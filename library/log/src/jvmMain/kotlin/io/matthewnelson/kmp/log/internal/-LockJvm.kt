@@ -13,7 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-package io.matthewnelson.kmp.log
+@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING", "NOTHING_TO_INLINE")
 
-@Suppress("UNUSED")
-internal fun stub() { /* no-op */ }
+package io.matthewnelson.kmp.log.internal
+
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
+
+@Suppress("ACTUAL_WITHOUT_EXPECT")
+internal actual typealias Lock = Any
+
+internal actual inline fun newLock(): Lock = Lock()
+
+internal actual inline fun <R> Lock.withLockImpl(block: () -> R): R {
+    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+    return synchronized(this, block)
+}

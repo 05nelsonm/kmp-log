@@ -1,0 +1,105 @@
+public abstract class io/matthewnelson/kmp/log/Log {
+	public static final field Root Lio/matthewnelson/kmp/log/Log$Root;
+	public final field max Lio/matthewnelson/kmp/log/Log$Level;
+	public final field min Lio/matthewnelson/kmp/log/Log$Level;
+	public final field uid Ljava/lang/String;
+	protected fun <init> (Ljava/lang/String;Lio/matthewnelson/kmp/log/Log$Level;)V
+	protected fun <init> (Ljava/lang/String;Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;)V
+	public final fun equals (Ljava/lang/Object;)Z
+	public final fun hashCode ()I
+	public static final fun install (Lio/matthewnelson/kmp/log/Log;)Z
+	public static final fun installOrThrow (Lio/matthewnelson/kmp/log/Log;)V
+	public static final fun installed ()Ljava/util/List;
+	protected fun isLoggable (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/String;Ljava/lang/String;)Z
+	protected abstract fun log (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)Z
+	protected fun onInstall ()V
+	protected fun onUninstall ()V
+	public final fun toString ()Ljava/lang/String;
+	public static final fun uninstall (Lio/matthewnelson/kmp/log/Log;)Z
+	public static final fun uninstall (Ljava/lang/String;)Z
+	public static final fun uninstallAll ()V
+	public static final fun uninstallOrThrow (Lio/matthewnelson/kmp/log/Log;)V
+	public static final fun uninstallOrThrow (Ljava/lang/String;)V
+}
+
+public final class io/matthewnelson/kmp/log/Log$Level : java/lang/Enum {
+	public static final field Debug Lio/matthewnelson/kmp/log/Log$Level;
+	public static final field Error Lio/matthewnelson/kmp/log/Log$Level;
+	public static final field Fatal Lio/matthewnelson/kmp/log/Log$Level;
+	public static final field Info Lio/matthewnelson/kmp/log/Log$Level;
+	public static final field Verbose Lio/matthewnelson/kmp/log/Log$Level;
+	public static final field Warn Lio/matthewnelson/kmp/log/Log$Level;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/matthewnelson/kmp/log/Log$Level;
+	public static fun values ()[Lio/matthewnelson/kmp/log/Log$Level;
+}
+
+public final class io/matthewnelson/kmp/log/Log$Logger {
+	public static final field Companion Lio/matthewnelson/kmp/log/Log$Logger$Companion;
+	public final field domain Ljava/lang/String;
+	public final field tag Ljava/lang/String;
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public static final fun checkDomain (Ljava/lang/String;)Ljava/lang/String;
+	public static final fun checkTag (Ljava/lang/String;)Ljava/lang/String;
+	public final fun d (Ljava/lang/String;)Z
+	public final fun d (Ljava/lang/String;Ljava/lang/Throwable;)Z
+	public final fun d (Ljava/lang/Throwable;)Z
+	public final fun d (Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)Z
+	public final fun d (Lkotlin/jvm/functions/Function0;)Z
+	public final fun e (Ljava/lang/String;)Z
+	public final fun e (Ljava/lang/String;Ljava/lang/Throwable;)Z
+	public final fun e (Ljava/lang/Throwable;)Z
+	public final fun e (Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)Z
+	public final fun e (Lkotlin/jvm/functions/Function0;)Z
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public final fun i (Ljava/lang/String;)Z
+	public final fun i (Ljava/lang/String;Ljava/lang/Throwable;)Z
+	public final fun i (Ljava/lang/Throwable;)Z
+	public final fun i (Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)Z
+	public final fun i (Lkotlin/jvm/functions/Function0;)Z
+	public final fun isLoggable (Lio/matthewnelson/kmp/log/Log$Level;)Z
+	public final fun log (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/String;)Z
+	public final fun log (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/String;Ljava/lang/Throwable;)Z
+	public final fun log (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/Throwable;)Z
+	public final fun log (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)Z
+	public final fun log (Lio/matthewnelson/kmp/log/Log$Level;Lkotlin/jvm/functions/Function0;)Z
+	public static final fun of (Ljava/lang/String;)Lio/matthewnelson/kmp/log/Log$Logger;
+	public static final fun of (Ljava/lang/String;Ljava/lang/String;)Lio/matthewnelson/kmp/log/Log$Logger;
+	public fun toString ()Ljava/lang/String;
+	public final fun v (Ljava/lang/String;)Z
+	public final fun v (Ljava/lang/String;Ljava/lang/Throwable;)Z
+	public final fun v (Ljava/lang/Throwable;)Z
+	public final fun v (Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)Z
+	public final fun v (Lkotlin/jvm/functions/Function0;)Z
+	public final fun w (Ljava/lang/String;)Z
+	public final fun w (Ljava/lang/String;Ljava/lang/Throwable;)Z
+	public final fun w (Ljava/lang/Throwable;)Z
+	public final fun w (Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)Z
+	public final fun w (Lkotlin/jvm/functions/Function0;)Z
+	public final fun wtf (Ljava/lang/String;)Z
+	public final fun wtf (Ljava/lang/String;Ljava/lang/Throwable;)Z
+	public final fun wtf (Ljava/lang/Throwable;)Z
+	public final fun wtf (Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)Z
+	public final fun wtf (Lkotlin/jvm/functions/Function0;)Z
+}
+
+public final class io/matthewnelson/kmp/log/Log$Logger$Companion {
+	public final fun checkDomain (Ljava/lang/String;)Ljava/lang/String;
+	public final fun checkTag (Ljava/lang/String;)Ljava/lang/String;
+	public final fun of (Ljava/lang/String;)Lio/matthewnelson/kmp/log/Log$Logger;
+	public final fun of (Ljava/lang/String;Ljava/lang/String;)Lio/matthewnelson/kmp/log/Log$Logger;
+}
+
+public final class io/matthewnelson/kmp/log/Log$Root {
+	public final fun install (Lio/matthewnelson/kmp/log/Log;)Z
+	public final fun installOrThrow (Lio/matthewnelson/kmp/log/Log;)V
+	public final fun installed ()Ljava/util/List;
+	public fun toString ()Ljava/lang/String;
+	public final fun uninstall (Lio/matthewnelson/kmp/log/Log;)Z
+	public final fun uninstall (Ljava/lang/String;)Z
+	public final fun uninstallAll ()V
+	public final fun uninstallOrThrow (Lio/matthewnelson/kmp/log/Log;)V
+	public final fun uninstallOrThrow (Ljava/lang/String;)V
+}
+

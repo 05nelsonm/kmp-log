@@ -36,6 +36,24 @@ kmpConfiguration {
             }
         }
 
+        kotlin {
+            compilerOptions {
+                optIn.add("kotlin.contracts.ExperimentalContracts")
+            }
+        }
+
+        kotlin {
+            with(sourceSets) {
+                val sets = arrayOf(
+                    "jvm",
+                    "native",
+                ).mapNotNull { name -> findByName(name + "Test") }
+                if (sets.isEmpty()) return@kotlin
+                val test = maybeCreate("jvmNativeTest").apply { dependsOn(getByName("commonTest")) }
+                sets.forEach { t -> t.dependsOn(test) }
+            }
+        }
+
         configureKotlinVersion()
     }
 }
