@@ -19,12 +19,14 @@ package io.matthewnelson.kmp.log.sys.internal
 
 import io.matthewnelson.kmp.log.sys.SysLog
 
-internal inline fun SysLog.Companion.androidDomainTag(
+private const val MAX_LEN_TAG: Int = 23
+
+internal inline fun SysLog.Default.androidDomainTag(
     DEVICE_SDK_INT: Int,
     domain: String?,
     tag: String,
 ): String = when {
     DEVICE_SDK_INT >= 26 -> commonDomainTag(domain, tag)
-    tag.length <= 23 -> tag
-    else -> tag.take(23)
+    tag.length <= MAX_LEN_TAG -> tag
+    else -> tag.take(MAX_LEN_TAG)
 }

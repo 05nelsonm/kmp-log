@@ -25,7 +25,13 @@ import java.util.Locale
 
 private val TIME_FORMAT = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
 
-internal inline fun SysLog.Companion.jvmLogPrint(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
+internal inline fun SysLog.Default.jvmLogPrint(
+    level: Level,
+    domain: String?,
+    tag: String,
+    msg: String?,
+    t: Throwable?,
+): Boolean {
     val formatted = run {
         val now = Date(System.currentTimeMillis())
         val dateTime = TIME_FORMAT.format(now)

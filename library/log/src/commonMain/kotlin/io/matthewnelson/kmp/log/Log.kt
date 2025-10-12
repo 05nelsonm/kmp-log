@@ -47,7 +47,7 @@ import kotlin.jvm.JvmSynthetic
  *
  *     val logger = Log.Logger.of(tag = "Example")
  *     logger.d { "This will not be logged" }
- *     Log.Root.install(SysLog())
+ *     Log.Root.install(SysLog.Default)
  *     logger.d { "This WILL be logged" }
  *     Log.Root.uninstall(SysLog.UID)
  *
@@ -954,7 +954,7 @@ public abstract class Log {
 
     /**
      * A unique identifier for this [Log] instance, such as a package name or
-     * a hashed file path. [Root.install] uses this value to inhibit multiple
+     * a hash of a file path. [Root.install] uses this value to inhibit multiple
      * instances from being installed.
      *
      * Will be non-empty and contain no whitespace.

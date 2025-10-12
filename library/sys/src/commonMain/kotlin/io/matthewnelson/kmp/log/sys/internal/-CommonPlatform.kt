@@ -20,11 +20,19 @@ package io.matthewnelson.kmp.log.sys.internal
 import io.matthewnelson.kmp.log.Log.Level
 import io.matthewnelson.kmp.log.sys.SysLog
 
-// NOTE: Never modify. If so, update SysLog.Companion.UID documentation.
+// NOTE: Never modify. If so, update SysLog.Default.UID documentation.
 internal const val SYS_LOG_UID: String = "io.matthewnelson.kmp.log.sys.SysLog"
 
+@Suppress("RedundantCompanionReference")
+internal inline fun ((min: Level) -> SysLog).commonOf(
+    min: Level,
+): SysLog {
+    if (min != SysLog.Default.min) return this(min)
+    return SysLog.Default
+}
+
 // TODO: Move to :log as Log.Util.simpleDomainTag?
-internal inline fun SysLog.Companion.commonDomainTag(
+internal inline fun SysLog.Default.commonDomainTag(
     domain: String?,
     tag: String,
 ): String {
@@ -36,7 +44,7 @@ internal inline fun SysLog.Companion.commonDomainTag(
 
 // TODO: Move to :log as Log.Util.simpleFormat?
 //  Would need a time source, so...
-internal inline fun SysLog.Companion.commonFormat(
+internal inline fun SysLog.Default.commonFormat(
     level: Level,
     domain: String?,
     tag: String,

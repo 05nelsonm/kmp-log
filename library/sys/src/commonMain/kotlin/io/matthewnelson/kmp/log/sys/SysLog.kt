@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
+@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING", "UNUSED")
 
 package io.matthewnelson.kmp.log.sys
 
@@ -22,21 +22,14 @@ import io.matthewnelson.kmp.log.Log
 /**
  * TODO
  * */
-public expect class SysLog: Log {
+public expect open class SysLog private constructor(
+    min: Level = Level.Verbose,
+): Log {
 
     /**
      * TODO
      * */
-    public constructor()
-
-    /**
-     * TODO
-     * */
-    public constructor(min: Level)
-
-    override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean
-
-    public companion object {
+    public companion object Default: SysLog {
 
         /**
          * The [SysLog.uid] (i.e. `io.matthewnelson.kmp.log.sys.SysLog`).
@@ -44,5 +37,16 @@ public expect class SysLog: Log {
          * Can be used with [Log.Root.uninstall].
          * */
         public /* const */ val UID: String /* = "io.matthewnelson.kmp.log.sys.SysLog" */
+
+        /**
+         * TODO
+         * */
+        public fun of(
+            min: Level,
+        ): SysLog
     }
+
+    final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean
+
+    final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean
 }

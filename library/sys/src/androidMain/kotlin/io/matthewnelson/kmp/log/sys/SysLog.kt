@@ -19,19 +19,29 @@ package io.matthewnelson.kmp.log.sys
 
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
+import io.matthewnelson.kmp.log.sys.internal.commonOf
 
 // android
-public actual class SysLog: Log {
+public actual open class SysLog private actual constructor(
+    min: Level /* = Level.Verbose */,
+): Log(UID, min) {
 
-    public actual constructor(): this(min = Level.Verbose)
-    public actual constructor(min: Level): super(UID, min)
+    public actual companion object Default: SysLog() {
+
+        public actual const val UID: String = SYS_LOG_UID
+
+        @JvmStatic
+        public actual fun of(
+            min: Level,
+        ): SysLog = ::SysLog.commonOf(min)
+    }
 
     actual override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         // TODO
         return false
     }
 
-    public actual companion object {
-        public actual const val UID: String = SYS_LOG_UID
+    actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
+        return super.isLoggable(level, domain, tag)
     }
 }

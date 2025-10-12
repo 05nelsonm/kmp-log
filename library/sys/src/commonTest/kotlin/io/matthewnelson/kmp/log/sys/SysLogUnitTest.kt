@@ -15,9 +15,10 @@
  **/
 package io.matthewnelson.kmp.log.sys
 
-import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.Log.Level
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 
 class SysLogUnitTest {
 
@@ -25,11 +26,17 @@ class SysLogUnitTest {
     fun givenSysLog_whenUid_thenIsAsExpected() {
         val expected = "io.matthewnelson.kmp.log.sys.SysLog"
         assertEquals(expected, SysLog.UID)
-        assertEquals(expected, SysLog().uid)
+        assertEquals(expected, SysLog.uid)
     }
 
     @Test
     fun givenSysLog_whenDefaultConstructor_thenMinIsLevelVerbose() {
-        assertEquals(Log.Level.Verbose, SysLog().min)
+        assertEquals(Level.Verbose, SysLog.min)
+    }
+
+    @Test
+    fun givenSysLog_whenOfWithNonDefaultValue_thenReturnsNewInstance() {
+        val actual = SysLog.of(min = Level.Debug)
+        assertNotEquals(SysLog.Default, actual)
     }
 }
