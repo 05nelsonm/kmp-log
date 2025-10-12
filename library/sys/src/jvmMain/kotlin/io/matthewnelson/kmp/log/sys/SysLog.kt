@@ -19,6 +19,7 @@ package io.matthewnelson.kmp.log.sys
 
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
+import io.matthewnelson.kmp.log.sys.internal.jvmLogPrint
 
 // jvm
 public actual class SysLog: Log {
@@ -27,8 +28,7 @@ public actual class SysLog: Log {
     public actual constructor(min: Level): super(UID, min)
 
     actual override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        // TODO
-        return false
+        return jvmLogPrint(level, domain, tag, msg, t)
     }
 
     public actual companion object {
