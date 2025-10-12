@@ -13,7 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
+@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
+
 package io.matthewnelson.kmp.log.sys
 
-@Suppress("UNUSED")
-internal fun stub() { /* no-op */ }
+import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
+
+// jsWasmJs
+public actual class SysLog: Log {
+
+    public actual constructor(): this(min = Level.Verbose)
+    public actual constructor(min: Level): super(UID, min)
+
+    actual override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
+        // TODO
+        return false
+    }
+
+    public actual companion object {
+        public actual const val UID: String = SYS_LOG_UID
+    }
+}

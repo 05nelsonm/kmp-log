@@ -6,3 +6,12 @@
 // - Show declarations: true
 
 // Library unique name: <io.matthewnelson.kmp-log:sys>
+final class io.matthewnelson.kmp.log.sys/SysLog : io.matthewnelson.kmp.log/Log { // io.matthewnelson.kmp.log.sys/SysLog|null[0]
+    constructor <init>() // io.matthewnelson.kmp.log.sys/SysLog.<init>|<init>(){}[0]
+    constructor <init>(io.matthewnelson.kmp.log/Log.Level) // io.matthewnelson.kmp.log.sys/SysLog.<init>|<init>(io.matthewnelson.kmp.log.Log.Level){}[0]
+
+    final object Companion { // io.matthewnelson.kmp.log.sys/SysLog.Companion|null[0]
+        final const val UID // io.matthewnelson.kmp.log.sys/SysLog.Companion.UID|{}UID[0]
+            final fun <get-UID>(): kotlin/String // io.matthewnelson.kmp.log.sys/SysLog.Companion.UID.<get-UID>|<get-UID>(){}[0]
+    }
+}
