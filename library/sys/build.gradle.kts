@@ -81,12 +81,16 @@ kmpConfiguration {
         kotlin {
             with(sourceSets) {
                 val sets = arrayOf(
-                    "android",
-                    "androidNative",
-                ).mapNotNull { name -> findByName(name + "Main") }
+                    "android" to "androidInstrumented",
+                    "androidNative" to "androidNative",
+                ).mapNotNull { (nameMain, nameTest) ->
+                    val main = findByName(nameMain + "Main") ?: return@mapNotNull null
+                    main to getByName(nameTest + "Test")
+                }
                 if (sets.isEmpty()) return@kotlin
                 val main = maybeCreate("androidRuntimeMain").apply { dependsOn(getByName("commonMain")) }
-                sets.forEach { m -> m.dependsOn(main) }
+                val test = maybeCreate("androidRuntimeTest").apply { dependsOn(getByName("commonTest")) }
+                sets.forEach { (m, t) -> m.dependsOn(main); t.dependsOn(test) }
             }
         }
 
