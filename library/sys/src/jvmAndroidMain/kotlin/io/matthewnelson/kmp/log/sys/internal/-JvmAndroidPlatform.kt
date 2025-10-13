@@ -23,7 +23,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val TIME_FORMAT = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
+internal val SYS_LOG_TIME_FORMAT = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
 
 internal inline fun SysLog.Default.jvmLogPrint(
     level: Level,
@@ -34,9 +34,9 @@ internal inline fun SysLog.Default.jvmLogPrint(
 ): Boolean {
     val formatted = run {
         val now = Date(System.currentTimeMillis())
-        val dateTime = TIME_FORMAT.format(now)
+        val dateTime = SYS_LOG_TIME_FORMAT.format(now)
         commonFormat(level, domain, tag, msg, t, dateTime, omitLastNewLine = false)
-    }
+    }.toString()
 
     try {
         when (level) {

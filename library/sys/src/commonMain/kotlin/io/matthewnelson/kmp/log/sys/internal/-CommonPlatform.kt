@@ -19,6 +19,9 @@ package io.matthewnelson.kmp.log.sys.internal
 
 import io.matthewnelson.kmp.log.Log.Level
 import io.matthewnelson.kmp.log.sys.SysLog
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 
 // NOTE: Never modify. If so, update SysLog.Default.UID documentation.
 internal const val SYS_LOG_UID: String = "io.matthewnelson.kmp.log.sys.SysLog"
@@ -36,14 +39,24 @@ internal inline fun SysLog.Default.commonDomainTag(
     domain: String?,
     tag: String,
 ): String {
-    // TODO: Should domain be "none" so that all logs have [something] and
-    //  can more easily be parsed?
     if (domain == null) return tag
-    return "[$domain]$tag"
+    var capacity = domain.length + 2 + tag.length
+    val sb = StringBuilder(++capacity)
+    return commonDomainTag(sb, domain, tag).toString()
+}
+
+internal inline fun SysLog.Default.commonDomainTag(
+    sb: StringBuilder,
+    domain: String?,
+    tag: String,
+): StringBuilder = sb.apply {
+    if (domain != null) {
+        append('[').append(domain).append(']')
+    }
+    append(tag)
 }
 
 // TODO: Move to :log as Log.Util.simpleFormat?
-//  Would need a time source, so...
 internal inline fun SysLog.Default.commonFormat(
     level: Level,
     domain: String?,
@@ -52,27 +65,72 @@ internal inline fun SysLog.Default.commonFormat(
     t: Throwable?,
     dateTime: String?,
     omitLastNewLine: Boolean,
-): String {
-    var prefix = ""
-    if (!dateTime.isNullOrBlank()) {
-        prefix = dateTime
-        prefix += " "
+): CharSequence {
+    val prefix = run {
+        var capacity = 0
+        if (!dateTime.isNullOrBlank()) {
+            capacity += dateTime.length
+            capacity++
+        }
+        capacity += 2
+        if (domain != null) {
+            capacity += domain.length
+            capacity += 2
+        }
+        capacity += tag.length
+        capacity += 2
+        StringBuilder(++capacity)
     }
-    prefix += level.name.first()
-    prefix += ' '
-    prefix += commonDomainTag(domain, tag)
-    prefix += ": "
 
-    return StringBuilder().apply {
-        msg?.lines()?.forEach { line ->
-            append(prefix).appendLine(line)
+    if (!dateTime.isNullOrBlank()) {
+        prefix.append(dateTime).append(' ')
+    }
+    prefix.append(level.name.first()).append(' ')
+    commonDomainTag(sb = prefix, domain, tag).append(':').append(' ')
+
+    val linesMsg = msg?.lines() ?: emptyList()
+    val stack = t?.stackTraceToString()
+    val linesStack = stack?.lines() ?: emptyList()
+
+    val sb = run {
+        var capacity = msg?.length ?: 0
+        if (stack != null) {
+            if (capacity != 0) capacity++
+            capacity += stack.length
         }
-        t?.stackTraceToString()?.lines()?.forEach { line ->
-            if (line.isBlank()) return@forEach
-            append(prefix).appendLine(line)
-        }
-        if (omitLastNewLine) {
-            setLength(length - 1)
-        }
-    }.toString()
+        capacity += (linesMsg.size * prefix.length)
+        capacity += (linesStack.size * prefix.length)
+        StringBuilder(++capacity)
+    }
+
+    linesMsg.forEach { line ->
+        sb.append(prefix).appendLine(line)
+    }
+    linesStack.forEach { line ->
+        if (line.isBlank()) return@forEach
+        sb.append(prefix).appendLine(line)
+    }
+    if (omitLastNewLine && sb.isNotEmpty()) {
+        sb.setLength(sb.length - 1)
+    }
+
+    return sb
+}
+
+@OptIn(ExperimentalContracts::class)
+@Throws(IllegalArgumentException::class)
+internal inline fun SysLog.Default.commonLogChunk(
+    formatted: CharSequence,
+    maxLenLog: Int,
+    _print: (chunk: String) -> Boolean,
+): Boolean {
+    contract { callsInPlace(_print, InvocationKind.UNKNOWN) }
+    require(maxLenLog >= 1_000) { "maxLen[$maxLenLog] < 1_000" }
+
+    if (formatted.length < maxLenLog) {
+        return _print(formatted.toString())
+    }
+
+    // TODO: Implement chunking
+    return _print(formatted.toString())
 }
