@@ -225,7 +225,8 @@ public abstract class Log {
              *
              * @return The non-`null` tag
              *
-             * @throws [IllegalArgumentException] If domain is invalid.
+             * @throws [IllegalArgumentException] If tag is invalid.
+             * @throws [NullPointerException] If tag is `null`.
              * */
             @JvmStatic
             @Throws(IllegalArgumentException::class, NullPointerException::class)
@@ -744,6 +745,13 @@ public abstract class Log {
         public fun installed(): List<Log> = _LOGS.toList()
 
         /**
+         * Returns the [Log] instance currently installed where [Log.uid] matches that
+         * which is specified, or `null` if no [Log] instances are found.
+         * */
+        @JvmStatic
+        public operator fun get(uid: String): Log? = _LOGS.firstOrNull { it.uid == uid }
+
+        /**
          * Install a [Log] instance.
          *
          * @param [log] The [Log] instance to install.
@@ -997,11 +1005,11 @@ public abstract class Log {
      * Log something.
      *
      * Guarantees:
+     *  - [level] will be between [min] and [max] (inclusive).
      *  - [domain] will be `null`, or in compliance with parameters specified by [Logger.checkDomain].
      *  - [tag] will be in compliance with parameters specified by [Logger.checkTag].
      *  - [msg] and [t] will never both be `null`.
      *  - [msg] will be `null` or a non-empty value, never empty.
-     *  - [level] will be between [min] and [max] (inclusive).
      *  - [isLoggable] will have returned `true` immediately prior to this function being called by [Root].
      *
      * @return `true` if a log was generated, `false` otherwise.
@@ -1012,9 +1020,9 @@ public abstract class Log {
      * Helper for implementations to filter by a logger's domain and/or tag.
      *
      * Guarantees:
+     *  - [level] will be between [min] and [max] (inclusive).
      *  - [domain] will be `null`, or in compliance with parameters specified by [Logger.checkDomain].
      *  - [tag] will be in compliance with parameters specified by [Logger.checkTag].
-     *  - [level] will be between [min] and [max] (inclusive).
      *
      * @return `true` if the log would be accepted, `false` otherwise. Default: `true`
      * */

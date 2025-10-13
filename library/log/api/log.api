@@ -6,6 +6,7 @@ public abstract class io/matthewnelson/kmp/log/Log {
 	protected fun <init> (Ljava/lang/String;Lio/matthewnelson/kmp/log/Log$Level;)V
 	protected fun <init> (Ljava/lang/String;Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;)V
 	public final fun equals (Ljava/lang/Object;)Z
+	public static final fun get (Ljava/lang/String;)Lio/matthewnelson/kmp/log/Log;
 	public final fun hashCode ()I
 	public static final fun install (Lio/matthewnelson/kmp/log/Log;)Z
 	public static final fun installOrThrow (Lio/matthewnelson/kmp/log/Log;)V
@@ -92,6 +93,7 @@ public final class io/matthewnelson/kmp/log/Log$Logger$Companion {
 }
 
 public final class io/matthewnelson/kmp/log/Log$Root {
+	public final fun get (Ljava/lang/String;)Lio/matthewnelson/kmp/log/Log;
 	public final fun install (Lio/matthewnelson/kmp/log/Log;)Z
 	public final fun installOrThrow (Lio/matthewnelson/kmp/log/Log;)V
 	public final fun installed ()Ljava/util/List;
