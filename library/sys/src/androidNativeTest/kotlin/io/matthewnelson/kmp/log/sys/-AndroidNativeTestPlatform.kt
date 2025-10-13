@@ -15,6 +15,12 @@
  **/
 package io.matthewnelson.kmp.log.sys
 
+import io.matthewnelson.kmp.log.Log
 import platform.posix.android_get_device_api_level
 
 actual fun deviceApiLevel(): Int = android_get_device_api_level()
+
+actual val IS_LOGGABLE_REQUIRED_API_LEVEL: Int = 30
+actual fun SysLog.Default.androidIsLoggable(level: Log.Level, domain: String?, tag: String): Boolean? {
+    return isLoggableOrNull(level, domain, tag)
+}

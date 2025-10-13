@@ -14,6 +14,8 @@
  * limitations under the License.
  **/
 import com.android.build.gradle.tasks.MergeSourceSetFolders
+import com.android.ddmlib.AndroidDebugBridge
+import com.android.ddmlib.NullOutputReceiver
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
@@ -44,6 +46,43 @@ kmpConfiguration {
                             .resolve("androidInstrumentedTest")
                             .resolve("AndroidManifest.xml")
                     )
+                }
+
+                val adb = adbExecutable
+                val task = project.tasks.register("adbSetPropSysLogTest") {
+                    description = "Configures all connected Android devices via ADB with log.tag test properties."
+
+                    @Suppress("DEPRECATION")
+                    actions = listOf(Action {
+                        AndroidDebugBridge.initIfNeeded(false)
+                        val bridge = AndroidDebugBridge.createBridge(adb.path, false)
+
+                        var timeout = 30_000
+                        while (!bridge.hasInitialDeviceList() && timeout > 0) {
+                            Thread.sleep(500)
+                            timeout -= 500
+                        }
+
+                        if (timeout <= 0 && !bridge.hasInitialDeviceList()) {
+                            throw GradleException("Timed out waiting on ADB devices list")
+                        }
+
+                        bridge.devices.forEach { device ->
+                            // If modifying tag name, must also update tests in androidRuntimeTest
+                            device.executeShellCommand(
+                                "setprop log.tag.SYS_LOG_TEST WARN",
+                                NullOutputReceiver.getReceiver(),
+                            )
+                        }
+                    })
+                }.get()
+
+                project.afterEvaluate {
+                    project.tasks.all {
+                        if (!name.startsWith("connected")) return@all
+                        if (!name.endsWith("AndroidTest")) return@all
+                        dependsOn(task)
+                    }
                 }
             }
 

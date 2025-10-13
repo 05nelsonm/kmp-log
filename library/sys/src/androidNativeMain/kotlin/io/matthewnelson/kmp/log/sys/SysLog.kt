@@ -19,7 +19,23 @@ package io.matthewnelson.kmp.log.sys
 
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
+import io.matthewnelson.kmp.log.sys.internal.commonDomainTag
 import io.matthewnelson.kmp.log.sys.internal.commonOf
+import kotlinx.cinterop.ByteVarOf
+import kotlinx.cinterop.CFunction
+import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.cstr
+import kotlinx.cinterop.invoke
+import kotlinx.cinterop.memScoped
+import platform.android.ANDROID_LOG_DEBUG
+import platform.android.ANDROID_LOG_ERROR
+import platform.android.ANDROID_LOG_FATAL
+import platform.android.ANDROID_LOG_INFO
+import platform.android.ANDROID_LOG_VERBOSE
+import platform.android.ANDROID_LOG_WARN
+import platform.posix.RTLD_NEXT
+import platform.posix.dlsym
 
 // androidNative
 public actual open class SysLog private actual constructor(
@@ -33,6 +49,49 @@ public actual open class SysLog private actual constructor(
         public actual fun of(
             min: Level,
         ): SysLog = ::SysLog.commonOf(min)
+
+        // Exposed for testing
+        @OptIn(ExperimentalForeignApi::class)
+        internal fun isLoggableOrNull(level: Level, domain: String?, tag: String): Boolean? {
+            val ___android_log_is_loggable = ANDROID_LOG_IS_LOGGABLE ?: return null
+            val priority = level.toPriority()
+            memScoped {
+                // Do not need to use androidDomainTag b/c __android_log_is_loggable is only available
+                // from API 30+, so no need to check device API level as the limitation on tag length
+                // was removed in API 26.
+                // TODO: Should `null` be passed for domain here and only check for tag?
+                val _tag = commonDomainTag(domain, tag).cstr.ptr
+                return ___android_log_is_loggable.invoke(priority, _tag, priority) == 1
+            }
+        }
+
+        private fun Level.toPriority(): Int = when (this) {
+            Level.Verbose -> ANDROID_LOG_VERBOSE
+            Level.Debug -> ANDROID_LOG_DEBUG
+            Level.Info -> ANDROID_LOG_INFO
+            Level.Warn -> ANDROID_LOG_WARN
+            Level.Error -> ANDROID_LOG_ERROR
+            Level.Fatal -> ANDROID_LOG_FATAL
+        }.toInt()
+
+        // Normally one would not want to hold onto a function pointer reference
+        // statically, but it's from glibc which is not going to be hot reloaded
+        // or anything w/o this process terminating, so.
+        //
+        // Available for API 30+
+        // include/android/log.h
+        @OptIn(ExperimentalForeignApi::class)
+        private val ANDROID_LOG_IS_LOGGABLE by lazy {
+            val ptr = dlsym(RTLD_NEXT, "__android_log_is_loggable")
+                ?: return@lazy null
+
+            @Suppress("UNCHECKED_CAST")
+            ptr as CPointer<CFunction<(
+                __prio: Int,
+                __tag: CPointer<ByteVarOf<Byte>>?,
+                __default_prio: Int,
+            ) -> Int>>
+        }
     }
 
     actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
@@ -41,6 +100,6 @@ public actual open class SysLog private actual constructor(
     }
 
     actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
-        return super.isLoggable(level, domain, tag)
+        return isLoggableOrNull(level, domain, tag) ?: true
     }
 }

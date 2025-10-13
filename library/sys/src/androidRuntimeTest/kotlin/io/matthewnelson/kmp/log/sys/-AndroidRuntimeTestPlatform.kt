@@ -15,4 +15,9 @@
  **/
 package io.matthewnelson.kmp.log.sys
 
+import io.matthewnelson.kmp.log.Log
+
 expect fun deviceApiLevel(): Int
+
+expect val IS_LOGGABLE_REQUIRED_API_LEVEL: Int
+expect fun SysLog.Default.androidIsLoggable(level: Log.Level, domain: String?, tag: String): Boolean?

@@ -127,7 +127,7 @@ public abstract class Log {
 
             /**
              * Create a new [Logger] instance. If a [Logger] instance already exists
-             * for the provided [tag], then that is returned instead.
+             * for the provided [tag] and `null` domain, then that is returned instead.
              *
              * @param [tag] The tag to use when logging.
              *
@@ -294,7 +294,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -358,7 +358,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -421,7 +421,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -484,7 +484,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -547,7 +547,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -610,7 +610,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -734,7 +734,7 @@ public abstract class Log {
     }
 
     /**
-     * The root location at which all [Log] instances are installed.
+     * The root location for which all [Log] instances are installed.
      * */
     public companion object Root {
 
@@ -785,7 +785,7 @@ public abstract class Log {
         @JvmStatic
         @Throws(IllegalStateException::class)
         public inline fun installOrThrow(log: Log) {
-            check(install(log)) { "$log was already installed." }
+            check(install(log)) { "$log is already installed." }
         }
 
         /**
@@ -889,7 +889,7 @@ public abstract class Log {
         @JvmStatic
         @Throws(IllegalStateException::class)
         public inline fun uninstallOrThrow(uid: String) {
-            check(uninstall(uid)) { "A Log with uid[$uid] was not installed." }
+            check(uninstall(uid)) { "A Log instance with uid[$uid] is not currently installed." }
         }
 
         private const val ROOT_DOMAIN: String = "kmp-log:log"

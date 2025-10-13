@@ -17,8 +17,10 @@
 
 package io.matthewnelson.kmp.log.sys
 
+import android.os.Build
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
+import io.matthewnelson.kmp.log.sys.internal.androidDomainTag
 import io.matthewnelson.kmp.log.sys.internal.commonOf
 
 // android
@@ -34,6 +36,24 @@ public actual open class SysLog private actual constructor(
         public actual fun of(
             min: Level,
         ): SysLog = ::SysLog.commonOf(min)
+
+        // Exposed for testing
+        @JvmSynthetic
+        internal fun isLoggableOrNull(level: Level, domain: String?, tag: String): Boolean? {
+            if (Build.VERSION.SDK_INT <= 0) return null
+            // TODO: Should `null` be passed for domain here and only check for tag?
+            val _tag = androidDomainTag(Build.VERSION.SDK_INT, domain, tag)
+            return android.util.Log.isLoggable(_tag, level.toPriority())
+        }
+
+        private fun Level.toPriority(): Int = when (this) {
+            Level.Verbose -> android.util.Log.VERBOSE
+            Level.Debug -> android.util.Log.DEBUG
+            Level.Info -> android.util.Log.INFO
+            Level.Warn -> android.util.Log.WARN
+            Level.Error -> android.util.Log.ERROR
+            Level.Fatal -> android.util.Log.ASSERT
+        }
     }
 
     actual override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
@@ -42,6 +62,6 @@ public actual open class SysLog private actual constructor(
     }
 
     actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
-        return super.isLoggable(level, domain, tag)
+        return isLoggableOrNull(level, domain, tag) ?: true
     }
 }
