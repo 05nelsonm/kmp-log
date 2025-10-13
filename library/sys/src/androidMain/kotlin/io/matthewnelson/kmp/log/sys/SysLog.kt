@@ -21,7 +21,9 @@ import android.os.Build
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
 import io.matthewnelson.kmp.log.sys.internal.androidDomainTag
+import io.matthewnelson.kmp.log.sys.internal.androidLogChunk
 import io.matthewnelson.kmp.log.sys.internal.commonOf
+import io.matthewnelson.kmp.log.sys.internal.jvmLogPrint
 
 // android
 public actual open class SysLog private actual constructor(
@@ -57,8 +59,22 @@ public actual open class SysLog private actual constructor(
     }
 
     actual override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        // TODO
-        return false
+        if (Build.VERSION.SDK_INT <= 0) {
+            // Android Unit Tests
+            return jvmLogPrint(level, domain, tag, msg, t)
+        }
+
+        val priority = level.toPriority()
+        val _tag = androidDomainTag(Build.VERSION.SDK_INT, domain, tag)
+
+        return androidLogChunk(msg, t) { chunk ->
+            val ret = if (level == Level.Fatal) {
+                android.util.Log.wtf(_tag, chunk)
+            } else {
+                android.util.Log.println(priority, _tag, chunk)
+            }
+            ret > 0
+        }
     }
 
     actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {

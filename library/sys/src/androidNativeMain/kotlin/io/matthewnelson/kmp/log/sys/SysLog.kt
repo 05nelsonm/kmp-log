@@ -19,22 +19,27 @@ package io.matthewnelson.kmp.log.sys
 
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
+import io.matthewnelson.kmp.log.sys.internal.androidDomainTag
+import io.matthewnelson.kmp.log.sys.internal.androidLogChunk
 import io.matthewnelson.kmp.log.sys.internal.commonDomainTag
 import io.matthewnelson.kmp.log.sys.internal.commonOf
-import kotlinx.cinterop.ByteVarOf
+import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.CFunction
 import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.CValuesRef
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.cstr
 import kotlinx.cinterop.invoke
-import kotlinx.cinterop.memScoped
 import platform.android.ANDROID_LOG_DEBUG
 import platform.android.ANDROID_LOG_ERROR
 import platform.android.ANDROID_LOG_FATAL
 import platform.android.ANDROID_LOG_INFO
 import platform.android.ANDROID_LOG_VERBOSE
 import platform.android.ANDROID_LOG_WARN
+import platform.android.__android_log_assert
+import platform.android.__android_log_print
 import platform.posix.RTLD_NEXT
+import platform.posix.android_get_device_api_level
 import platform.posix.dlsym
 
 // androidNative
@@ -55,14 +60,12 @@ public actual open class SysLog private actual constructor(
         internal fun isLoggableOrNull(level: Level, domain: String?, tag: String): Boolean? {
             val ___android_log_is_loggable = ANDROID_LOG_IS_LOGGABLE ?: return null
             val priority = level.toPriority()
-            memScoped {
-                // Do not need to use androidDomainTag b/c __android_log_is_loggable is only available
-                // from API 30+, so no need to check device API level as the limitation on tag length
-                // was removed in API 26.
-                // TODO: Should `null` be passed for domain here and only check for tag?
-                val _tag = commonDomainTag(domain, tag).cstr.ptr
-                return ___android_log_is_loggable.invoke(priority, _tag, priority) == 1
-            }
+            // Do not need to use androidDomainTag b/c __android_log_is_loggable is only available
+            // from API 30+, so no need to check device API level as the limitation on tag length
+            // was removed in API 26.
+            // TODO: Should `null` be passed for domain here and only check for tag?
+            val _tag = commonDomainTag(domain, tag).cstr
+            return ___android_log_is_loggable.invoke(priority, _tag, priority) == 1
         }
 
         private fun Level.toPriority(): Int = when (this) {
@@ -88,15 +91,24 @@ public actual open class SysLog private actual constructor(
             @Suppress("UNCHECKED_CAST")
             ptr as CPointer<CFunction<(
                 __prio: Int,
-                __tag: CPointer<ByteVarOf<Byte>>?,
+                __tag: CValuesRef<ByteVar>?,
                 __default_prio: Int,
             ) -> Int>>
         }
     }
 
     actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        // TODO
-        return false
+        val priority = level.toPriority()
+        val _tag = androidDomainTag(android_get_device_api_level(), domain, tag)
+
+        return androidLogChunk(msg, t) { chunk ->
+            if (level == Level.Fatal) {
+                __android_log_assert(null, _tag, chunk)
+                true
+            } else {
+                __android_log_print(priority, _tag, chunk) > 0
+            }
+        }
     }
 
     actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {

@@ -18,7 +18,11 @@
 package io.matthewnelson.kmp.log.sys.internal
 
 import io.matthewnelson.kmp.log.sys.SysLog
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 
+private const val MAX_LEN_LOG: Int = 4000
 private const val MAX_LEN_TAG: Int = 23
 
 internal inline fun SysLog.Default.androidDomainTag(
@@ -29,4 +33,36 @@ internal inline fun SysLog.Default.androidDomainTag(
     DEVICE_SDK_INT >= 26 -> commonDomainTag(domain, tag)
     tag.length <= MAX_LEN_TAG -> tag
     else -> tag.take(MAX_LEN_TAG)
+}
+
+@OptIn(ExperimentalContracts::class)
+internal inline fun SysLog.Default.androidLogChunk(
+    msg: String?,
+    t: Throwable?,
+    _print: (chunk: String) -> Boolean,
+): Boolean {
+    contract { callsInPlace(_print, InvocationKind.UNKNOWN) }
+    val stack = t?.stackTraceToString()
+
+    val sb = run {
+        var capacity = msg?.length ?: 0
+        if (stack != null) {
+            if (capacity != 0) capacity++
+            capacity += stack.length
+        }
+        StringBuilder(++capacity)
+    }
+
+    if (msg != null) sb.append(msg)
+    if (stack != null) {
+        if (sb.isNotEmpty()) sb.appendLine()
+        sb.append(stack)
+    }
+
+    // trim
+    while (sb.isNotEmpty() && sb.last().isWhitespace()) {
+        sb.setLength(sb.length - 1)
+    }
+
+    return commonLogChunk(sb, MAX_LEN_LOG, _print)
 }
