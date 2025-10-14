@@ -36,7 +36,6 @@ import platform.android.ANDROID_LOG_FATAL
 import platform.android.ANDROID_LOG_INFO
 import platform.android.ANDROID_LOG_VERBOSE
 import platform.android.ANDROID_LOG_WARN
-import platform.android.__android_log_assert
 import platform.android.__android_log_print
 import platform.posix.RTLD_NEXT
 import platform.posix.android_get_device_api_level
@@ -100,14 +99,8 @@ public actual open class SysLog private actual constructor(
     actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         val priority = level.toPriority()
         val _tag = androidDomainTag(android_get_device_api_level(), domain, tag)
-
         return androidLogChunk(msg, t) { chunk ->
-            if (level == Level.Fatal) {
-                __android_log_assert(null, _tag, chunk)
-                true
-            } else {
-                __android_log_print(priority, _tag, chunk) > 0
-            }
+            __android_log_print(priority, _tag, chunk) > 0
         }
     }
 

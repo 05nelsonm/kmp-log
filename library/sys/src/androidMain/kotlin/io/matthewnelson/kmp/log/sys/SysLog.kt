@@ -66,14 +66,8 @@ public actual open class SysLog private actual constructor(
 
         val priority = level.toPriority()
         val _tag = androidDomainTag(Build.VERSION.SDK_INT, domain, tag)
-
         return androidLogChunk(msg, t) { chunk ->
-            val ret = if (level == Level.Fatal) {
-                android.util.Log.wtf(_tag, chunk)
-            } else {
-                android.util.Log.println(priority, _tag, chunk)
-            }
-            ret > 0
+            android.util.Log.println(priority, _tag, chunk) > 0
         }
     }
 

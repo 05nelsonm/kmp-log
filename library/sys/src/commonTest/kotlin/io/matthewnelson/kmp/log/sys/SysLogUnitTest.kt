@@ -15,12 +15,18 @@
  **/
 package io.matthewnelson.kmp.log.sys
 
+import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.Log.Level
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class SysLogUnitTest {
+
+    private companion object {
+        private val LOG = Log.Logger.of(tag = "SysLogUnitTest")
+    }
 
     @Test
     fun givenSysLog_whenUid_thenIsAsExpected() {
@@ -38,5 +44,20 @@ class SysLogUnitTest {
     fun givenSysLog_whenOfWithNonDefaultValue_thenReturnsNewInstance() {
         val actual = SysLog.of(min = Level.Debug)
         assertNotEquals(SysLog.Default, actual)
+    }
+
+    @Test
+    fun givenSysLog_whenLogThings_thenReturnsTrue() {
+        Log.installOrThrow(SysLog)
+        try {
+            assertTrue(LOG.v { "TEST VERBOSE" }, "v")
+            assertTrue(LOG.d { "TEST DEBUG" }, "d")
+            assertTrue(LOG.i { "TEST INFO" }, "i")
+            assertTrue(LOG.w { "TEST WARN" }, "w")
+            assertTrue(LOG.e(IllegalStateException("log error")) { "TEST ERROR" }, "e")
+            assertTrue(LOG.wtf(UnsupportedOperationException("log fatal")) { "TEST FATAL" }, "wtf")
+        } finally {
+            Log.uninstallOrThrow(SysLog.UID)
+        }
     }
 }

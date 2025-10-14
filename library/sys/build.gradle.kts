@@ -73,6 +73,10 @@ kmpConfiguration {
                                 "setprop log.tag.SYS_LOG_TEST WARN",
                                 NullOutputReceiver.getReceiver(),
                             )
+                            device.executeShellCommand(
+                                "setprop log.tag.SysLogUnitTest VERBOSE",
+                                NullOutputReceiver.getReceiver(),
+                            )
                         }
                     })
                 }.get()
