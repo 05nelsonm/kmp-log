@@ -20,29 +20,62 @@ package io.matthewnelson.kmp.log.internal
 import kotlin.concurrent.AtomicInt
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
+import kotlin.experimental.ExperimentalNativeApi
+import kotlin.native.concurrent.ThreadLocal
 
-@Suppress("ACTUAL_WITHOUT_EXPECT")
-internal actual typealias Lock = AtomicInt
+@ThreadLocal
+private object TLS { var owner: Any? = null }
 
 private const val UNLOCKED = 0
 
-internal actual inline fun newLock(): Lock = Lock(UNLOCKED)
+@OptIn(ExperimentalNativeApi::class)
+internal actual class Lock {
+    private val lock = AtomicInt(UNLOCKED)
+    private val reentries = AtomicInt(UNLOCKED)
+
+    internal fun lock() {
+        if (TLS.owner == null) {
+            TLS.owner = Any()
+        }
+        val ownerId = TLS.owner.hashCode()
+        check(ownerId != UNLOCKED) { "ownerId == $UNLOCKED" }
+        while (true) {
+            val previous = lock.compareAndExchange(UNLOCKED, ownerId)
+            when (previous) {
+                ownerId -> {
+                    reentries.incrementAndGet()
+                    break
+                }
+                UNLOCKED -> {
+                    check(reentries.value == 0) { "reentries.value != 0" }
+                    break
+                }
+            }
+        }
+    }
+
+    internal fun unlock() {
+        check(TLS.owner != null) { "TLS.owner == null" }
+        if (reentries.value > 0) {
+            reentries.decrementAndGet()
+        } else {
+            val ownerId = TLS.owner.hashCode()
+            check(ownerId != UNLOCKED) { "ownerId == $UNLOCKED" }
+            val previous = lock.compareAndExchange(ownerId, UNLOCKED)
+            check(previous == ownerId) { "previous[$previous] != ownerId[$ownerId]" }
+            TLS.owner = null
+        }
+    }
+}
+
+internal actual inline fun newLock(): Lock = Lock()
 
 internal actual inline fun <R> Lock.withLockImpl(block: () -> R): R {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
-    val lock = this
-    var any: Any
-    do {
-        any = Any()
-    } while (any.hashCode() == UNLOCKED)
-
-    while (true) {
-        if (lock.compareAndSet(UNLOCKED, any.hashCode())) break
-    }
-
+    lock()
     return try {
         block()
     } finally {
-        lock.compareAndSet(any.hashCode(), UNLOCKED)
+        unlock()
     }
 }
