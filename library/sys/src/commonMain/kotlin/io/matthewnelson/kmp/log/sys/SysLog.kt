@@ -20,14 +20,22 @@ package io.matthewnelson.kmp.log.sys
 import io.matthewnelson.kmp.log.Log
 
 /**
- * TODO
+ * Formats and then prints logs to the following system locations.
+ *
+ * - Android: [Log.println](https://developer.android.com/reference/android/util/Log#println(int,%20java.lang.String,%20java.lang.String))
+ * - Jvm/AndroidUnitTest: [System.out](https://docs.oracle.com/javase/8/docs/api/java/lang/System.html#out)/[System.err](https://docs.oracle.com/javase/8/docs/api/java/lang/System.html#err)
+ * - Js/WasmJs: [Console](https://developer.mozilla.org/en-US/docs/Web/API/console)
+ * - WasmWasi: [fd_write](https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#-fd_writefd-fd-iovs-ciovec_array---resultsize-errno) to `STDOUT_FILENO`/`STDERR_FILENO`
+ * - Native:
+ *     - Android: [__android_log_print](https://cs.android.com/android/platform/superproject/+/android-latest-release:system/logging/liblog/include/android/log.h;l=115)
+ *     - Darwin/Linux/Windows: [fprintf](https://www.man7.org/linux/man-pages/man3/fprintf.3p.html) to `stdout`/`stderr`
  * */
 public expect open class SysLog private constructor(
     min: Level = Level.Verbose,
 ): Log {
 
     /**
-     * TODO
+     * The default [SysLog] implementation with [Log.min] set to [Level.Verbose].
      * */
     public companion object Default: SysLog {
 
@@ -39,7 +47,8 @@ public expect open class SysLog private constructor(
         public /* const */ val UID: String /* = "io.matthewnelson.kmp.log.sys.SysLog" */
 
         /**
-         * TODO
+         * Instantiate a new [SysLog] instance with the specified minimum [Level]. If
+         * [Level] specified is the same as [Default], then [Default] will be returned.
          * */
         public fun of(
             min: Level,
