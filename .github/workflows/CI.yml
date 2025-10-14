@@ -17,13 +17,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate Gradle Wrapper
-        uses: gradle/actions/wrapper-validation@v3
+        uses: gradle/actions/wrapper-validation@v5
 
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: 11
+          java-version: 17
 
       - name: Check API Compatibility
         if: matrix.os == 'macos-latest'
@@ -77,8 +77,16 @@ jobs:
             arch: x86_64
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
+      - name: Remove unnecessary tools
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          android: false
+          tool-cache: true
+          dotnet: true
+          haskell: true
+          swap-storage: true
+          docker-images: false
+          large-packages: false
 
       - name: Enable KVM
         run: |
@@ -86,8 +94,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
       - name: Validate Gradle Wrapper
-        uses: gradle/actions/wrapper-validation@v3
+        uses: gradle/actions/wrapper-validation@v5
 
       - name: Setup JDK
         uses: actions/setup-java@v4

@@ -12,12 +12,10 @@ gradle-kotlin               = "2.2.20"
 gradle-publish-maven        = "0.34.0"
 
 kmp-file                    = "0.5.1-SNAPSHOT"
+kmp-process                 = "0.4.0"
 kotlinx-coroutines          = "1.10.2"
 
 [libraries]
-androidx-test-core          = { module = "androidx.test:core", version.ref = "androidx-test-core" }
-androidx-test-runner        = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
-
 gradle-android              = { module = "com.android.tools.build:gradle", version.ref = "gradle-android" }
 gradle-dokka                = { module = "org.jetbrains.dokka:dokka-gradle-plugin", version.ref = "gradle-dokka" }
 gradle-kmp-configuration    = { module = "io.matthewnelson:gradle-kmp-configuration-plugin", version.ref = "gradle-kmp-configuration" }
@@ -26,6 +24,12 @@ gradle-publish-maven        = { module = "com.vanniktech:gradle-maven-publish-pl
 
 kmp-file-async              = { module = "io.matthewnelson.kmp-file:async", version.ref = "kmp-file" }
 kotlinx-coroutines-core     = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+
+# Tests
+androidx-test-core          = { module = "androidx.test:core", version.ref = "androidx-test-core" }
+androidx-test-runner        = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
+
+kmp-process                 = { module = "io.matthewnelson.kmp-process:process", version.ref = "kmp-process" }
 kotlinx-coroutines-test     = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 
 [plugins]

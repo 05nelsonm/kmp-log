@@ -20,6 +20,7 @@ package io.matthewnelson.kmp.log
 import io.matthewnelson.kmp.log.internal.commonCheckDomain
 import io.matthewnelson.kmp.log.internal.commonCheckTag
 import io.matthewnelson.kmp.log.internal.newLock
+import io.matthewnelson.kmp.log.internal.qualifiedNameOrNull
 import io.matthewnelson.kmp.log.internal.withLock
 import kotlin.concurrent.Volatile
 import kotlin.contracts.InvocationKind
@@ -47,7 +48,7 @@ import kotlin.jvm.JvmSynthetic
  *
  *     val logger = Log.Logger.of(tag = "Example")
  *     logger.d { "This will not be logged" }
- *     Log.Root.install(SysLog())
+ *     Log.Root.install(SysLog.Default)
  *     logger.d { "This WILL be logged" }
  *     Log.Root.uninstall(SysLog.UID)
  *
@@ -127,7 +128,7 @@ public abstract class Log {
 
             /**
              * Create a new [Logger] instance. If a [Logger] instance already exists
-             * for the provided [tag], then that is returned instead.
+             * for the provided [tag] and `null` domain, then that is returned instead.
              *
              * @param [tag] The tag to use when logging.
              *
@@ -225,7 +226,8 @@ public abstract class Log {
              *
              * @return The non-`null` tag
              *
-             * @throws [IllegalArgumentException] If domain is invalid.
+             * @throws [IllegalArgumentException] If tag is invalid.
+             * @throws [NullPointerException] If tag is `null`.
              * */
             @JvmStatic
             @Throws(IllegalArgumentException::class, NullPointerException::class)
@@ -293,7 +295,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -357,7 +359,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -420,7 +422,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -483,7 +485,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -546,7 +548,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -609,7 +611,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * @param [lazyMsg] The message to log.
-         * @param [t] The error to log.
+         * @param [t] The error to log or `null`.
          *
          * @return `true` if it was logged by a [Log] instance, `false` otherwise.
          * */
@@ -733,7 +735,7 @@ public abstract class Log {
     }
 
     /**
-     * The root location at which all [Log] instances are installed.
+     * The root location for which all [Log] instances are installed.
      * */
     public companion object Root {
 
@@ -742,6 +744,13 @@ public abstract class Log {
          * */
         @JvmStatic
         public fun installed(): List<Log> = _LOGS.toList()
+
+        /**
+         * Returns the [Log] instance currently installed where [Log.uid] matches that
+         * which is specified, or `null` if no [Log] instances are found.
+         * */
+        @JvmStatic
+        public operator fun get(uid: String): Log? = _LOGS.firstOrNull { it.uid == uid }
 
         /**
          * Install a [Log] instance.
@@ -777,7 +786,7 @@ public abstract class Log {
         @JvmStatic
         @Throws(IllegalStateException::class)
         public inline fun installOrThrow(log: Log) {
-            check(install(log)) { "$log was already installed." }
+            check(install(log)) { "$log is already installed." }
         }
 
         /**
@@ -881,7 +890,7 @@ public abstract class Log {
         @JvmStatic
         @Throws(IllegalStateException::class)
         public inline fun uninstallOrThrow(uid: String) {
-            check(uninstall(uid)) { "A Log with uid[$uid] was not installed." }
+            check(uninstall(uid)) { "A Log instance with uid[$uid] is not currently installed." }
         }
 
         private const val ROOT_DOMAIN: String = "kmp-log:log"
@@ -954,7 +963,7 @@ public abstract class Log {
 
     /**
      * A unique identifier for this [Log] instance, such as a package name or
-     * a hashed file path. [Root.install] uses this value to inhibit multiple
+     * a hash of a file path. [Root.install] uses this value to inhibit multiple
      * instances from being installed.
      *
      * Will be non-empty and contain no whitespace.
@@ -997,11 +1006,11 @@ public abstract class Log {
      * Log something.
      *
      * Guarantees:
+     *  - [level] will be between [min] and [max] (inclusive).
      *  - [domain] will be `null`, or in compliance with parameters specified by [Logger.checkDomain].
      *  - [tag] will be in compliance with parameters specified by [Logger.checkTag].
      *  - [msg] and [t] will never both be `null`.
      *  - [msg] will be `null` or a non-empty value, never empty.
-     *  - [level] will be between [min] and [max] (inclusive).
      *  - [isLoggable] will have returned `true` immediately prior to this function being called by [Root].
      *
      * @return `true` if a log was generated, `false` otherwise.
@@ -1012,9 +1021,9 @@ public abstract class Log {
      * Helper for implementations to filter by a logger's domain and/or tag.
      *
      * Guarantees:
+     *  - [level] will be between [min] and [max] (inclusive).
      *  - [domain] will be `null`, or in compliance with parameters specified by [Logger.checkDomain].
      *  - [tag] will be in compliance with parameters specified by [Logger.checkTag].
-     *  - [level] will be between [min] and [max] (inclusive).
      *
      * @return `true` if the log would be accepted, `false` otherwise. Default: `true`
      * */
@@ -1056,7 +1065,13 @@ public abstract class Log {
     }
     /** @suppress */
     public final override fun toString(): String {
-        val name = this::class.simpleName ?: "Log"
+        val name = with(this::class) {
+            qualifiedNameOrNull()?.let { qn ->
+                val i = qn.indexOfFirst { c -> c.isUpperCase() }
+                if (i == -1) return@let null
+                qn.substring(i, qn.length)
+            } ?: simpleName ?: "Log"
+        }
         return "$name[min=$min, max=$max, uid=$uid]"
     }
 }

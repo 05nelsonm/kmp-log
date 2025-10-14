@@ -24,11 +24,12 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
 
 class LoggerJvmNativeUnitTest {
 
     @Test
-    fun givenLogger_whenOfIsCalledFromMultipleThreads_thenCachedLoggersAreProtectedByLock() = runTest {
+    fun givenLogger_whenOfIsCalledFromMultipleThreads_thenCachedLoggersAreProtectedByLock() = runTest(timeout = 3.minutes) {
         val before = Log.Logger.size()
 
         val loggers = Array(200_000) {

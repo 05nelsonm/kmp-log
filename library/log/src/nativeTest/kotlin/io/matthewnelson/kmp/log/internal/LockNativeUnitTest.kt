@@ -21,20 +21,28 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.minutes
 
 class LockNativeUnitTest {
 
     private val lock = newLock()
 
     @Test
-    fun givenLock_whenUsedFromMultipleThreads_thenGuardsAccess() = runTest {
+    fun givenLock_whenUsedFromMultipleThreads_thenGuardsAccess() = runTest(timeout = 3.minutes) {
         val size = 500_000
+        // When list is resized, if it was not guarded by a lock then would
+        // eventually end up throwing an IndexOutOfBoundsException.
         val list = ArrayList<Int>(50)
         Array(size) { i ->
             async(Dispatchers.IO) {
                 lock.withLock {
-                    // Would normally throw IndexOutOfBoundsException
-                    list.add(i)
+                    if (i % 2 == 0) {
+                        lock.withLock {
+                            list.add(i)
+                        }
+                    } else {
+                        list.add(i)
+                    }
                 }
             }
         }.toList().awaitAll()

@@ -1,0 +1,13 @@
+public class io/matthewnelson/kmp/log/sys/SysLog : io/matthewnelson/kmp/log/Log {
+	public static final field Default Lio/matthewnelson/kmp/log/sys/SysLog$Default;
+	public static final field UID Ljava/lang/String;
+	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	protected final fun isLoggable (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/String;Ljava/lang/String;)Z
+	protected fun log (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)Z
+	public static final fun of (Lio/matthewnelson/kmp/log/Log$Level;)Lio/matthewnelson/kmp/log/sys/SysLog;
+}
+
+public final class io/matthewnelson/kmp/log/sys/SysLog$Default : io/matthewnelson/kmp/log/sys/SysLog {
+	public final fun of (Lio/matthewnelson/kmp/log/Log$Level;)Lio/matthewnelson/kmp/log/sys/SysLog;
+}
+

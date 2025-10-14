@@ -17,32 +17,7 @@
 
 package io.matthewnelson.kmp.log.internal
 
-import kotlin.concurrent.AtomicInt
-import kotlin.contracts.InvocationKind
-import kotlin.contracts.contract
+import io.matthewnelson.kmp.log.Log
+import kotlin.reflect.KClass
 
-@Suppress("ACTUAL_WITHOUT_EXPECT")
-internal actual typealias Lock = AtomicInt
-
-private const val UNLOCKED = 0
-
-internal actual inline fun newLock(): Lock = Lock(UNLOCKED)
-
-internal actual inline fun <R> Lock.withLockImpl(block: () -> R): R {
-    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
-    val lock = this
-    var any: Any
-    do {
-        any = Any()
-    } while (any.hashCode() == UNLOCKED)
-
-    while (true) {
-        if (lock.compareAndSet(UNLOCKED, any.hashCode())) break
-    }
-
-    return try {
-        block()
-    } finally {
-        lock.compareAndSet(any.hashCode(), UNLOCKED)
-    }
-}
+internal actual inline fun KClass<out Log>.qualifiedNameOrNull(): String? = qualifiedName

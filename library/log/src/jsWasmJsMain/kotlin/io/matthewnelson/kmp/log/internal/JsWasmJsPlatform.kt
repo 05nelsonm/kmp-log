@@ -13,7 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-package io.matthewnelson.kmp.log.sys
+@file:Suppress("NOTHING_TO_INLINE")
 
-@Suppress("UNUSED")
-internal fun stub() { /* no-op */ }
+package io.matthewnelson.kmp.log.internal
+
+import io.matthewnelson.kmp.log.Log
+import kotlin.reflect.KClass
+
+internal actual inline fun KClass<out Log>.qualifiedNameOrNull(): String? = null

@@ -19,6 +19,7 @@ import io.matthewnelson.kmp.configuration.extension.container.target.TargetAndro
 import org.gradle.api.Action
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
+import org.jetbrains.kotlin.konan.target.HostManager
 
 fun KmpConfigurationExtension.configureShared(
     java9ModuleName: String? = null,
@@ -35,7 +36,11 @@ fun KmpConfigurationExtension.configureShared(
         }
 
         jvm {
-            java9ModuleInfoName = java9ModuleName
+            // CI complains on Windows b/c Java 11 is not found.
+            // Publications never happen on Windows, so just disable it.
+            if (!HostManager.hostIsMingw) {
+                java9ModuleInfoName = java9ModuleName
+            }
         }
 
         js {
