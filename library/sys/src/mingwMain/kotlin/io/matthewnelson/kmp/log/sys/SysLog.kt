@@ -20,6 +20,8 @@ package io.matthewnelson.kmp.log.sys
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
 import io.matthewnelson.kmp.log.sys.internal.commonOf
+import io.matthewnelson.kmp.log.sys.internal.nativeIsLoggable
+import io.matthewnelson.kmp.log.sys.internal.nativeLogPrint
 
 // mingw
 public actual open class SysLog private actual constructor(
@@ -36,11 +38,13 @@ public actual open class SysLog private actual constructor(
     }
 
     actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        // TODO
-        return false
+        return nativeLogPrint(level, domain, tag, msg, t, _dateTime = {
+            // TODO: Date
+            null
+        })
     }
 
     actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
-        return super.isLoggable(level, domain, tag)
+        return nativeIsLoggable(level)
     }
 }
