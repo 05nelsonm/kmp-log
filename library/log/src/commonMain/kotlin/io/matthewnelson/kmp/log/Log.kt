@@ -20,6 +20,7 @@ package io.matthewnelson.kmp.log
 import io.matthewnelson.kmp.log.internal.commonCheckDomain
 import io.matthewnelson.kmp.log.internal.commonCheckTag
 import io.matthewnelson.kmp.log.internal.newLock
+import io.matthewnelson.kmp.log.internal.qualifiedNameOrNull
 import io.matthewnelson.kmp.log.internal.withLock
 import kotlin.concurrent.Volatile
 import kotlin.contracts.InvocationKind
@@ -1064,7 +1065,13 @@ public abstract class Log {
     }
     /** @suppress */
     public final override fun toString(): String {
-        val name = this::class.simpleName ?: "Log"
+        val name = with(this::class) {
+            qualifiedNameOrNull()?.let { qn ->
+                val i = qn.indexOfFirst { c -> c.isUpperCase() }
+                if (i == -1) return@let null
+                qn.substring(i, qn.length)
+            } ?: simpleName ?: "Log"
+        }
         return "$name[min=$min, max=$max, uid=$uid]"
     }
 }
