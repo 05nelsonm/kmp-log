@@ -19,7 +19,10 @@ package io.matthewnelson.kmp.log.sys
 
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
+import io.matthewnelson.kmp.log.sys.internal.commonFormat
 import io.matthewnelson.kmp.log.sys.internal.commonOf
+import kotlin.wasm.unsafe.UnsafeWasmMemoryApi
+import kotlin.wasm.unsafe.withScopedMemoryAllocator
 
 // wasmWasi
 public actual open class SysLog private actual constructor(
@@ -33,14 +36,55 @@ public actual open class SysLog private actual constructor(
         public actual fun of(
             min: Level,
         ): SysLog = ::SysLog.commonOf(min)
+
+        private const val STDOUT_FILENO: Int = 1
+        private const val STDERR_FILENO: Int = 2
     }
 
     actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        // TODO
-        return false
+        val formatted = run {
+            // TODO: Date
+            commonFormat(level, domain, tag, msg, t, dateTime = null, omitLastNewLine = false)
+        }.toString().encodeToByteArray()
+
+        val fd = when (level) {
+            Level.Verbose,
+            Level.Debug,
+            Level.Info,
+            Level.Warn -> STDOUT_FILENO
+            Level.Error,
+            Level.Fatal -> STDERR_FILENO
+        }
+
+        @OptIn(UnsafeWasmMemoryApi::class)
+        withScopedMemoryAllocator { alloc ->
+            val data = alloc.allocate(formatted.size)
+            for (i in formatted.indices) {
+                (data + i).storeByte(formatted[i])
+            }
+            val iovec = alloc.allocate(Int.SIZE_BYTES * 2)
+            iovec.storeInt(data.address.toInt())
+            (iovec + Int.SIZE_BYTES).storeInt(formatted.size)
+            val ret = alloc.allocate(Int.SIZE_BYTES)
+
+            val errno = fdWrite(
+                fd = fd,
+                iovecPtr = iovec.address.toInt(),
+                iovecSize = 1,
+                retPtr = ret.address.toInt(),
+            )
+
+            if (errno != 0) return false
+            return ret.loadInt() == formatted.size
+        }
     }
 
     actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
         return super.isLoggable(level, domain, tag)
     }
 }
+
+// https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#-fd_writefd-fd-iovs-ciovec_array---resultsize-errno
+@Suppress("OPT_IN_USAGE")
+@WasmImport("wasi_snapshot_preview1", "fd_write")
+private external fun fdWrite(fd: Int, iovecPtr: Int, iovecSize: Int, retPtr: Int): Int

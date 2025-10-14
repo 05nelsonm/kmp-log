@@ -15,4 +15,5 @@
  **/
 package io.matthewnelson.kmp.log.sys.internal.node
 
+@Suppress("OPT_IN_USAGE")
 internal actual fun isNodeJs(): Boolean = js(CODE_IS_NODE_JS)
