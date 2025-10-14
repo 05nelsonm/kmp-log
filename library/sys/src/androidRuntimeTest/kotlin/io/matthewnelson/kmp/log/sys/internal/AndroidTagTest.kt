@@ -29,7 +29,7 @@ class AndroidTagTest {
         repeat(24) { tag += "A" }
         val sdkInt = deviceApiLevel()
         val actual = SysLog.androidDomainTag(sdkInt, domain = null, tag)
-        if (sdkInt <= 23) {
+        if (sdkInt <= 25) {
             assertEquals(23, actual.length)
             assertNotEquals(tag, actual)
         } else {
