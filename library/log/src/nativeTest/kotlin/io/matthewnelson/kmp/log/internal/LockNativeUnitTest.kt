@@ -21,6 +21,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.minutes
 
 class LockNativeUnitTest {
@@ -38,6 +39,7 @@ class LockNativeUnitTest {
                 lock.withLock {
                     if (i % 2 == 0) {
                         lock.withLock {
+                            // Test that reentries work (nested withLock calls)
                             list.add(i)
                         }
                     } else {
@@ -46,5 +48,7 @@ class LockNativeUnitTest {
                 }
             }
         }.toList().awaitAll()
+
+        assertEquals(size, list.size)
     }
 }
