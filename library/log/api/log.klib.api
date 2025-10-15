@@ -94,13 +94,21 @@ abstract class io.matthewnelson.kmp.log/Log { // io.matthewnelson.kmp.log/Log|nu
         }
     }
 
+    final object AbortHandler : io.matthewnelson.kmp.log/Log { // io.matthewnelson.kmp.log/Log.AbortHandler|null[0]
+        final const val UID // io.matthewnelson.kmp.log/Log.AbortHandler.UID|{}UID[0]
+            final fun <get-UID>(): kotlin/String // io.matthewnelson.kmp.log/Log.AbortHandler.UID.<get-UID>|<get-UID>(){}[0]
+
+        final val isInstalled // io.matthewnelson.kmp.log/Log.AbortHandler.isInstalled|{}isInstalled[0]
+            final fun <get-isInstalled>(): kotlin/Boolean // io.matthewnelson.kmp.log/Log.AbortHandler.isInstalled.<get-isInstalled>|<get-isInstalled>(){}[0]
+    }
+
     final object Root { // io.matthewnelson.kmp.log/Log.Root|null[0]
         final fun get(kotlin/String): io.matthewnelson.kmp.log/Log? // io.matthewnelson.kmp.log/Log.Root.get|get(kotlin.String){}[0]
         final fun install(io.matthewnelson.kmp.log/Log): kotlin/Boolean // io.matthewnelson.kmp.log/Log.Root.install|install(io.matthewnelson.kmp.log.Log){}[0]
         final fun installed(): kotlin.collections/List<io.matthewnelson.kmp.log/Log> // io.matthewnelson.kmp.log/Log.Root.installed|installed(){}[0]
         final fun toString(): kotlin/String // io.matthewnelson.kmp.log/Log.Root.toString|toString(){}[0]
         final fun uninstall(kotlin/String): kotlin/Boolean // io.matthewnelson.kmp.log/Log.Root.uninstall|uninstall(kotlin.String){}[0]
-        final fun uninstallAll() // io.matthewnelson.kmp.log/Log.Root.uninstallAll|uninstallAll(){}[0]
+        final fun uninstallAll(kotlin/Boolean) // io.matthewnelson.kmp.log/Log.Root.uninstallAll|uninstallAll(kotlin.Boolean){}[0]
         final inline fun installOrThrow(io.matthewnelson.kmp.log/Log) // io.matthewnelson.kmp.log/Log.Root.installOrThrow|installOrThrow(io.matthewnelson.kmp.log.Log){}[0]
         final inline fun uninstall(io.matthewnelson.kmp.log/Log): kotlin/Boolean // io.matthewnelson.kmp.log/Log.Root.uninstall|uninstall(io.matthewnelson.kmp.log.Log){}[0]
         final inline fun uninstallOrThrow(io.matthewnelson.kmp.log/Log) // io.matthewnelson.kmp.log/Log.Root.uninstallOrThrow|uninstallOrThrow(io.matthewnelson.kmp.log.Log){}[0]

@@ -20,6 +20,7 @@ package io.matthewnelson.kmp.log.sys
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
 import io.matthewnelson.kmp.log.sys.internal.commonFormat
+import io.matthewnelson.kmp.log.sys.internal.commonIsInstalled
 import io.matthewnelson.kmp.log.sys.internal.commonLogChunk
 import io.matthewnelson.kmp.log.sys.internal.commonOf
 import io.matthewnelson.kmp.log.sys.internal.js.JsDate
@@ -35,6 +36,8 @@ public actual open class SysLog private actual constructor(
     public actual companion object Default: SysLog() {
 
         public actual const val UID: String = SYS_LOG_UID
+
+        public actual val isInstalled: Boolean get() = commonIsInstalled()
 
         public actual fun of(
             min: Level,

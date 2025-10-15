@@ -18,9 +18,15 @@ public abstract class io/matthewnelson/kmp/log/Log {
 	public final fun toString ()Ljava/lang/String;
 	public static final fun uninstall (Lio/matthewnelson/kmp/log/Log;)Z
 	public static final fun uninstall (Ljava/lang/String;)Z
-	public static final fun uninstallAll ()V
+	public static final fun uninstallAll (Z)V
 	public static final fun uninstallOrThrow (Lio/matthewnelson/kmp/log/Log;)V
 	public static final fun uninstallOrThrow (Ljava/lang/String;)V
+}
+
+public final class io/matthewnelson/kmp/log/Log$AbortHandler : io/matthewnelson/kmp/log/Log {
+	public static final field INSTANCE Lio/matthewnelson/kmp/log/Log$AbortHandler;
+	public static final field UID Ljava/lang/String;
+	public static final fun isInstalled ()Z
 }
 
 public final class io/matthewnelson/kmp/log/Log$Level : java/lang/Enum {
@@ -100,7 +106,7 @@ public final class io/matthewnelson/kmp/log/Log$Root {
 	public fun toString ()Ljava/lang/String;
 	public final fun uninstall (Lio/matthewnelson/kmp/log/Log;)Z
 	public final fun uninstall (Ljava/lang/String;)Z
-	public final fun uninstallAll ()V
+	public final fun uninstallAll (Z)V
 	public final fun uninstallOrThrow (Lio/matthewnelson/kmp/log/Log;)V
 	public final fun uninstallOrThrow (Ljava/lang/String;)V
 }

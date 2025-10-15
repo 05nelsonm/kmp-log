@@ -29,6 +29,9 @@ import io.matthewnelson.kmp.log.Log
  * - Native:
  *     - Android: [__android_log_print](https://cs.android.com/android/platform/superproject/+/android-latest-release:system/logging/liblog/include/android/log.h;l=115)
  *     - Darwin/Linux/MinGW: [fprintf](https://www.man7.org/linux/man-pages/man3/fprintf.3p.html) to `stdout`/`stderr`
+ *
+ * **NOTE:** On Android & AndroidNative API 25 and below, [Logger.domain] is never used
+ * and [Logger.tag] will be truncated (if necessary) to 23 characters.
  * */
 public expect open class SysLog private constructor(
     min: Level = Level.Debug,
@@ -45,6 +48,11 @@ public expect open class SysLog private constructor(
          * Can be used with [Log.Root.uninstall].
          * */
         public /* const */ val UID: String /* = "io.matthewnelson.kmp.log.sys.SysLog" */
+
+        /**
+         * Checks if [SysLog] is installed at [Log.Root].
+         * */
+        public val isInstalled: Boolean
 
         /**
          * Instantiate a new [SysLog] instance with the specified minimum [Level]. If

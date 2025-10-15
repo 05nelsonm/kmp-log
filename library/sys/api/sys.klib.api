@@ -14,6 +14,9 @@ open class io.matthewnelson.kmp.log.sys/SysLog : io.matthewnelson.kmp.log/Log { 
         final const val UID // io.matthewnelson.kmp.log.sys/SysLog.Default.UID|{}UID[0]
             final fun <get-UID>(): kotlin/String // io.matthewnelson.kmp.log.sys/SysLog.Default.UID.<get-UID>|<get-UID>(){}[0]
 
+        final val isInstalled // io.matthewnelson.kmp.log.sys/SysLog.Default.isInstalled|{}isInstalled[0]
+            final fun <get-isInstalled>(): kotlin/Boolean // io.matthewnelson.kmp.log.sys/SysLog.Default.isInstalled.<get-isInstalled>|<get-isInstalled>(){}[0]
+
         final fun of(io.matthewnelson.kmp.log/Log.Level): io.matthewnelson.kmp.log.sys/SysLog // io.matthewnelson.kmp.log.sys/SysLog.Default.of|of(io.matthewnelson.kmp.log.Log.Level){}[0]
     }
 }

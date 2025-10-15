@@ -33,6 +33,7 @@ class AndroidIsLoggableTest {
             return
         }
 
+        Log.uninstallOrThrow(Log.AbortHandler.UID)
         Log.installOrThrow(SysLog.of(Log.Level.Verbose))
         try {
             Log.Level.entries.forEach { level ->
@@ -49,6 +50,7 @@ class AndroidIsLoggableTest {
                 assertEquals(expected, LOG.isLoggable(level), "$LOG >> $level")
             }
         } finally {
+            Log.install(Log.AbortHandler)
             Log.uninstallOrThrow(SysLog.UID)
         }
     }

@@ -199,8 +199,13 @@ class LoggerUnitTest {
 
     @Test
     fun givenLogger_whenNoLogInstanceInstalled_thenIsLoggableAlwaysReturnsFalse() {
-        Log.Level.entries.forEach { level ->
-            assertFalse(LOG.isLoggable(level))
+        try {
+            Root.uninstallOrThrow(Log.AbortHandler.UID)
+            Log.Level.entries.forEach { level ->
+                assertFalse(LOG.isLoggable(level))
+            }
+        } finally {
+            Root.installOrThrow(Log.AbortHandler)
         }
     }
 
@@ -208,7 +213,7 @@ class LoggerUnitTest {
     fun givenLogger_whenLogVerbose_thenVerboseLevelIsSentToLogInstance() {
         val log = TestLog(uid = "Verbose", min = Log.Level.Verbose)
         try {
-            Root.install(log)
+            Root.installOrThrow(log)
             LOG.v("1")
             LOG.v(Throwable("2"))
             LOG.v(null, Throwable("3"))
@@ -222,7 +227,7 @@ class LoggerUnitTest {
                 assertEquals(Log.Level.Verbose, logItem.level)
             }
         } finally {
-            Root.uninstall(log)
+            Root.uninstallOrThrow(log)
         }
     }
 
@@ -230,7 +235,7 @@ class LoggerUnitTest {
     fun givenLogger_whenLogDebug_thenDebugLevelIsSentToLogInstance() {
         val log = TestLog(uid = "Debug", min = Log.Level.Debug)
         try {
-            Root.install(log)
+            Root.installOrThrow(log)
             LOG.d("1")
             LOG.d(Throwable("2"))
             LOG.d(null, Throwable("3"))
@@ -244,7 +249,7 @@ class LoggerUnitTest {
                 assertEquals(Log.Level.Debug, logItem.level)
             }
         } finally {
-            Root.uninstall(log)
+            Root.uninstallOrThrow(log)
         }
     }
 
@@ -252,7 +257,7 @@ class LoggerUnitTest {
     fun givenLogger_whenLogInfo_thenInfoLevelIsSentToLogInstance() {
         val log = TestLog(uid = "Info", min = Log.Level.Info)
         try {
-            Root.install(log)
+            Root.installOrThrow(log)
             LOG.i("1")
             LOG.i(Throwable("2"))
             LOG.i(null, Throwable("3"))
@@ -266,7 +271,7 @@ class LoggerUnitTest {
                 assertEquals(Log.Level.Info, logItem.level)
             }
         } finally {
-            Root.uninstall(log)
+            Root.uninstallOrThrow(log)
         }
     }
 
@@ -274,7 +279,7 @@ class LoggerUnitTest {
     fun givenLogger_whenLogWarn_thenWarnLevelIsSentToLogInstance() {
         val log = TestLog(uid = "Warn", min = Log.Level.Warn)
         try {
-            Root.install(log)
+            Root.installOrThrow(log)
             LOG.w("1")
             LOG.w(Throwable("2"))
             LOG.w(null, Throwable("3"))
@@ -288,7 +293,7 @@ class LoggerUnitTest {
                 assertEquals(Log.Level.Warn, logItem.level)
             }
         } finally {
-            Root.uninstall(log)
+            Root.uninstallOrThrow(log)
         }
     }
 
@@ -296,7 +301,7 @@ class LoggerUnitTest {
     fun givenLogger_whenLogError_thenErrorLevelIsSentToLogInstance() {
         val log = TestLog(uid = "Error", min = Log.Level.Error)
         try {
-            Root.install(log)
+            Root.installOrThrow(log)
             LOG.e("1")
             LOG.e(Throwable("2"))
             LOG.e(null, Throwable("3"))
@@ -310,7 +315,7 @@ class LoggerUnitTest {
                 assertEquals(Log.Level.Error, logItem.level)
             }
         } finally {
-            Root.uninstall(log)
+            Root.uninstallOrThrow(log)
         }
     }
 
@@ -318,7 +323,8 @@ class LoggerUnitTest {
     fun givenLogger_whenLogFatal_thenFatalLevelIsSentToLogInstance() {
         val log = TestLog(uid = "Fatal", min = Log.Level.Fatal)
         try {
-            Root.install(log)
+            Root.installOrThrow(log)
+            Root.uninstallOrThrow(Log.AbortHandler.UID)
             LOG.wtf("1")
             LOG.wtf(Throwable("2"))
             LOG.wtf(null, Throwable("3"))
@@ -332,7 +338,8 @@ class LoggerUnitTest {
                 assertEquals(Log.Level.Fatal, logItem.level)
             }
         } finally {
-            Root.uninstall(log)
+            Root.uninstallOrThrow(log)
+            Root.installOrThrow(Log.AbortHandler)
         }
     }
 
@@ -340,23 +347,23 @@ class LoggerUnitTest {
     fun givenLogger_whenMsgIsNullAndTIsNull_thenIsNotLogged() {
         try {
             val log = TestLog(uid = "msg_null")
-            Root.install(log)
+            Root.installOrThrow(log)
             assertFalse(LOG.wtf(null, null))
             assertEquals(0, log.logs?.size)
         } finally {
-            Root.uninstallAll()
+            Root.uninstallOrThrow("msg_null")
         }
     }
 
     @Test
     fun givenLogger_whenMsgIsEmptyAndTIsNull_thenIsNotLogged() {
         try {
-            val log = TestLog(uid = "msg_null")
-            Root.install(log)
+            val log = TestLog(uid = "msg_empty")
+            Root.installOrThrow(log)
             assertFalse(LOG.wtf("", null))
             assertEquals(0, log.logs?.size)
         } finally {
-            Root.uninstallAll()
+            Root.uninstallOrThrow("msg_empty")
         }
     }
 }

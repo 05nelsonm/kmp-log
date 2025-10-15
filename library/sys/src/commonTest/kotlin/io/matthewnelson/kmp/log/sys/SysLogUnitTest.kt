@@ -19,6 +19,7 @@ import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.Log.Level
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -52,7 +53,23 @@ class SysLogUnitTest {
     }
 
     @Test
+    fun givenIsInstalled_whenNotInstalled_thenReturnsFalse() {
+        assertFalse(SysLog.isInstalled)
+    }
+
+    @Test
+    fun givenIsInstalled_whenIsInstalled_thenReturnsTrue() {
+        try {
+            Log.installOrThrow(SysLog)
+            assertTrue(SysLog.isInstalled)
+        } finally {
+            Log.uninstall(SysLog)
+        }
+    }
+
+    @Test
     fun givenSysLog_whenLogThings_thenReturnsTrue() {
+        Log.uninstallOrThrow(Log.AbortHandler.UID)
         Log.installOrThrow(SysLog.of(Level.Verbose))
         try {
             assertTrue(LOG.v { "TEST VERBOSE" }, "v")
@@ -62,6 +79,7 @@ class SysLogUnitTest {
             assertTrue(LOG.e(IllegalStateException("log error")) { "TEST ERROR" }, "e")
             assertTrue(LOG.wtf(UnsupportedOperationException("log fatal")) { "TEST FATAL" }, "wtf")
         } finally {
+            Log.install(Log.AbortHandler)
             Log.uninstallOrThrow(SysLog.UID)
         }
     }
