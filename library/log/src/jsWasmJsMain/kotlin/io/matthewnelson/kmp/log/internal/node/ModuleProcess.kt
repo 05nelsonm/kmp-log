@@ -15,7 +15,7 @@
  **/
 package io.matthewnelson.kmp.log.internal.node
 
-/** [docs](https://nodejs.org/api/os.html) */
+/** [docs](https://nodejs.org/api/process.html) */
 internal external interface ModuleProcess {
     fun abort()
 }

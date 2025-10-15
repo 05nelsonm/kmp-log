@@ -29,5 +29,5 @@ internal actual inline fun Log.AbortHandler.doAbort(t: Throwable?): Boolean {
     } else {
         throw (t ?: Throwable("ABORT"))
     }
-    return false
+    return true
 }

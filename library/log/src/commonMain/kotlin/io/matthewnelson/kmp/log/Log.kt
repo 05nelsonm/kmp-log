@@ -1210,6 +1210,6 @@ public abstract class Log {
     }
 
     // A way to signal to AbortHandler that no Log instances were installed to log
-    // the Fatal error, and that it should print the stacktrace to before aborting.
+    // the Fatal error, and that it should print the stacktrace before aborting.
     private class FatalException(message: String?, cause: Throwable?): Throwable(message, cause)
 }
