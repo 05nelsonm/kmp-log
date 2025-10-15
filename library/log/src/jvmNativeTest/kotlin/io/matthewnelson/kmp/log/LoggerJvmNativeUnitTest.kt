@@ -32,14 +32,15 @@ class LoggerJvmNativeUnitTest {
     fun givenLogger_whenOfIsCalledFromMultipleThreads_thenCachedLoggersAreProtectedByLock() = runTest(timeout = 3.minutes) {
         val before = Log.Logger.size()
 
+        val limit = 1_000
         val loggers = Array(200_000) {
-            val i = Random.nextInt(from = 0, until = 200)
+            val i = Random.nextInt(from = 0, until = limit)
             async(Dispatchers.IO) {
                 Log.Logger.of("random_$i")
             }
         }.toList().awaitAll().toSet()
 
         assertEquals(Log.Logger.size() - before, loggers.size)
-        assertTrue(loggers.size <= 200, "size[${loggers.size}] > 200")
+        assertTrue(loggers.size <= limit, "size[${loggers.size}] > $limit")
     }
 }

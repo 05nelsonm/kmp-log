@@ -20,6 +20,7 @@ package io.matthewnelson.kmp.log.sys
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
 import io.matthewnelson.kmp.log.sys.internal.commonFormat
+import io.matthewnelson.kmp.log.sys.internal.commonIsInstalled
 import io.matthewnelson.kmp.log.sys.internal.commonOf
 import kotlin.wasm.unsafe.UnsafeWasmMemoryApi
 import kotlin.wasm.unsafe.withScopedMemoryAllocator
@@ -32,6 +33,8 @@ public actual open class SysLog private actual constructor(
     public actual companion object Default: SysLog() {
 
         public actual const val UID: String = SYS_LOG_UID
+
+        public actual val isInstalled: Boolean get() = commonIsInstalled()
 
         public actual fun of(
             min: Level,
@@ -84,7 +87,6 @@ public actual open class SysLog private actual constructor(
     }
 }
 
-// https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#-fd_writefd-fd-iovs-ciovec_array---resultsize-errno
 @Suppress("OPT_IN_USAGE")
 @WasmImport("wasi_snapshot_preview1", "fd_write")
 private external fun fdWrite(fd: Int, iovecPtr: Int, iovecSize: Int, retPtr: Int): Int

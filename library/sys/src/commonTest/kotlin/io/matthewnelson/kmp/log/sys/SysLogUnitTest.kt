@@ -19,6 +19,7 @@ import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.Log.Level
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -52,16 +53,33 @@ class SysLogUnitTest {
     }
 
     @Test
+    fun givenIsInstalled_whenNotInstalled_thenReturnsFalse() {
+        assertFalse(SysLog.isInstalled)
+    }
+
+    @Test
+    fun givenIsInstalled_whenIsInstalled_thenReturnsTrue() {
+        try {
+            Log.installOrThrow(SysLog)
+            assertTrue(SysLog.isInstalled)
+        } finally {
+            Log.uninstall(SysLog)
+        }
+    }
+
+    @Test
     fun givenSysLog_whenLogThings_thenReturnsTrue() {
+        Log.uninstallOrThrow(Log.AbortHandler.UID)
         Log.installOrThrow(SysLog.of(Level.Verbose))
         try {
-            assertTrue(LOG.v { "TEST VERBOSE" }, "v")
-            assertTrue(LOG.d { "TEST DEBUG" }, "d")
-            assertTrue(LOG.i { "TEST INFO" }, "i")
-            assertTrue(LOG.w { "TEST WARN" }, "w")
-            assertTrue(LOG.e(IllegalStateException("log error")) { "TEST ERROR" }, "e")
-            assertTrue(LOG.wtf(UnsupportedOperationException("log fatal")) { "TEST FATAL" }, "wtf")
+            assertEquals(1, LOG.v { "TEST VERBOSE" }, "v")
+            assertEquals(1, LOG.d { "TEST DEBUG" }, "d")
+            assertEquals(1, LOG.i { "TEST INFO" }, "i")
+            assertEquals(1, LOG.w { "TEST WARN" }, "w")
+            assertEquals(1, LOG.e(IllegalStateException("log error")) { "TEST ERROR" }, "e")
+            assertEquals(1, LOG.wtf(UnsupportedOperationException("log fatal")) { "TEST FATAL" }, "wtf")
         } finally {
+            Log.install(Log.AbortHandler)
             Log.uninstallOrThrow(SysLog.UID)
         }
     }

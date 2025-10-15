@@ -17,6 +17,7 @@
 
 package io.matthewnelson.kmp.log.sys.internal
 
+import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.Log.Level
 import io.matthewnelson.kmp.log.sys.SysLog
 import kotlin.contracts.ExperimentalContracts
@@ -33,6 +34,8 @@ internal inline fun ((min: Level) -> SysLog).commonOf(
     if (min != SysLog.Default.min) return this(min)
     return SysLog.Default
 }
+
+internal inline fun SysLog.Default.commonIsInstalled(): Boolean = Log.Root[UID] != null
 
 // TODO: Move to :log as Log.Util.simpleDomainTag?
 internal inline fun SysLog.Default.commonDomainTag(

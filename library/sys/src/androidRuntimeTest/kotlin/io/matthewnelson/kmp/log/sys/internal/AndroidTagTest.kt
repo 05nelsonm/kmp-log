@@ -24,7 +24,7 @@ import kotlin.test.assertNotEquals
 class AndroidTagTest {
 
     @Test
-    fun givenTag_whenAndroidApi23OrBelow_thenIsTruncatedIfTooLong() {
+    fun givenTag_whenAndroidApi25OrBelow_thenIsTruncatedIfTooLong() {
         var tag = ""
         repeat(24) { tag += "A" }
         val sdkInt = deviceApiLevel()

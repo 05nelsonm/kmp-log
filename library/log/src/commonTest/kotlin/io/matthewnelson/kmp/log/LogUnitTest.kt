@@ -50,7 +50,8 @@ class LogUnitTest {
             assertFalse(Log.install(two), "install(two)")
             assertNull(two.logs, "two.logs")
         } finally {
-            Log.uninstallAll()
+            Log.uninstall(one)
+            Log.uninstall(two)
         }
     }
 
@@ -70,7 +71,8 @@ class LogUnitTest {
             assertNull(one.logs, "one.logs")
             assertNull(two.logs, "two.logs")
         } finally {
-            Log.uninstallAll()
+            Log.uninstall(one)
+            Log.uninstall(two)
         }
     }
 
@@ -87,7 +89,7 @@ class LogUnitTest {
             Log.install(log)
             assertEquals(false, isAvailable)
         } finally {
-            Log.uninstallAll()
+            Log.uninstallOrThrow(log)
         }
     }
 
@@ -100,12 +102,8 @@ class LogUnitTest {
                 isAvailable = installed().contains(this)
             }
         }
-        try {
-            Log.install(log)
-            Log.uninstallOrThrow(log)
-            assertEquals(false, isAvailable)
-        } finally {
-            Log.uninstallAll()
-        }
+        Log.install(log)
+        Log.uninstallOrThrow(log)
+        assertEquals(false, isAvailable)
     }
 }

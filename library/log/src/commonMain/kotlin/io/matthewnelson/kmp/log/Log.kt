@@ -17,23 +17,27 @@
 
 package io.matthewnelson.kmp.log
 
+import io.matthewnelson.kmp.log.internal.ABORTER_ACCEPTS_MESSAGE
+import io.matthewnelson.kmp.log.internal.ABORT_HANDLER_UID
 import io.matthewnelson.kmp.log.internal.commonCheckDomain
 import io.matthewnelson.kmp.log.internal.commonCheckTag
+import io.matthewnelson.kmp.log.internal.doAbort
 import io.matthewnelson.kmp.log.internal.newLock
 import io.matthewnelson.kmp.log.internal.withLock
 import kotlin.concurrent.Volatile
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 import kotlin.jvm.JvmField
+import kotlin.jvm.JvmName
 import kotlin.jvm.JvmStatic
 import kotlin.jvm.JvmSynthetic
 
 /**
  * An abstraction for dynamic logging.
  *
- * Various [Log] implementations can be installed into [Root], whereby [Logger]
- * logs get directed. By default, no [Log] instances are available at [Root]; one
- * must be installed. If no [Log] implementations are installed, then no logging
+ * Various [Log] implementations can be installed into [Root] whereby [Logger]
+ * logs get directed. By default, the only [Log] instance available at [Root] is
+ * [AbortHandler]. If no other [Log] implementations are installed, then no logging
  * occurs (this is by design).
  *
  * Application developers are able to tailor logging to their needs, such as a debug
@@ -46,9 +50,9 @@ import kotlin.jvm.JvmSynthetic
  * e.g. (Using `SysLog` from `kmp-log:sys`)
  *
  *     val logger = Log.Logger.of(tag = "Example")
- *     logger.d { "This will not be logged" }
+ *     logger.i { "This will not be logged" }
  *     Log.Root.install(SysLog.Default)
- *     logger.d { "This WILL be logged" }
+ *     logger.i { "This WILL be logged" }
  *     Log.Root.uninstall(SysLog.UID)
  *
  * @see [Logger]
@@ -85,16 +89,27 @@ public abstract class Log {
 
         /**
          * See [Logger.wtf]
+         * See [AbortHandler]
          *
-         * **NOTE:** Logs generated at this level, depending on the platform, configuration,
-         * and installed [Log] implementation(s), may cause the process to abort. [Log]
-         * implementations should log these exceptions immediately, regardless.
+         * **NOTE:** [Log] implementations should not abort or exit the program
+         * when processing a log at this level; that is left to [AbortHandler]
+         * if it is installed.
          * */
         Fatal,
     }
 
     /**
      * Logs things to installed [Log] implementation(s) at [Root].
+     *
+     * **NOTE:** Logs containing no data are ignored by all [Log] instances.
+     *
+     * e.g.
+     *
+     *     MyLogger.wtf(msg = null, t = null) // Ignored
+     *     MyLogger.wtf(msg = "") // Ignored
+     *     MyLogger.wtf { "" } // Ignored
+     *     MyLogger.wtf(t = null) { "" } // Ignored
+     *     MyLogger.wtf { "CRASH ME!" }
      *
      * @see [of]
      * */
@@ -161,27 +176,33 @@ public abstract class Log {
                 val _tag = checkTag(tag)
                 val _domain = checkDomain(domain)
 
-                var i = 0
+                var iNext = 0
                 run {
-                    val limit = LOGGERS.size
-                    while (i < limit) {
-                        val logger = LOGGERS[i]
+                    val loggers = _LOGGERS
+                    for (j in loggers.indices) {
+                        val logger = loggers[j] ?: break
                         if (logger.domain == _domain && logger.tag == _tag) return logger
-                        i++
+                        iNext++
                     }
                 }
 
                 LOCK_LOGGERS.withLock {
-                    // LOGGERS only ever grows, so just need to check for
+                    // _LOGGERS only ever grows, so just need to check for
                     // any that may have been added while waiting on the lock.
-                    while (i < LOGGERS.size) {
-                        val logger = LOGGERS[i]
+                    val loggers = _LOGGERS
+                    while (iNext < loggers.size) {
+                        val logger = loggers[iNext] ?: break
                         if (logger.domain == _domain && logger.tag == _tag) return logger
-                        i++
+                        iNext++
                     }
-
                     val logger = Logger(_domain, _tag)
-                    LOGGERS.add(logger)
+                    if (iNext == loggers.size) {
+                        val grow = loggers.copyOf(loggers.size * 2)
+                        grow[iNext] = logger
+                        _LOGGERS = grow
+                    } else {
+                        loggers[iNext] = logger
+                    }
                     return logger
                 }
             }
@@ -234,10 +255,11 @@ public abstract class Log {
 
             // Exposed for testing
             @JvmSynthetic
-            internal fun size(): Int = LOGGERS.size
+            internal fun size(): Int = _LOGGERS.count { it != null }
 
             private val LOCK_LOGGERS = newLock()
-            private val LOGGERS = ArrayList<Logger>(20)
+            @Volatile
+            private var _LOGGERS: Array<Logger?> = arrayOfNulls(20)
         }
 
         /**
@@ -248,18 +270,18 @@ public abstract class Log {
          *
          * @param [msg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun v(msg: String): Boolean = v(msg, t = null)
+        public inline fun v(msg: String): Int = v(msg, t = null)
 
         /**
          * Send a [Level.Verbose] log message to all [Log] instances installed at [Root].
          *
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun v(t: Throwable): Boolean = v(msg = null, t)
+        public inline fun v(t: Throwable): Int = v(msg = null, t)
 
         /**
          * Send a [Level.Verbose] log message to all [Log] instances installed at [Root].
@@ -270,9 +292,9 @@ public abstract class Log {
          * @param [msg] The message to log.
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun v(msg: String?, t: Throwable?): Boolean = log(Level.Verbose, msg, t)
+        public inline fun v(msg: String?, t: Throwable?): Int = log(Level.Verbose, msg, t)
 
         /**
          * Send a [Level.Verbose] log message to all [Log] instances installed at [Root]. If
@@ -281,9 +303,9 @@ public abstract class Log {
          *
          * @param [lazyMsg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun v(lazyMsg: () -> Any): Boolean {
+        public inline fun v(lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return v(t = null, lazyMsg)
         }
@@ -296,9 +318,9 @@ public abstract class Log {
          * @param [lazyMsg] The message to log.
          * @param [t] The error to log or `null`.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun v(t: Throwable?, lazyMsg: () -> Any): Boolean {
+        public inline fun v(t: Throwable?, lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Verbose, t, lazyMsg)
         }
@@ -311,18 +333,18 @@ public abstract class Log {
          *
          * @param [msg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun d(msg: String): Boolean = d(msg, t = null)
+        public inline fun d(msg: String): Int = d(msg, t = null)
 
         /**
          * Send a [Level.Debug] log message to all [Log] instances installed at [Root].
          *
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun d(t: Throwable): Boolean = d(msg = null, t)
+        public inline fun d(t: Throwable): Int = d(msg = null, t)
 
         /**
          * Send a [Level.Debug] log message to all [Log] instances installed at [Root]. If
@@ -334,9 +356,9 @@ public abstract class Log {
          * @param [msg] The message to log.
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun d(msg: String?, t: Throwable?): Boolean = log(Level.Debug, msg, t)
+        public inline fun d(msg: String?, t: Throwable?): Int = log(Level.Debug, msg, t)
 
         /**
          * Send a [Level.Debug] log message to all [Log] instances installed at [Root]. If
@@ -345,9 +367,9 @@ public abstract class Log {
          *
          * @param [lazyMsg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun d(lazyMsg: () -> Any): Boolean {
+        public inline fun d(lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return d(t = null, lazyMsg)
         }
@@ -360,9 +382,9 @@ public abstract class Log {
          * @param [lazyMsg] The message to log.
          * @param [t] The error to log or `null`.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun d(t: Throwable?, lazyMsg: () -> Any): Boolean {
+        public inline fun d(t: Throwable?, lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Debug, t, lazyMsg)
         }
@@ -375,18 +397,18 @@ public abstract class Log {
          *
          * @param [msg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun i(msg: String): Boolean = i(msg, t = null)
+        public inline fun i(msg: String): Int = i(msg, t = null)
 
         /**
          * Send a [Level.Info] log message to all [Log] instances installed at [Root].
          *
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun i(t: Throwable): Boolean = i(msg = null, t)
+        public inline fun i(t: Throwable): Int = i(msg = null, t)
 
         /**
          * Send a [Level.Info] log message to all [Log] instances installed at [Root].
@@ -397,9 +419,9 @@ public abstract class Log {
          * @param [msg] The message to log.
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun i(msg: String?, t: Throwable?): Boolean = log(Level.Info, msg, t)
+        public inline fun i(msg: String?, t: Throwable?): Int = log(Level.Info, msg, t)
 
         /**
          * Send a [Level.Info] log message to all [Log] instances installed at [Root]. If
@@ -408,9 +430,9 @@ public abstract class Log {
          *
          * @param [lazyMsg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun i(lazyMsg: () -> Any): Boolean {
+        public inline fun i(lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return i(t = null, lazyMsg)
         }
@@ -423,9 +445,9 @@ public abstract class Log {
          * @param [lazyMsg] The message to log.
          * @param [t] The error to log or `null`.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun i(t: Throwable?, lazyMsg: () -> Any): Boolean {
+        public inline fun i(t: Throwable?, lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Info, t, lazyMsg)
         }
@@ -438,18 +460,18 @@ public abstract class Log {
          *
          * @param [msg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun w(msg: String): Boolean = w(msg, t = null)
+        public inline fun w(msg: String): Int = w(msg, t = null)
 
         /**
          * Send a [Level.Warn] log message to all [Log] instances installed at [Root].
          *
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun w(t: Throwable): Boolean = w(msg = null, t)
+        public inline fun w(t: Throwable): Int = w(msg = null, t)
 
         /**
          * Send a [Level.Warn] log message to all [Log] instances installed at [Root].
@@ -460,9 +482,9 @@ public abstract class Log {
          * @param [msg] The message to log.
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun w(msg: String?, t: Throwable?): Boolean = log(Level.Warn, msg, t)
+        public inline fun w(msg: String?, t: Throwable?): Int = log(Level.Warn, msg, t)
 
         /**
          * Send a [Level.Warn] log message to all [Log] instances installed at [Root]. If
@@ -471,9 +493,9 @@ public abstract class Log {
          *
          * @param [lazyMsg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun w(lazyMsg: () -> Any): Boolean {
+        public inline fun w(lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return w(t = null, lazyMsg)
         }
@@ -486,9 +508,9 @@ public abstract class Log {
          * @param [lazyMsg] The message to log.
          * @param [t] The error to log or `null`.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun w(t: Throwable?, lazyMsg: () -> Any): Boolean {
+        public inline fun w(t: Throwable?, lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Warn, t, lazyMsg)
         }
@@ -501,18 +523,18 @@ public abstract class Log {
          *
          * @param [msg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun e(msg: String): Boolean = e(msg, t = null)
+        public inline fun e(msg: String): Int = e(msg, t = null)
 
         /**
          * Send a [Level.Error] log message to all [Log] instances installed at [Root].
          *
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun e(t: Throwable): Boolean = e(msg = null, t)
+        public inline fun e(t: Throwable): Int = e(msg = null, t)
 
         /**
          * Send a [Level.Error] log message to all [Log] instances installed at [Root].
@@ -523,9 +545,9 @@ public abstract class Log {
          * @param [msg] The message to log.
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun e(msg: String?, t: Throwable?): Boolean = log(Level.Error, msg, t)
+        public inline fun e(msg: String?, t: Throwable?): Int = log(Level.Error, msg, t)
 
         /**
          * Send a [Level.Error] log message to all [Log] instances installed at [Root]. If
@@ -534,9 +556,9 @@ public abstract class Log {
          *
          * @param [lazyMsg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun e(lazyMsg: () -> Any): Boolean {
+        public inline fun e(lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return e(t = null, lazyMsg)
         }
@@ -549,9 +571,9 @@ public abstract class Log {
          * @param [lazyMsg] The message to log.
          * @param [t] The error to log or `null`.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun e(t: Throwable?, lazyMsg: () -> Any): Boolean {
+        public inline fun e(t: Throwable?, lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Error, t, lazyMsg)
         }
@@ -562,20 +584,30 @@ public abstract class Log {
          * **NOTE:** The `lazyMsg` inline version of this function should be preferred when
          * possible to mitigate unnecessary `String` creation.
          *
+         * **NOTE:** If [AbortHandler] is installed at [Root] (the default configuration),
+         * this will cause the program to exit.
+         *
          * @param [msg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
+         *
+         * @see [AbortHandler]
          * */
-        public inline fun wtf(msg: String): Boolean = wtf(msg, t = null)
+        public inline fun wtf(msg: String): Int = wtf(msg, t = null)
 
         /**
          * Send a [Level.Fatal] log message to all [Log] instances installed at [Root].
          *
+         * **NOTE:** If [AbortHandler] is installed at [Root] (the default configuration),
+         * this will cause the program to exit.
+         *
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
+         *
+         * @see [AbortHandler]
          * */
-        public inline fun wtf(t: Throwable): Boolean = wtf(msg = null, t)
+        public inline fun wtf(t: Throwable): Int = wtf(msg = null, t)
 
         /**
          * Send a [Level.Fatal] log message to all [Log] instances installed at [Root].
@@ -583,23 +615,33 @@ public abstract class Log {
          * **NOTE:** The `lazyMsg` inline version of this function should be preferred when
          * possible to mitigate unnecessary `String` creation.
          *
+         * **NOTE:** If [AbortHandler] is installed at [Root] (the default configuration),
+         * this will cause the program to exit.
+         *
          * @param [msg] The message to log.
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
+         *
+         * @see [AbortHandler]
          * */
-        public inline fun wtf(msg: String?, t: Throwable?): Boolean = log(Level.Fatal, msg, t)
+        public inline fun wtf(msg: String?, t: Throwable?): Int = log(Level.Fatal, msg, t)
 
         /**
          * Send a [Level.Fatal] log message to all [Log] instances installed at [Root]. If
          * no [Log] instances are installed, or none will accept it, then nothing is logged
          * and [lazyMsg] will not be invoked.
          *
+         * **NOTE:** If [AbortHandler] is installed at [Root] (the default configuration),
+         * this will cause the program to exit.
+         *
          * @param [lazyMsg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
+         *
+         * @see [AbortHandler]
          * */
-        public inline fun wtf(lazyMsg: () -> Any): Boolean {
+        public inline fun wtf(lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return wtf(t = null, lazyMsg)
         }
@@ -609,12 +651,17 @@ public abstract class Log {
          * no [Log] instances are installed, or none will accept it, then nothing is logged
          * and [lazyMsg] will not be invoked.
          *
+         * **NOTE:** If [AbortHandler] is installed at [Root] (the default configuration),
+         * this will cause the program to exit.
+         *
          * @param [lazyMsg] The message to log.
          * @param [t] The error to log or `null`.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
+         *
+         * @see [AbortHandler]
          * */
-        public inline fun wtf(t: Throwable?, lazyMsg: () -> Any): Boolean {
+        public inline fun wtf(t: Throwable?, lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Fatal, t, lazyMsg)
         }
@@ -628,9 +675,9 @@ public abstract class Log {
          * @param [level] The [Level] of the log.
          * @param [msg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun log(level: Level, msg: String): Boolean = log(level, msg, t = null)
+        public inline fun log(level: Level, msg: String): Int = log(level, msg, t = null)
 
         /**
          * Send a log message for specified [Level] to all [Log] instances installed at [Root].
@@ -641,9 +688,9 @@ public abstract class Log {
          * @param [level] The [Level] of the log.
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun log(level: Level, t: Throwable): Boolean = log(level, msg = null, t)
+        public inline fun log(level: Level, t: Throwable): Int = log(level, msg = null, t)
 
         /**
          * Send a log message for specified [Level] to all [Log] instances installed at [Root].
@@ -654,9 +701,9 @@ public abstract class Log {
          * @param [msg] The message to log.
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public fun log(level: Level, msg: String?, t: Throwable?): Boolean = Root.log(logger = this, level, msg, t)
+        public fun log(level: Level, msg: String?, t: Throwable?): Int = Root.log(logger = this, level, msg, t)
 
         /**
          * Send a log message for specified [Level] to all [Log] instances installed at [Root].
@@ -666,9 +713,9 @@ public abstract class Log {
          * @param [level] The [Level] of the log.
          * @param [lazyMsg] The message to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun log(level: Level, lazyMsg: () -> Any): Boolean {
+        public inline fun log(level: Level, lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(level, t = null, lazyMsg)
         }
@@ -682,11 +729,11 @@ public abstract class Log {
          * @param [lazyMsg] The message to log.
          * @param [t] The error to log.
          *
-         * @return `true` if it was logged by a [Log] instance, `false` otherwise.
+         * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun log(level: Level, t: Throwable?, lazyMsg: () -> Any): Boolean {
+        public inline fun log(level: Level, t: Throwable?, lazyMsg: () -> Any): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
-            if (!isLoggable(level)) return false
+            if (!isLoggable(level)) return 0
             val msg = lazyMsg().toString()
             return log(level, msg, t)
         }
@@ -742,14 +789,14 @@ public abstract class Log {
          * Returns a list of all [Log] instances that are currently installed.
          * */
         @JvmStatic
-        public fun installed(): List<Log> = _LOGS.toList()
+        public fun installed(): List<Log> = LOGS._ARRAY.toList()
 
         /**
          * Returns the [Log] instance currently installed where [Log.uid] matches that
          * which is specified, or `null` if no [Log] instances are found.
          * */
         @JvmStatic
-        public operator fun get(uid: String): Log? = _LOGS.firstOrNull { it.uid == uid }
+        public operator fun get(uid: String): Log? = LOGS._ARRAY.firstOrNull { it.uid == uid }
 
         /**
          * Install a [Log] instance.
@@ -763,11 +810,17 @@ public abstract class Log {
          * */
         @JvmStatic
         public fun install(log: Log): Boolean {
-            LOCK_LOGS.withLock {
-                val logs = _LOGS
+            LOGS.LOCK.withLock {
+                val logs = LOGS._ARRAY
                 if (logs.firstOrNull { it.uid == log.uid } != null) return false
+                if (log.uid == AbortHandler.uid) {
+                    require(log == AbortHandler) { "$log is not $AbortHandler" }
+                    // Always install AbortHandler as the last instance
+                    LOGS._ARRAY = arrayOf(*logs, log)
+                    return true
+                }
                 log.doOnInstall()
-                _LOGS = arrayOf(log, *logs)
+                LOGS._ARRAY = arrayOf(log, *logs)
                 return true
             }
         }
@@ -790,12 +843,21 @@ public abstract class Log {
 
         /**
          * Uninstall all currently installed [Log] instances.
+         *
+         * @param [evenAbortHandler] If `true`, even the [AbortHandler] will be
+         *   uninstalled. If `false`, [AbortHandler] will not be uninstalled if and
+         *   only if it is currently installed (i.e. it will not be re-installed).
          * */
         @JvmStatic
-        public fun uninstallAll() {
-            LOCK_LOGS.withLock {
-                val logs = _LOGS
-                _LOGS = emptyArray()
+        public fun uninstallAll(evenAbortHandler: Boolean) {
+            LOGS.LOCK.withLock {
+                val logs = LOGS._ARRAY
+                if (logs.isEmpty()) return
+                LOGS._ARRAY = when {
+                    evenAbortHandler -> emptyArray()
+                    logs.contains(AbortHandler) -> if (logs.size == 1) return else arrayOf(AbortHandler)
+                    else -> emptyArray()
+                }
                 var threw: Throwable? = null
                 logs.forEach { log ->
                     try {
@@ -837,11 +899,11 @@ public abstract class Log {
          * */
         @JvmStatic
         public fun uninstall(uid: String): Boolean {
-            LOCK_LOGS.withLock {
-                val logs = _LOGS
+            LOGS.LOCK.withLock {
+                val logs = LOGS._ARRAY
                 val index = logs.indexOfFirst { it.uid == uid }
                 if (index == -1) return false
-                _LOGS = if (logs.size == 1) {
+                LOGS._ARRAY = if (logs.size == 1) {
                     emptyArray()
                 } else {
                     val list = ArrayList<Log>(logs.size - 1)
@@ -895,27 +957,33 @@ public abstract class Log {
         private const val ROOT_DOMAIN: String = "kmp-log:log"
         private const val ROOT_TAG: String = "Log.Root"
 
-        private val LOCK_LOGS = newLock()
-        @Volatile
-        private var _LOGS: Array<Log> = emptyArray()
+        private val LOGS by lazy { Logs() }
 
         private fun isLoggable(logger: Logger, level: Level): Boolean {
-            _LOGS.forEach { log ->
+            LOGS._ARRAY.forEach { log ->
                 if (log.isLoggable(logger, level)) return true
             }
             return false
         }
 
-        private fun log(logger: Logger, level: Level, msg: String?, t: Throwable?): Boolean {
+        private fun log(logger: Logger, level: Level, msg: String?, t: Throwable?): Int {
             val m = if (msg.isNullOrEmpty()) null else msg
-            if (m == null && t == null) return false
-            var wasLogged = false
-            _LOGS.forEach { log ->
+            if (m == null && t == null) return 0
+            var loggedBy = 0
+            LOGS._ARRAY.forEach { log ->
                 if (!log.isLoggable(logger, level)) return@forEach
-                if (!log.log(level, logger.domain, logger.tag, m, t)) return@forEach
-                wasLogged = true
+                val tOrFatal = if (loggedBy == 0 && level == AbortHandler.max && log == AbortHandler) {
+                    // AbortHandler will always be installed as the last Log instance.
+                    // If no Log instances have logged the Level.Fatal error yet, passing
+                    // FatalException will cause it to print the stack trace before aborting.
+                    FatalException(null, t)
+                } else {
+                    t
+                }
+                if (!log.log(level, logger.domain, logger.tag, m, tOrFatal)) return@forEach
+                loggedBy++
             }
-            return wasLogged
+            return loggedBy
         }
 
         private inline fun Log.isLoggable(logger: Logger, level: Level): Boolean {
@@ -923,6 +991,7 @@ public abstract class Log {
             return isLoggable(level, logger.domain, logger.tag)
         }
 
+        // OK to call on AbortHandler b/c it does nothing
         private inline fun Log.doOnInstall() {
             onInstall()
             if (Level.Debug !in min..max) return
@@ -930,6 +999,7 @@ public abstract class Log {
             log(Level.Debug, ROOT_DOMAIN, ROOT_TAG, toString() + ".onInstall()", null)
         }
 
+        // OK to call on AbortHandler b/c it does nothing
         private inline fun Log.doOnUninstall() {
             try {
                 if (Level.Debug !in min..max) return
@@ -942,6 +1012,77 @@ public abstract class Log {
 
         /** @suppress */
         public override fun toString(): String = ROOT_TAG
+
+        // Must wrap variables in a class and initialize lazily b/c Jvm
+        // throws a fit due to AbortController.INSTANCE being null.
+        @Suppress("PropertyName")
+        private class Logs {
+            @Volatile
+            var _ARRAY: Array<Log> = arrayOf(AbortHandler)
+            val LOCK = newLock()
+        }
+    }
+
+    /**
+     * A [Log] instance that, when installed (the default configuration), will handle
+     * finalization of [Level.Fatal] logs by aborting the program. This instance will
+     * always be the last [Root.installed] instance, giving a chance for all other
+     * installed [Log] instances to capture the log. If no other [Log] instances logged
+     * the [Level.Fatal] log, [printStackTrace] will be used to output the error before
+     * aborting.
+     *
+     * Abort handling is performed in the following manner:
+     *  - Android: [android.util.Log.wtf](https://developer.android.com/reference/android/util/Log#wtf(java.lang.String,%20java.lang.String))
+     *  - Jvm/AndroidUnitTest: [Runtime.halt](https://docs.oracle.com/javase/8/docs/api/java/lang/Runtime.html#halt-int-)
+     *  - Js/WasmJs:
+     *      - Browser: Throw exception
+     *      - Node.js: [process.abort](https://nodejs.org/api/process.html#processabort)
+     *  - WasmWasi: [proc_exit](https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#-proc_exitrval-exitcode)
+     *  - Native:
+     *      - Android:
+     *          - API 30+: [__android_log_call_aborter](https://cs.android.com/android/platform/superproject/+/android-latest-release:system/logging/liblog/include/android/log.h;l=336)
+     *          - API 29-: [abort](https://man7.org/linux/man-pages/man3/abort.3p.html)
+     *      - Darwin/Linux/MinGW: [abort](https://man7.org/linux/man-pages/man3/abort.3p.html)
+     * */
+    public object AbortHandler: Log(uid = ABORT_HANDLER_UID, min = Level.Fatal) {
+
+        /**
+         * The [AbortHandler.uid] (i.e. `io.matthewnelson.kmp.log.Log.AbortHandler`)
+         *
+         * Can be used with [Log.Root.uninstall]
+         * */
+        public const val UID: String = ABORT_HANDLER_UID
+
+        /**
+         * Checks if [AbortHandler] is installed at [Root].
+         * */
+        @JvmStatic
+        @get:JvmName("isInstalled")
+        public val isInstalled: Boolean get() = Root[UID] != null
+
+        override fun log(
+            level: Level,
+            domain: String?,
+            tag: String,
+            msg: String?,
+            t: Throwable?,
+        ): Boolean {
+            val abortErr = if (t is FatalException) {
+                // No Log instances logged the error. Repackage and print.
+                var message = domain?.let { "[$it]$tag" } ?: tag
+                if (msg != null) message += ": $msg"
+                val e = FatalException(message, t.cause)
+                if (ABORTER_ACCEPTS_MESSAGE) {
+                    e
+                } else {
+                    e.printStackTrace()
+                    null
+                }
+            } else {
+                null
+            }
+            return doAbort(t = abortErr)
+        }
     }
 
     /**
@@ -1074,4 +1215,8 @@ public abstract class Log {
         }
         return "$name[min=$min, max=$max, uid=$uid]"
     }
+
+    // A way to signal to AbortHandler that no Log instances were installed to log
+    // the Fatal error, and that it should print the stacktrace before aborting.
+    private class FatalException(message: String?, cause: Throwable?): Throwable(message, cause)
 }
