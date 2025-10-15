@@ -43,7 +43,7 @@ import platform.posix.dlsym
 
 // androidNative
 public actual open class SysLog private actual constructor(
-    min: Level /* = Level.Verbose */,
+    min: Level /* = Level.Debug */,
 ): Log(UID, min) {
 
     public actual companion object Default: SysLog() {

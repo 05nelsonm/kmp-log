@@ -33,7 +33,7 @@ class AndroidIsLoggableTest {
             return
         }
 
-        Log.installOrThrow(SysLog)
+        Log.installOrThrow(SysLog.of(Log.Level.Verbose))
         try {
             Log.Level.entries.forEach { level ->
                 val expected = when (level) {
