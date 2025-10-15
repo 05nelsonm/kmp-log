@@ -348,7 +348,7 @@ class LoggerUnitTest {
         try {
             val log = TestLog(uid = "msg_null")
             Root.installOrThrow(log)
-            assertFalse(LOG.wtf(null, null))
+            assertEquals(0, LOG.wtf(null, null))
             assertEquals(0, log.logs?.size)
         } finally {
             Root.uninstallOrThrow("msg_null")
@@ -360,7 +360,7 @@ class LoggerUnitTest {
         try {
             val log = TestLog(uid = "msg_empty")
             Root.installOrThrow(log)
-            assertFalse(LOG.wtf("", null))
+            assertEquals(0, LOG.wtf("", null))
             assertEquals(0, log.logs?.size)
         } finally {
             Root.uninstallOrThrow("msg_empty")
