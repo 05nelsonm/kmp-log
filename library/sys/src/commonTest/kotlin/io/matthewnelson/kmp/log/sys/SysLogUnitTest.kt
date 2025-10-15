@@ -36,19 +36,24 @@ class SysLogUnitTest {
     }
 
     @Test
-    fun givenSysLog_whenDefaultConstructor_thenMinIsLevelVerbose() {
-        assertEquals(Level.Verbose, SysLog.min)
+    fun givenSysLog_whenDefaultConstructor_thenMinIsLevelDebug() {
+        assertEquals(Level.Debug, SysLog.min)
     }
 
     @Test
     fun givenSysLog_whenOfWithNonDefaultValue_thenReturnsNewInstance() {
-        val actual = SysLog.of(min = Level.Debug)
+        val actual = SysLog.of(min = Level.Info)
         assertNotEquals(SysLog.Default, actual)
     }
 
     @Test
+    fun givenSysLog_whenDefault_thenToStringStartsWithSysLogDotDefault() {
+        assertTrue(SysLog.toString().startsWith("SysLog.Default["))
+    }
+
+    @Test
     fun givenSysLog_whenLogThings_thenReturnsTrue() {
-        Log.installOrThrow(SysLog)
+        Log.installOrThrow(SysLog.of(Level.Verbose))
         try {
             assertTrue(LOG.v { "TEST VERBOSE" }, "v")
             assertTrue(LOG.d { "TEST DEBUG" }, "d")

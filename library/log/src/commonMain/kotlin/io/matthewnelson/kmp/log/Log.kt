@@ -20,7 +20,6 @@ package io.matthewnelson.kmp.log
 import io.matthewnelson.kmp.log.internal.commonCheckDomain
 import io.matthewnelson.kmp.log.internal.commonCheckTag
 import io.matthewnelson.kmp.log.internal.newLock
-import io.matthewnelson.kmp.log.internal.qualifiedNameOrNull
 import io.matthewnelson.kmp.log.internal.withLock
 import kotlin.concurrent.Volatile
 import kotlin.contracts.InvocationKind
@@ -1065,12 +1064,13 @@ public abstract class Log {
     }
     /** @suppress */
     public final override fun toString(): String {
-        val name = with(this::class) {
-            qualifiedNameOrNull()?.let { qn ->
-                val i = qn.indexOfFirst { c -> c.isUpperCase() }
-                if (i == -1) return@let null
-                qn.substring(i, qn.length)
-            } ?: simpleName ?: "Log"
+        var name = this::class.simpleName ?: "Log"
+        when {
+            name == "Default" -> when (uid) {
+                // An unfortunate side effect of not having KClass<*>.qualifiedName
+                // available from commonMain (Js/WasmJs/WasmWasi)
+                "io.matthewnelson.kmp.log.sys.SysLog" -> name = "SysLog.Default"
+            }
         }
         return "$name[min=$min, max=$max, uid=$uid]"
     }

@@ -28,14 +28,14 @@ import io.matthewnelson.kmp.log.Log
  * - WasmWasi: [fd_write](https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#-fd_writefd-fd-iovs-ciovec_array---resultsize-errno) to `STDOUT_FILENO`/`STDERR_FILENO`
  * - Native:
  *     - Android: [__android_log_print](https://cs.android.com/android/platform/superproject/+/android-latest-release:system/logging/liblog/include/android/log.h;l=115)
- *     - Darwin/Linux/Windows: [fprintf](https://www.man7.org/linux/man-pages/man3/fprintf.3p.html) to `stdout`/`stderr`
+ *     - Darwin/Linux/MinGW: [fprintf](https://www.man7.org/linux/man-pages/man3/fprintf.3p.html) to `stdout`/`stderr`
  * */
 public expect open class SysLog private constructor(
-    min: Level = Level.Verbose,
+    min: Level = Level.Debug,
 ): Log {
 
     /**
-     * The default [SysLog] implementation with [Log.min] set to [Level.Verbose].
+     * The default [SysLog] implementation with [SysLog.min] set to [Level.Debug].
      * */
     public companion object Default: SysLog {
 

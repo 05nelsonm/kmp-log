@@ -23,7 +23,7 @@ import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
-// NOTE: Never modify. If so, update SysLog.Default.UID documentation.
+// NOTE: Never modify. If so, update SysLog.Default.UID documentation, and Log.toString()
 internal const val SYS_LOG_UID: String = "io.matthewnelson.kmp.log.sys.SysLog"
 
 @Suppress("RedundantCompanionReference")
