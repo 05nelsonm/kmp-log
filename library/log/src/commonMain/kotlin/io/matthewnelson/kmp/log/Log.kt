@@ -176,27 +176,33 @@ public abstract class Log {
                 val _tag = checkTag(tag)
                 val _domain = checkDomain(domain)
 
-                var i = 0
+                var iNext = 0
                 run {
-                    val limit = LOGGERS.size
-                    while (i < limit) {
-                        val logger = LOGGERS[i]
+                    val loggers = _LOGGERS
+                    for (j in loggers.indices) {
+                        val logger = loggers[j] ?: break
                         if (logger.domain == _domain && logger.tag == _tag) return logger
-                        i++
+                        iNext++
                     }
                 }
 
                 LOCK_LOGGERS.withLock {
-                    // LOGGERS only ever grows, so just need to check for
+                    // _LOGGERS only ever grows, so just need to check for
                     // any that may have been added while waiting on the lock.
-                    while (i < LOGGERS.size) {
-                        val logger = LOGGERS[i]
+                    val loggers = _LOGGERS
+                    while (iNext < loggers.size) {
+                        val logger = loggers[iNext] ?: break
                         if (logger.domain == _domain && logger.tag == _tag) return logger
-                        i++
+                        iNext++
                     }
-
                     val logger = Logger(_domain, _tag)
-                    LOGGERS.add(logger)
+                    if (iNext == loggers.size) {
+                        val grow = loggers.copyOf(loggers.size * 2)
+                        grow[iNext] = logger
+                        _LOGGERS = grow
+                    } else {
+                        loggers[iNext] = logger
+                    }
                     return logger
                 }
             }
@@ -249,10 +255,11 @@ public abstract class Log {
 
             // Exposed for testing
             @JvmSynthetic
-            internal fun size(): Int = LOGGERS.size
+            internal fun size(): Int = _LOGGERS.count { it != null }
 
             private val LOCK_LOGGERS = newLock()
-            private val LOGGERS = ArrayList<Logger>(20)
+            @Volatile
+            private var _LOGGERS: Array<Logger?> = arrayOfNulls(20)
         }
 
         /**
