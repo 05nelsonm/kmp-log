@@ -19,7 +19,7 @@ package io.matthewnelson.kmp.log.sys
 
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
-import io.matthewnelson.kmp.log.sys.internal.commonFormat
+import io.matthewnelson.kmp.log.sys.internal.commonFormatLog
 import io.matthewnelson.kmp.log.sys.internal.commonIsInstalled
 import io.matthewnelson.kmp.log.sys.internal.commonOf
 import kotlin.wasm.unsafe.UnsafeWasmMemoryApi
@@ -47,7 +47,7 @@ public actual open class SysLog private actual constructor(
     actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         val formatted = run {
             // TODO: Date
-            commonFormat(level, domain, tag, msg, t, dateTime = null, omitLastNewLine = false)
+            commonFormatLog(level, domain, tag, msg, t, dateTime = null, omitLastNewLine = false)
         }.toString().encodeToByteArray()
 
         val fd = when (level) {

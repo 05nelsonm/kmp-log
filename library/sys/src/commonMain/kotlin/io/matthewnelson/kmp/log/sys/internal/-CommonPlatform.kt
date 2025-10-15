@@ -59,34 +59,70 @@ internal inline fun SysLog.Default.commonDomainTag(
     append(tag)
 }
 
+internal inline fun SysLog.Default.commonFormatDateTime(
+    month: Int,     // 1-12
+    day: Int,       // 1-31
+    hours: Int,     // 0-23
+    minutes: Int,   // 0-59
+    seconds: Int,   // 0-59
+    millis: Int,    // 0-999
+): CharSequence = StringBuilder(19).apply {
+    if (month <= 9) append('0')
+    append(month)
+    append('-')
+    if (day <= 9) append('0')
+    append(day)
+    append(' ')
+    if (hours <= 9) append('0')
+    append(hours)
+    append(':')
+    if (minutes <= 9) append('0')
+    append(minutes)
+    append(':')
+    if (seconds <= 9) append('0')
+    append(seconds)
+    append('.')
+    if (millis <= 99) append('0')
+    if (millis <= 9) append('0')
+    append(millis)
+}
+
 // TODO: Move to :log as Log.Util.simpleFormat?
-internal inline fun SysLog.Default.commonFormat(
+internal inline fun SysLog.Default.commonFormatLog(
     level: Level,
     domain: String?,
     tag: String,
     msg: String?,
     t: Throwable?,
-    dateTime: String?,
+    dateTime: CharSequence?,
     omitLastNewLine: Boolean,
 ): CharSequence {
     val prefix = run {
         var capacity = 0
         if (!dateTime.isNullOrBlank()) {
             capacity += dateTime.length
-            capacity++
+            capacity++    // ' '
         }
-        capacity += 2
+        capacity += 2     // Level
         if (domain != null) {
             capacity += domain.length
-            capacity += 2
+            capacity += 2 // []
         }
         capacity += tag.length
-        capacity += 2
-        StringBuilder(++capacity)
+        capacity += 2     // ': '
+        ++capacity        // For good measure
+
+        if (dateTime != null && dateTime is StringBuilder) {
+            dateTime.ensureCapacity(capacity)
+            dateTime
+        } else {
+            StringBuilder(capacity)
+        }
     }
 
     if (!dateTime.isNullOrBlank()) {
-        prefix.append(dateTime).append(' ')
+        if (prefix != dateTime) prefix.append(dateTime)
+        prefix.append(' ')
     }
     prefix.append(level.name.first()).append(' ')
     commonDomainTag(sb = prefix, domain, tag).append(':').append(' ')
