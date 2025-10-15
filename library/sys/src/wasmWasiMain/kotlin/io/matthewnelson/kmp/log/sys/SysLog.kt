@@ -87,7 +87,6 @@ public actual open class SysLog private actual constructor(
     }
 }
 
-// https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#-fd_writefd-fd-iovs-ciovec_array---resultsize-errno
 @Suppress("OPT_IN_USAGE")
 @WasmImport("wasi_snapshot_preview1", "fd_write")
 private external fun fdWrite(fd: Int, iovecPtr: Int, iovecSize: Int, retPtr: Int): Int

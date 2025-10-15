@@ -17,9 +17,11 @@
 
 package io.matthewnelson.kmp.log
 
+import io.matthewnelson.kmp.log.internal.ABORTER_ACCEPTS_MESSAGE
 import io.matthewnelson.kmp.log.internal.ABORT_HANDLER_UID
 import io.matthewnelson.kmp.log.internal.commonCheckDomain
 import io.matthewnelson.kmp.log.internal.commonCheckTag
+import io.matthewnelson.kmp.log.internal.doAbort
 import io.matthewnelson.kmp.log.internal.newLock
 import io.matthewnelson.kmp.log.internal.withLock
 import kotlin.concurrent.Volatile
@@ -1019,8 +1021,21 @@ public abstract class Log {
      * finalization of [Level.Fatal] logs by aborting the program. This instance will
      * always be the last [Root.installed] instance, giving a chance for all other
      * installed [Log] instances to capture the log. If no other [Log] instances logged
-     * the [Level.Fatal] log from [Logger], [printStackTrace] will be used to output
-     * the error before exiting.
+     * the [Level.Fatal] log, [printStackTrace] will be used to output the error before
+     * aborting.
+     *
+     * Abort handling is performed in the following manner:
+     *  - Android: [android.util.Log.wtf](https://developer.android.com/reference/android/util/Log#wtf(java.lang.String,%20java.lang.String))
+     *  - Jvm/AndroidUnitTest: [Runtime.halt](https://docs.oracle.com/javase/8/docs/api/java/lang/Runtime.html#halt-int-)
+     *  - Js/WasmJs:
+     *      - Browser: Throw exception
+     *      - Node.js: [process.abort](https://nodejs.org/api/process.html#processabort)
+     *  - WasmWasi: [proc_exit](https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#-proc_exitrval-exitcode)
+     *  - Native:
+     *      - Android:
+     *          - API 30+: [__android_log_call_aborter](https://cs.android.com/android/platform/superproject/+/android-latest-release:system/logging/liblog/include/android/log.h;l=336)
+     *          - API 29-: [abort](https://man7.org/linux/man-pages/man3/abort.3p.html)
+     *      - Darwin/Linux/MinGW: [abort](https://man7.org/linux/man-pages/man3/abort.3p.html)
      * */
     public object AbortHandler: Log(uid = ABORT_HANDLER_UID, min = Level.Fatal) {
 
@@ -1045,14 +1060,21 @@ public abstract class Log {
             msg: String?,
             t: Throwable?,
         ): Boolean {
-            if (t is FatalException) {
+            val abortErr = if (t is FatalException) {
                 // No Log instances logged the error. Repackage and print.
                 var message = domain?.let { "[$it]$tag" } ?: tag
                 if (msg != null) message += ": $msg"
-                FatalException(message, t.cause).printStackTrace()
+                val e = FatalException(message, t.cause)
+                if (ABORTER_ACCEPTS_MESSAGE) {
+                    e
+                } else {
+                    e.printStackTrace()
+                    null
+                }
+            } else {
+                null
             }
-            throw Throwable("TODO: ABORT!!!")
-//            return true
+            return doAbort(t = abortErr)
         }
     }
 

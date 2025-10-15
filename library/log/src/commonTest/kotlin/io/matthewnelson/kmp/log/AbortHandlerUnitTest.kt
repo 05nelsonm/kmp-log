@@ -15,6 +15,8 @@
  **/
 package io.matthewnelson.kmp.log
 
+import io.matthewnelson.kmp.log.internal.doAbort
+import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -100,5 +102,11 @@ class AbortHandlerUnitTest {
             Log.uninstallAll(evenAbortHandler = false)
             Log.install(Log.AbortHandler)
         }
+    }
+
+    @Test
+    @Ignore // Will crash. Comment out to run manually if modifying anything to do with doAbort.
+    fun givenAbortHandler_whenDoAbort_thenProgramCrashes() {
+        Log.AbortHandler.doAbort(null)
     }
 }
