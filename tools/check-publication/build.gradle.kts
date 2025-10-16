@@ -67,20 +67,19 @@ kmpConfiguration {
             }
         }
 
-        kotlin {
-            with(sourceSets) {
-                arrayOf(
-                    "android"
-                    "jvm",
-                    "js",
-                    "wasmJs",
-                    "native",
-                ).forEach { name ->
-                    findByName(name + "Main")?.dependencies {
-                        implementation("$group:file:$version")
-                    }
-                }
-            }
-        }
+//        kotlin {
+//            with(sourceSets) {
+//                // All targets except wasmWasi
+//                arrayOf(
+//                    "jvmAndroid"
+//                    "jsWasmJs",
+//                    "native",
+//                ).forEach { name ->
+//                    findByName(name + "Main")?.dependencies {
+//                        implementation("$group:file:$version")
+//                    }
+//                }
+//            }
+//        }
     }
 }

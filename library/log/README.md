@@ -1,3 +1,3 @@
 # Module log
 
-Logging for dummies
+Core `kmp-log` module containing `Log`, `Log.Root`, and `Log.Logger`.

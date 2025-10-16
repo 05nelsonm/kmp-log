@@ -32,7 +32,7 @@ if (CHECK_PUBLICATION != null) {
     include(":tools:check-publication")
 } else {
     arrayOf(
-        "file",
+//        "file",
         "log",
         "sys",
     ).forEach { name ->
