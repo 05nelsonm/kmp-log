@@ -85,6 +85,7 @@ kmpConfiguration {
 //                ).forEach { name ->
 //                    findByName(name + "Main")?.dependencies {
 //                        implementation("$group:file:$version")
+//                        implementation("$group:compat-ktor:$version")
 //                    }
 //                }
 //            }

@@ -32,6 +32,7 @@ if (CHECK_PUBLICATION != null) {
     include(":tools:check-publication")
 } else {
     arrayOf(
+        "compat-ktor",
         "compat-slf4j",
 //        "file",
         "log",
