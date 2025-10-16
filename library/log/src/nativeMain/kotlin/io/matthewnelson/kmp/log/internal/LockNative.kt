@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING", "NOTHING_TO_INLINE")
+@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING", "NOTHING_TO_INLINE", "WRONG_INVOCATION_KIND")
 
 package io.matthewnelson.kmp.log.internal
 
@@ -72,16 +72,22 @@ internal actual inline fun newLock(): Lock = Lock()
 
 internal actual inline fun <R> Lock.withLockImpl(block: () -> R): R {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
-
     // Native is weird in that it may cause a null pointer de-reference (sometimes
     // experienced when using coroutines). Forcing localization seems to fix the
     // issues.
     val local = this
-
     local.lock()
-    try {
-        return block()
+    var threw: Throwable? = null
+    val ret = try {
+        block()
+    } catch (t: Throwable) {
+        threw = t
+        null
     } finally {
         local.unlock()
     }
+    threw?.let { throw it }
+    local.hashCode()
+    @Suppress("UNCHECKED_CAST")
+    return ret as R
 }
