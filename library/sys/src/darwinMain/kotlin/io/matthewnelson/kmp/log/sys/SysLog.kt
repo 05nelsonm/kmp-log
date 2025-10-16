@@ -23,8 +23,6 @@ import io.matthewnelson.kmp.log.sys.internal.commonIsInstalled
 import io.matthewnelson.kmp.log.sys.internal.commonOf
 import io.matthewnelson.kmp.log.sys.internal.nativeIsLoggable
 import io.matthewnelson.kmp.log.sys.internal.nativeLogPrint
-import platform.Foundation.NSDate
-import platform.Foundation.NSDateFormatter
 
 // darwin
 public actual open class SysLog private actual constructor(
@@ -40,15 +38,10 @@ public actual open class SysLog private actual constructor(
         public actual fun of(
             min: Level,
         ): SysLog = ::SysLog.commonOf(min)
-
-        private val SYS_LOG_TIME_FORMAT = NSDateFormatter().apply { dateFormat = "MM-dd HH:mm:ss.SSS" }
     }
 
     actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        return nativeLogPrint(level, domain, tag, msg, t, _dateTime = {
-            val now = NSDate()
-            SYS_LOG_TIME_FORMAT.stringFromDate(now)
-        })
+        return nativeLogPrint(level, domain, tag, msg, t)
     }
 
     actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {

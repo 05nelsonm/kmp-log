@@ -14,6 +14,7 @@
  * limitations under the License.
  **/
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 
 plugins {
     id("configuration")
@@ -54,6 +55,18 @@ kmpConfiguration {
             }
         }
 
+        kotlin {
+            val cinteropDir = project.projectDir
+                .resolve("src")
+                .resolve("nativeInterop")
+                .resolve("cinterop")
+
+            targets.filterIsInstance<KotlinNativeTarget>().forEach { target ->
+                target.compilations["main"].cinterops.create("local_date_time") {
+                    definitionFile.set(cinteropDir.resolve("$name.def"))
+                }
+            }
+        }
         configureKotlinVersion()
     }
 }

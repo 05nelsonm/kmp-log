@@ -68,17 +68,17 @@ public actual open class SysLog private actual constructor(
             val iovec = alloc.allocate(Int.SIZE_BYTES * 2)
             iovec.storeInt(data.address.toInt())
             (iovec + Int.SIZE_BYTES).storeInt(formatted.size)
-            val ret = alloc.allocate(Int.SIZE_BYTES)
+            val result = alloc.allocate(Int.SIZE_BYTES)
 
-            val errno = fdWrite(
+            val ret = fdWrite(
                 fd = fd,
                 iovecPtr = iovec.address.toInt(),
                 iovecSize = 1,
-                retPtr = ret.address.toInt(),
+                resultPtr = result.address.toInt(),
             )
 
-            if (errno != 0) return false
-            return ret.loadInt() == formatted.size
+            if (ret != 0) return false
+            return result.loadInt() == formatted.size
         }
     }
 
@@ -89,4 +89,4 @@ public actual open class SysLog private actual constructor(
 
 @Suppress("OPT_IN_USAGE")
 @WasmImport("wasi_snapshot_preview1", "fd_write")
-private external fun fdWrite(fd: Int, iovecPtr: Int, iovecSize: Int, retPtr: Int): Int
+private external fun fdWrite(fd: Int, iovecPtr: Int, iovecSize: Int, resultPtr: Int): Int

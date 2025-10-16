@@ -41,10 +41,7 @@ public actual open class SysLog private actual constructor(
     }
 
     actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        return nativeLogPrint(level, domain, tag, msg, t, _dateTime = {
-            // TODO: Date
-            null
-        })
+        return nativeLogPrint(level, domain, tag, msg, t)
     }
 
     actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {

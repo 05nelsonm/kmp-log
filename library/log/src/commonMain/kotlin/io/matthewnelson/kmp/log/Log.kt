@@ -179,8 +179,8 @@ public abstract class Log {
                 var iNext = 0
                 run {
                     val loggers = _LOGGERS
-                    for (j in loggers.indices) {
-                        val logger = loggers[j] ?: break
+                    while (iNext < loggers.size) {
+                        val logger = loggers[iNext] ?: break
                         if (logger.domain == _domain && logger.tag == _tag) return logger
                         iNext++
                     }
@@ -197,7 +197,7 @@ public abstract class Log {
                     }
                     val logger = Logger(_domain, _tag)
                     if (iNext == loggers.size) {
-                        val grow = loggers.copyOf(loggers.size * 2)
+                        val grow = loggers.copyOf(loggers.size + (loggers.size / 2))
                         grow[iNext] = logger
                         _LOGGERS = grow
                     } else {

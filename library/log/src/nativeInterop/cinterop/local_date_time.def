@@ -1,0 +1,43 @@
+package = io.matthewnelson.kmp.log.internal
+---
+#ifdef _WIN32
+#include <sysinfoapi.h>
+#else
+#include <time.h>
+#endif
+
+int
+kmp_log_local_date_time(int date_time[7])
+{
+  if (!date_time) {
+    return -1;
+  }
+#ifdef _WIN32
+  SYSTEMTIME lt = {0};
+  GetLocalTime(&lt);
+  date_time[0] = lt.wYear;
+  date_time[1] = lt.wMonth;
+  date_time[2] = lt.wDay;
+  date_time[3] = lt.wHour;
+  date_time[4] = lt.wMinute;
+  date_time[5] = lt.wSecond;
+  date_time[6] = lt.wMilliseconds;
+#else
+  struct timespec now;
+  struct       tm  tp;
+  if (clock_gettime(CLOCK_REALTIME, &now) == -1) {
+    return -1;
+  }
+  if (!localtime_r(&now.tv_sec, &tp)) {
+    return -1;
+  }
+  date_time[0] = tp.tm_year + 1900;
+  date_time[1] = tp.tm_mon + 1;
+  date_time[2] = tp.tm_mday;
+  date_time[3] = tp.tm_hour;
+  date_time[4] = tp.tm_min;
+  date_time[5] = tp.tm_sec;
+  date_time[6] = now.tv_nsec / 1000000;
+#endif
+  return 0;
+}
