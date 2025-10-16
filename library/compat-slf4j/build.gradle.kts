@@ -13,30 +13,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-rootProject.name = "kmp-log"
-
-pluginManagement {
-    repositories {
-        mavenCentral()
-        gradlePluginPortal()
-        google()
-    }
+plugins {
+    id("configuration")
 }
 
-includeBuild("build-logic")
+kmpConfiguration {
+    configureShared(
+        java9ModuleName = "io.matthewnelson.kmp.log.compat.slf4j",
+        publish = true,
+        jvmOnly = true,
+    ) {
+        jvm {
+            sourceSetMain {
+                dependencies {
+                    api(libs.slf4j.api)
+                }
+            }
+        }
 
-@Suppress("PrivatePropertyName")
-private val CHECK_PUBLICATION: String? by settings
+        common {
+            sourceSetMain {
+                dependencies {
+                    api(project(":library:log"))
+                }
+            }
+        }
 
-if (CHECK_PUBLICATION != null) {
-    include(":tools:check-publication")
-} else {
-    arrayOf(
-        "compat-slf4j",
-//        "file",
-        "log",
-        "sys",
-    ).forEach { name ->
-        include(":library:$name")
+        configureKotlinVersion()
     }
 }

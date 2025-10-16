@@ -130,6 +130,9 @@ dependencies {
     
     // If you need SysLog
     implementation("io.matthewnelson.kmp-log:sys:$v")
+
+    // If you need to convert Log.Logger to org.slf4j.Logger
+    implementation("io.matthewnelson.kmp-log:compat-slf4j:$v")
 }
 ```
 
