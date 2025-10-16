@@ -43,6 +43,7 @@ internal inline fun Log.Logger.Companion.commonCheckDomain(domain: String?): Str
     var lastCharWasSeparator = false
     domain.forEachIndexed { i, c ->
         when (c) {
+            in '0'..'9' -> lastCharWasSeparator = false
             in 'a'..'z' -> lastCharWasSeparator = false
             else -> if (SEPARATORS.contains(c)) {
                 separatorChars++
@@ -53,15 +54,15 @@ internal inline fun Log.Logger.Companion.commonCheckDomain(domain: String?): Str
                     throw IllegalArgumentException(msg)
                 }
                 if (i == 0) {
-                    throw IllegalArgumentException("domain must start with character [a-z]")
+                    throw IllegalArgumentException("domain must start with character [a-z] or [0-9]")
                 }
                 if (i == domain.lastIndex) {
-                    throw IllegalArgumentException("domain must end with character [a-z]")
+                    throw IllegalArgumentException("domain must end with character [a-z] or [0-9]")
                 }
                 lastCharWasSeparator = true
             } else {
                 var msg = "Invalid domain character[$c] at index[$i]."
-                msg += " Allowable characters are [a-z][$SEPARATORS]"
+                msg += " Allowable characters are [a-z][0-9][$SEPARATORS]"
                 throw IllegalArgumentException(msg)
             }
         }
