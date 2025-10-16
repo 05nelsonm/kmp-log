@@ -15,6 +15,7 @@
  **/
 package io.matthewnelson.kmp.log.internal
 
+import io.matthewnelson.kmp.log.Log
 import kotlin.test.Test
 import kotlin.test.assertFalse
 
@@ -22,6 +23,6 @@ class AbortHandlerJvmUnitTest {
 
     @Test
     fun givenAbortHandler_whenAborterAcceptsMessage_thenReturnsFalseBecauseNotRunningAndroid() {
-        assertFalse(ABORTER_ACCEPTS_MESSAGE)
+        assertFalse(Log.AbortHandler.aborterAcceptsMessages())
     }
 }

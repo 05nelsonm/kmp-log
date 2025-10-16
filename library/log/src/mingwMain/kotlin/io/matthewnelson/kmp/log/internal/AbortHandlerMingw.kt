@@ -20,6 +20,6 @@ package io.matthewnelson.kmp.log.internal
 import io.matthewnelson.kmp.log.Log
 import platform.posix.abort
 
-internal actual val ABORTER_ACCEPTS_MESSAGE: Boolean = false
+internal actual inline fun Log.AbortHandler.aborterAcceptsMessages(): Boolean = false
 
 internal actual inline fun Log.AbortHandler.doAbort(t: Throwable?): Boolean { abort(); return true }

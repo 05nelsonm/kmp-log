@@ -17,8 +17,8 @@
 
 package io.matthewnelson.kmp.log
 
-import io.matthewnelson.kmp.log.internal.ABORTER_ACCEPTS_MESSAGE
 import io.matthewnelson.kmp.log.internal.ABORT_HANDLER_UID
+import io.matthewnelson.kmp.log.internal.aborterAcceptsMessages
 import io.matthewnelson.kmp.log.internal.commonCheckDomain
 import io.matthewnelson.kmp.log.internal.commonCheckTag
 import io.matthewnelson.kmp.log.internal.doAbort
@@ -1072,7 +1072,7 @@ public abstract class Log {
                 var message = domain?.let { "[$it]$tag" } ?: tag
                 if (msg != null) message += ": $msg"
                 val e = FatalException(message, t.cause)
-                if (ABORTER_ACCEPTS_MESSAGE) {
+                if (aborterAcceptsMessages()) {
                     e
                 } else {
                     e.printStackTrace()

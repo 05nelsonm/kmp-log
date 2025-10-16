@@ -67,6 +67,7 @@ kmpConfiguration {
                 }
             }
         }
+
         configureKotlinVersion()
     }
 }

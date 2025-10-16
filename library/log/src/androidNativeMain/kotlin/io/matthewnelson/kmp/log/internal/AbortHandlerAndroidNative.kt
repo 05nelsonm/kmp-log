@@ -36,7 +36,7 @@ import platform.posix.dlsym
 // Available for API 30+
 // include/android/log.h
 @OptIn(ExperimentalForeignApi::class)
-internal val ANDROID_LOG_CALL_ABORTER by lazy {
+private val ANDROID_LOG_CALL_ABORTER by lazy {
     val ptr = dlsym(RTLD_NEXT, "__android_log_call_aborter")
         ?: return@lazy null
 
@@ -47,7 +47,7 @@ internal val ANDROID_LOG_CALL_ABORTER by lazy {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-internal actual val ABORTER_ACCEPTS_MESSAGE: Boolean get() = ANDROID_LOG_CALL_ABORTER != null
+internal actual inline fun Log.AbortHandler.aborterAcceptsMessages(): Boolean = ANDROID_LOG_CALL_ABORTER != null
 
 @OptIn(ExperimentalForeignApi::class)
 internal actual inline fun Log.AbortHandler.doAbort(t: Throwable?): Boolean {

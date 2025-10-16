@@ -20,6 +20,5 @@ import io.matthewnelson.kmp.log.Log
 // NOTE: Never modify. If so, update Log.AbortHandler.UID documentation.
 internal const val ABORT_HANDLER_UID: String = "io.matthewnelson.kmp.log.Log.AbortHandler"
 
-internal expect val ABORTER_ACCEPTS_MESSAGE: Boolean
-
+internal expect inline fun Log.AbortHandler.aborterAcceptsMessages(): Boolean
 internal expect inline fun Log.AbortHandler.doAbort(t: Throwable?): Boolean
