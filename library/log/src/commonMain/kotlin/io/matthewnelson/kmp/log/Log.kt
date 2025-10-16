@@ -810,17 +810,17 @@ public abstract class Log {
          * */
         @JvmStatic
         public fun install(log: Log): Boolean {
-            LOGS.LOCK.withLock {
-                val logs = LOGS._ARRAY
+            LOGS.withLockAndReentryGuard {
+                val logs = _ARRAY
                 if (logs.firstOrNull { it.uid == log.uid } != null) return false
                 if (log.uid == AbortHandler.uid) {
                     require(log == AbortHandler) { "$log is not $AbortHandler" }
                     // Always install AbortHandler as the last instance
-                    LOGS._ARRAY = arrayOf(*logs, log)
+                    _ARRAY = arrayOf(*logs, log)
                     return true
                 }
                 log.doOnInstall()
-                LOGS._ARRAY = arrayOf(log, *logs)
+                _ARRAY = arrayOf(log, *logs)
                 return true
             }
         }
@@ -850,10 +850,10 @@ public abstract class Log {
          * */
         @JvmStatic
         public fun uninstallAll(evenAbortHandler: Boolean) {
-            LOGS.LOCK.withLock {
-                val logs = LOGS._ARRAY
+            LOGS.withLockAndReentryGuard {
+                val logs = _ARRAY
                 if (logs.isEmpty()) return
-                LOGS._ARRAY = when {
+                _ARRAY = when {
                     evenAbortHandler -> emptyArray()
                     logs.contains(AbortHandler) -> if (logs.size == 1) return else arrayOf(AbortHandler)
                     else -> emptyArray()
@@ -899,11 +899,11 @@ public abstract class Log {
          * */
         @JvmStatic
         public fun uninstall(uid: String): Boolean {
-            LOGS.LOCK.withLock {
-                val logs = LOGS._ARRAY
+            LOGS.withLockAndReentryGuard {
+                val logs = _ARRAY
                 val index = logs.indexOfFirst { it.uid == uid }
                 if (index == -1) return false
-                LOGS._ARRAY = if (logs.size == 1) {
+                _ARRAY = if (logs.size == 1) {
                     emptyArray()
                 } else {
                     val list = ArrayList<Log>(logs.size - 1)
@@ -1017,9 +1017,32 @@ public abstract class Log {
         // throws a fit due to AbortController.INSTANCE being null.
         @Suppress("PropertyName")
         private class Logs {
+            val LOCK = newLock()
+
+            // All modifications are guarded by withLockAndReentryGuard
             @Volatile
             var _ARRAY: Array<Log> = arrayOf(AbortHandler)
-            val LOCK = newLock()
+
+            // For guarding against Logs calling install/uninstall functions
+            // from their onInstall/onUninstall implementations.
+            @Volatile
+            var _REENTRY_GUARD: Boolean = false
+        }
+
+        private inline fun <R> Logs.withLockAndReentryGuard(block: Logs.() -> R): R {
+            contract { callsInPlace(block, InvocationKind.AT_MOST_ONCE) }
+            LOCK.withLock {
+                check(!_REENTRY_GUARD) {
+                    "Log.Root.{install/uninstall} functions cannot be called from Log.{onInstall/onUninstall}"
+                }
+
+                _REENTRY_GUARD = true
+                try {
+                    return block()
+                } finally {
+                    _REENTRY_GUARD = false
+                }
+            }
         }
     }
 
@@ -1173,9 +1196,6 @@ public abstract class Log {
      * Helper for implementations to delay initialization of things to time of [Root.install]. This
      * is called just prior to making the [Log] available to logging functions, and is done so while
      * holding a lock. Implementations should be fast, non-blocking, and not throw exception.
-     *
-     * **NOTE:** Implementations must **NOT** call any [Root] install/uninstall functions from here
-     * as it will result in a deadlock.
      * */
     protected open fun onInstall() {}
 
@@ -1183,9 +1203,6 @@ public abstract class Log {
      * Helper for implementations to clean up any resources at time of [Root.uninstall]. This is
      * called after the [Log] has been removed from the list of available [Log], and is done so while
      * holding a lock. Implementations should be fast, non-blocking, and not throw exception.
-     *
-     * **NOTE:** Implementations must **NOT** call any [Root] install/uninstall functions from here
-     * as it will result in a deadlock.
      * */
     protected open fun onUninstall() {}
 

@@ -15,6 +15,7 @@
  **/
 package io.matthewnelson.kmp.log
 
+import io.matthewnelson.kmp.log.Log.Root
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -105,5 +106,33 @@ class LogUnitTest {
         Log.install(log)
         Log.uninstallOrThrow(log)
         assertEquals(false, isAvailable)
+    }
+
+    @Test
+    fun givenLogImplementation_whenOnInstallUninstallCallsRootInstallUninstall_thenThrowsIllegalStateException() {
+        val log1 = object : TestLog(uid = "OnUninstall") {
+            override fun onUninstall() {
+                uninstall(AbortHandler)
+            }
+        }
+        val log2 = object : TestLog(uid = "OnInstall") {
+            override fun onInstall() {
+                install(log1)
+            }
+        }
+
+        try {
+            assertEquals(1, Root.installed().size)
+            assertEquals(listOf(Log.AbortHandler), Root.installed())
+            assertFailsWith<IllegalStateException> { Root.install(log2) }
+            assertEquals(1, Root.installed().size)
+            assertEquals(listOf(Log.AbortHandler), Root.installed())
+            Root.install(log1)
+            assertFailsWith<IllegalStateException> { Root.uninstall(log1) }
+            assertEquals(1, Root.installed().size)
+            assertEquals(listOf(Log.AbortHandler), Root.installed())
+        } finally {
+            Root.uninstallAll(evenAbortHandler = false)
+        }
     }
 }
