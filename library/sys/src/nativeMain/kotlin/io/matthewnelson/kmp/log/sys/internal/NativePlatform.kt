@@ -18,9 +18,12 @@
 package io.matthewnelson.kmp.log.sys.internal
 
 import io.matthewnelson.kmp.log.Log.Level
+import io.matthewnelson.kmp.log.internal.kmp_log_local_date_time
 import io.matthewnelson.kmp.log.sys.SysLog
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import platform.posix.FILE
 import platform.posix.fprintf
 import platform.posix.stderr
@@ -28,6 +31,25 @@ import platform.posix.stdout
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
+
+internal fun SysLog.Default.nativeDateTime(): CharSequence? {
+    val dateTime = IntArray(7)
+    @Suppress("RemoveRedundantCallsOfConversionMethods")
+    @OptIn(ExperimentalForeignApi::class)
+    val ret = dateTime.usePinned { pinned ->
+        kmp_log_local_date_time(date_time = pinned.addressOf(0))
+    }.toInt()
+    if (ret != 0) return null
+    return commonFormatDateTime(
+        // year = dateTime[0],
+        month   = dateTime[1],
+        day     = dateTime[2],
+        hours   = dateTime[3],
+        minutes = dateTime[4],
+        seconds = dateTime[5],
+        millis  = dateTime[6],
+    )
+}
 
 // NOTE: Cannot be utilized for androidNative because
 // /proc/self/fd/{0/1/2} point to /dev/null
@@ -38,13 +60,13 @@ internal inline fun SysLog.Default.nativeLogPrint(
     tag: String,
     msg: String?,
     t: Throwable?,
-    _dateTime: () -> String?,
+    _dateTime: () -> CharSequence? = ::nativeDateTime,
 ): Boolean {
     contract { callsInPlace(_dateTime, InvocationKind.AT_MOST_ONCE) }
     val stdio = stdioOrNull(level) ?: return false
     val formatted = run {
         val dateTime = _dateTime()
-        commonFormat(level, domain, tag, msg, t, dateTime, omitLastNewLine = false)
+        commonFormatLog(level, domain, tag, msg, t, dateTime, omitLastNewLine = false)
     }.toString()
     return fprintf(stdio, formatted) > 0
 }
@@ -58,8 +80,8 @@ internal inline fun SysLog.Default.nativeIsLoggable(level: Level): Boolean = std
 internal inline fun SysLog.Default.stdioOrNull(level: Level): CPointer<FILE>? = when (level) {
     Level.Verbose,
     Level.Debug,
-    Level.Info,
-    Level.Warn -> stdout
+    Level.Info -> stdout
+    Level.Warn,
     Level.Error,
     Level.Fatal -> stderr
 }

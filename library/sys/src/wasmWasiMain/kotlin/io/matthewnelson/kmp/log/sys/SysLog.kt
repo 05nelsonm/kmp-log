@@ -19,7 +19,7 @@ package io.matthewnelson.kmp.log.sys
 
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
-import io.matthewnelson.kmp.log.sys.internal.commonFormat
+import io.matthewnelson.kmp.log.sys.internal.commonFormatLog
 import io.matthewnelson.kmp.log.sys.internal.commonIsInstalled
 import io.matthewnelson.kmp.log.sys.internal.commonOf
 import kotlin.wasm.unsafe.UnsafeWasmMemoryApi
@@ -47,14 +47,14 @@ public actual open class SysLog private actual constructor(
     actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         val formatted = run {
             // TODO: Date
-            commonFormat(level, domain, tag, msg, t, dateTime = null, omitLastNewLine = false)
+            commonFormatLog(level, domain, tag, msg, t, dateTime = null, omitLastNewLine = false)
         }.toString().encodeToByteArray()
 
         val fd = when (level) {
             Level.Verbose,
             Level.Debug,
-            Level.Info,
-            Level.Warn -> STDOUT_FILENO
+            Level.Info -> STDOUT_FILENO
+            Level.Warn,
             Level.Error,
             Level.Fatal -> STDERR_FILENO
         }
@@ -68,17 +68,17 @@ public actual open class SysLog private actual constructor(
             val iovec = alloc.allocate(Int.SIZE_BYTES * 2)
             iovec.storeInt(data.address.toInt())
             (iovec + Int.SIZE_BYTES).storeInt(formatted.size)
-            val ret = alloc.allocate(Int.SIZE_BYTES)
+            val result = alloc.allocate(Int.SIZE_BYTES)
 
-            val errno = fdWrite(
+            val ret = fdWrite(
                 fd = fd,
                 iovecPtr = iovec.address.toInt(),
                 iovecSize = 1,
-                retPtr = ret.address.toInt(),
+                resultPtr = result.address.toInt(),
             )
 
-            if (errno != 0) return false
-            return ret.loadInt() == formatted.size
+            if (ret != 0) return false
+            return result.loadInt() == formatted.size
         }
     }
 
@@ -89,4 +89,4 @@ public actual open class SysLog private actual constructor(
 
 @Suppress("OPT_IN_USAGE")
 @WasmImport("wasi_snapshot_preview1", "fd_write")
-private external fun fdWrite(fd: Int, iovecPtr: Int, iovecSize: Int, retPtr: Int): Int
+private external fun fdWrite(fd: Int, iovecPtr: Int, iovecSize: Int, resultPtr: Int): Int

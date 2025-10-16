@@ -15,6 +15,7 @@
  **/
 package io.matthewnelson.kmp.log.internal
 
+import io.matthewnelson.kmp.log.Log
 import platform.posix.android_get_device_api_level
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,6 +25,6 @@ class AndroidNativeAborterTest {
     @Test
     fun givenAndroid_whenAborterAcceptsMessage_thenReturnsExpectedForApiLevel() {
         val expected = android_get_device_api_level() >= 30
-        assertEquals(expected, ABORTER_ACCEPTS_MESSAGE)
+        assertEquals(expected, Log.AbortHandler.aborterAcceptsMessages())
     }
 }

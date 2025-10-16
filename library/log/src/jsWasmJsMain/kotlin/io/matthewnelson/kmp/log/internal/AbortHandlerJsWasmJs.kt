@@ -21,7 +21,8 @@ import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.internal.node.IS_NODE_JS
 import io.matthewnelson.kmp.log.internal.node.nodeModuleProcess
 
-internal actual val ABORTER_ACCEPTS_MESSAGE: Boolean = !IS_NODE_JS // Throw exception on JsBrowser
+// Throw exception on JsBrowser
+internal actual inline fun Log.AbortHandler.aborterAcceptsMessages(): Boolean = !IS_NODE_JS
 
 internal actual inline fun Log.AbortHandler.doAbort(t: Throwable?): Boolean {
     if (IS_NODE_JS) {

@@ -17,8 +17,8 @@
 
 package io.matthewnelson.kmp.log
 
-import io.matthewnelson.kmp.log.internal.ABORTER_ACCEPTS_MESSAGE
 import io.matthewnelson.kmp.log.internal.ABORT_HANDLER_UID
+import io.matthewnelson.kmp.log.internal.aborterAcceptsMessages
 import io.matthewnelson.kmp.log.internal.commonCheckDomain
 import io.matthewnelson.kmp.log.internal.commonCheckTag
 import io.matthewnelson.kmp.log.internal.doAbort
@@ -179,8 +179,8 @@ public abstract class Log {
                 var iNext = 0
                 run {
                     val loggers = _LOGGERS
-                    for (j in loggers.indices) {
-                        val logger = loggers[j] ?: break
+                    while (iNext < loggers.size) {
+                        val logger = loggers[iNext] ?: break
                         if (logger.domain == _domain && logger.tag == _tag) return logger
                         iNext++
                     }
@@ -197,7 +197,7 @@ public abstract class Log {
                     }
                     val logger = Logger(_domain, _tag)
                     if (iNext == loggers.size) {
-                        val grow = loggers.copyOf(loggers.size * 2)
+                        val grow = loggers.copyOf(loggers.size + (loggers.size / 2))
                         grow[iNext] = logger
                         _LOGGERS = grow
                     } else {
@@ -1072,7 +1072,7 @@ public abstract class Log {
                 var message = domain?.let { "[$it]$tag" } ?: tag
                 if (msg != null) message += ": $msg"
                 val e = FatalException(message, t.cause)
-                if (ABORTER_ACCEPTS_MESSAGE) {
+                if (aborterAcceptsMessages()) {
                     e
                 } else {
                     e.printStackTrace()

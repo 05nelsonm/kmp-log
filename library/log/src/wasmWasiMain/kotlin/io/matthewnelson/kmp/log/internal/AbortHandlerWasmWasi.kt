@@ -25,7 +25,7 @@ import kotlin.wasm.unsafe.withScopedMemoryAllocator
 @WasmImport("wasi_snapshot_preview1", "proc_exit")
 private external fun procExit(retPtr: Int)
 
-internal actual val ABORTER_ACCEPTS_MESSAGE: Boolean = false
+internal actual inline fun Log.AbortHandler.aborterAcceptsMessages(): Boolean = false
 
 internal actual inline fun Log.AbortHandler.doAbort(t: Throwable?): Boolean {
     @OptIn(UnsafeWasmMemoryApi::class)

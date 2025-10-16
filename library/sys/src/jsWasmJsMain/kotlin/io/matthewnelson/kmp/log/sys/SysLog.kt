@@ -20,12 +20,12 @@ package io.matthewnelson.kmp.log.sys
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.internal.node.isNodeJs
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
-import io.matthewnelson.kmp.log.sys.internal.commonFormat
+import io.matthewnelson.kmp.log.sys.internal.commonFormatLog
+import io.matthewnelson.kmp.log.sys.internal.commonFormatDateTime
 import io.matthewnelson.kmp.log.sys.internal.commonIsInstalled
 import io.matthewnelson.kmp.log.sys.internal.commonLogChunk
 import io.matthewnelson.kmp.log.sys.internal.commonOf
 import io.matthewnelson.kmp.log.sys.internal.js.JsDate
-import io.matthewnelson.kmp.log.sys.internal.js.formatMMddHHmmssSSS
 import io.matthewnelson.kmp.log.sys.internal.js.jsConsole
 
 // jsWasmJs
@@ -46,8 +46,19 @@ public actual open class SysLog private actual constructor(
 
     actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         val formatted = run {
-            val dateTime = JsDate().formatMMddHHmmssSSS()
-            commonFormat(level, domain, tag, msg, t, dateTime, omitLastNewLine = true)
+            val now = JsDate()
+
+            // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/Date
+            val dateTime = commonFormatDateTime(
+                month   = now.getMonth() + 1,
+                day     = now.getDate(),
+                hours   = now.getHours(),
+                minutes = now.getMinutes(),
+                seconds = now.getSeconds(),
+                millis  = now.getMilliseconds(),
+            )
+
+            commonFormatLog(level, domain, tag, msg, t, dateTime, omitLastNewLine = true)
         }
 
         val consoleFn = when (level) {

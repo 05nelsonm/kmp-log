@@ -37,7 +37,7 @@ private val ANDROID_LOG_WTF by lazy {
     }
 }
 
-internal actual val ABORTER_ACCEPTS_MESSAGE: Boolean = ANDROID_LOG_WTF != null
+internal actual inline fun Log.AbortHandler.aborterAcceptsMessages(): Boolean = ANDROID_LOG_WTF != null
 
 internal actual inline fun Log.AbortHandler.doAbort(t: Throwable?): Boolean {
     val wtf = ANDROID_LOG_WTF
