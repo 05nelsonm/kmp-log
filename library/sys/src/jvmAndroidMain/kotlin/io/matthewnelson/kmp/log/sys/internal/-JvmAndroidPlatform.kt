@@ -42,8 +42,8 @@ internal inline fun SysLog.Default.jvmLogPrint(
         when (level) {
             Level.Verbose,
             Level.Debug,
-            Level.Info,
-            Level.Warn -> System.out
+            Level.Info -> System.out
+            Level.Warn,
             Level.Error,
             Level.Fatal -> System.err
         }.print(formatted)

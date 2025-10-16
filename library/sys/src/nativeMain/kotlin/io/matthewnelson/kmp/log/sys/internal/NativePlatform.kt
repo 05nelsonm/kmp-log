@@ -80,8 +80,8 @@ internal inline fun SysLog.Default.nativeIsLoggable(level: Level): Boolean = std
 internal inline fun SysLog.Default.stdioOrNull(level: Level): CPointer<FILE>? = when (level) {
     Level.Verbose,
     Level.Debug,
-    Level.Info,
-    Level.Warn -> stdout
+    Level.Info -> stdout
+    Level.Warn,
     Level.Error,
     Level.Fatal -> stderr
 }

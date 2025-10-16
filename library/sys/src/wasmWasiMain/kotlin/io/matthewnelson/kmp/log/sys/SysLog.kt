@@ -53,8 +53,8 @@ public actual open class SysLog private actual constructor(
         val fd = when (level) {
             Level.Verbose,
             Level.Debug,
-            Level.Info,
-            Level.Warn -> STDOUT_FILENO
+            Level.Info -> STDOUT_FILENO
+            Level.Warn,
             Level.Error,
             Level.Fatal -> STDERR_FILENO
         }
