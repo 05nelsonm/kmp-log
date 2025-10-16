@@ -51,6 +51,14 @@ kmpConfiguration {
             }
         }
 
+        jvm {
+            sourceSetMain {
+                dependencies {
+                    implementation("${group}:compat-slf4j:${version}")
+                }
+            }
+        }
+
         @OptIn(ExperimentalWasmDsl::class)
         wasmWasi {
             target {

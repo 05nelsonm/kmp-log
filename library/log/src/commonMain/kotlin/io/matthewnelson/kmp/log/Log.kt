@@ -215,6 +215,7 @@ public abstract class Log {
              *  - Is greater than or equal to `3` characters in length.
              *  - Is less than or equal to `32` characters in length.
              *  - Contains only the following:
+             *      - Characters `0` - `9`
              *      - Characters `a` - `z`
              *      - Separators `.`, `-`, `:`
              *  - Does not start or end with a separator character.

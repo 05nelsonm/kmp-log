@@ -131,7 +131,7 @@ class LoggerUnitTest {
             Log.Logger.checkDomain(".ab")
             fail()
         } catch (e: IllegalArgumentException) {
-            assertEquals("domain must start with character [a-z]", e.message)
+            assertEquals("domain must start with character [a-z] or [0-9]", e.message)
         }
     }
 
@@ -141,7 +141,7 @@ class LoggerUnitTest {
             Log.Logger.checkDomain("ab.")
             fail()
         } catch (e: IllegalArgumentException) {
-            assertEquals("domain must end with character [a-z]", e.message)
+            assertEquals("domain must end with character [a-z] or [0-9]", e.message)
         }
     }
 

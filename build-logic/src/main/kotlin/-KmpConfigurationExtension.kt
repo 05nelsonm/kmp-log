@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.konan.target.HostManager
 fun KmpConfigurationExtension.configureShared(
     java9ModuleName: String? = null,
     publish: Boolean = false,
+    jvmOnly: Boolean = false,
     action: Action<KmpConfigurationContainerDsl>,
 ) {
     if (publish) {
@@ -43,33 +44,35 @@ fun KmpConfigurationExtension.configureShared(
             }
         }
 
-        js {
-            target {
-                browser()
-                nodejs {
-                    testTask {
-                        useMocha { timeout = "30s" }
+        if (!jvmOnly) {
+            js {
+                target {
+                    browser()
+                    nodejs {
+                        testTask {
+                            useMocha { timeout = "30s" }
+                        }
                     }
                 }
             }
-        }
-        @OptIn(ExperimentalWasmDsl::class)
-        wasmJs {
-            target {
-                browser()
-                nodejs()
+            @OptIn(ExperimentalWasmDsl::class)
+            wasmJs {
+                target {
+                    browser()
+                    nodejs()
+                }
             }
+
+            androidNativeAll()
+
+            iosAll()
+            macosAll()
+            tvosAll()
+            watchosAll()
+
+            linuxAll()
+            mingwAll()
         }
-
-        androidNativeAll()
-
-        iosAll()
-        macosAll()
-        tvosAll()
-        watchosAll()
-
-        linuxAll()
-        mingwAll()
 
         common {
             if (publish) pluginIds("publication", "dokka")
