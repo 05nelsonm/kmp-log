@@ -17,6 +17,7 @@ package io.matthewnelson.kmp.log.sys
 
 import io.matthewnelson.kmp.log.Log
 
+expect fun isNative(): Boolean
 expect fun deviceApiLevel(): Int
 
 expect val IS_LOGGABLE_REQUIRED_API_LEVEL: Int

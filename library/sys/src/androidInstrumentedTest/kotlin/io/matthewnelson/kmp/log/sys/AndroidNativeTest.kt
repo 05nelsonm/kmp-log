@@ -37,7 +37,7 @@ class AndroidNativeTest {
 
     @Test
     fun givenAndroidNative_whenTestLogBinary_thenIsSuccessful() {
-        run("libTestLog.so", 2.minutes)
+        run("libTestLog.so", 3.minutes)
     }
 
     private fun run(libName: String, timeout: Duration) {

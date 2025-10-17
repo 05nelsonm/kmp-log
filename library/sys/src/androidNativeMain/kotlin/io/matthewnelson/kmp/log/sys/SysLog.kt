@@ -97,12 +97,14 @@ public actual open class SysLog private actual constructor(
                 __default_prio: Int,
             ) -> Int>>
         }
+
+        private const val MAX_LEN_LOG: Int = 1_000
     }
 
     actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         val priority = level.toPriority()
         val _tag = androidDomainTag(android_get_device_api_level(), domain, tag)
-        return androidLogChunk(msg, t) { chunk ->
+        return androidLogChunk(msg, t, MAX_LEN_LOG) { chunk ->
             __android_log_print(priority, _tag, chunk) > 0
         }
     }

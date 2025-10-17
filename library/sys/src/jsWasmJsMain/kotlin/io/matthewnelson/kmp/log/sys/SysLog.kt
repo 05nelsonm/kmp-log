@@ -20,7 +20,7 @@ package io.matthewnelson.kmp.log.sys
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.internal.node.isNodeJs
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
-import io.matthewnelson.kmp.log.sys.internal.commonFormatLog
+import io.matthewnelson.kmp.log.sys.internal.commonFormatLogOrNull
 import io.matthewnelson.kmp.log.sys.internal.commonFormatDateTime
 import io.matthewnelson.kmp.log.sys.internal.commonIsInstalled
 import io.matthewnelson.kmp.log.sys.internal.commonLogChunk
@@ -58,8 +58,8 @@ public actual open class SysLog private actual constructor(
                 millis  = now.getMilliseconds(),
             )
 
-            commonFormatLog(level, domain, tag, msg, t, dateTime, omitLastNewLine = true)
-        }
+            commonFormatLogOrNull(level, domain, tag, msg, t, dateTime, omitLastNewLine = true)
+        } ?: return false
 
         val consoleFn = when (level) {
             Level.Verbose,

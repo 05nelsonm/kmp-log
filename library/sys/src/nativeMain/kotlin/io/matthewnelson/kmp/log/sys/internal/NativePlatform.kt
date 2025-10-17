@@ -66,9 +66,9 @@ internal inline fun SysLog.Default.nativeLogPrint(
     val stdio = stdioOrNull(level) ?: return false
     val formatted = run {
         val dateTime = _dateTime()
-        commonFormatLog(level, domain, tag, msg, t, dateTime, omitLastNewLine = false)
-    }.toString()
-    return fprintf(stdio, formatted) > 0
+        commonFormatLogOrNull(level, domain, tag, msg, t, dateTime, omitLastNewLine = false)
+    } ?: return false
+    return fprintf(stdio, formatted.toString()) > 0
 }
 
 // NOTE: Cannot be utilized for androidNative because

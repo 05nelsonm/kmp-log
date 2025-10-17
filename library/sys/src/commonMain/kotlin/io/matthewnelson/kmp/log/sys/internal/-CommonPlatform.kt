@@ -26,6 +26,8 @@ import kotlin.contracts.contract
 
 // NOTE: Never modify. If so, update SysLog.Default.UID documentation, and Log.toString()
 internal const val SYS_LOG_UID: String = "io.matthewnelson.kmp.log.sys.SysLog"
+internal const val CR: Char = '\r'
+internal const val LF: Char = '\n'
 
 @Suppress("RedundantCompanionReference")
 internal inline fun ((min: Level) -> SysLog).commonOf(
@@ -87,7 +89,8 @@ internal inline fun SysLog.Default.commonFormatDateTime(
 }
 
 // TODO: Move to :log as Log.Util.simpleFormat?
-internal inline fun SysLog.Default.commonFormatLog(
+// Returns `null` if empty (no data to log)
+internal inline fun SysLog.Default.commonFormatLogOrNull(
     level: Level,
     domain: String?,
     tag: String,
@@ -95,7 +98,7 @@ internal inline fun SysLog.Default.commonFormatLog(
     t: Throwable?,
     dateTime: CharSequence?,
     omitLastNewLine: Boolean,
-): CharSequence {
+): CharSequence? {
     val prefix = run {
         var capacity = 0
         if (!dateTime.isNullOrBlank()) {
@@ -126,6 +129,11 @@ internal inline fun SysLog.Default.commonFormatLog(
     prefix.append(level.name.first()).append(' ')
     commonDomainTag(sb = prefix, domain, tag).append(':').append(' ')
 
+    // TODO: Optimize. This is creating a bunch of unnecessary strings
+    //  whereby parsing it once in reverse would enable collection of
+    //  all the ranges. Can calculate a more accurate capacity because
+    //  when a line is found, can strip the end of any whitespace which
+    //  would not go into the final log.
     val linesMsg = msg?.lines() ?: emptyList()
     val stack = t?.stackTraceToString()
     val linesStack = stack?.lines() ?: emptyList()
@@ -142,6 +150,7 @@ internal inline fun SysLog.Default.commonFormatLog(
     }
 
     linesMsg.forEach { line ->
+        if (line.isBlank()) return@forEach
         sb.append(prefix).appendLine(line)
     }
     linesStack.forEach { line ->
@@ -152,7 +161,7 @@ internal inline fun SysLog.Default.commonFormatLog(
         sb.setLength(sb.length - 1)
     }
 
-    return sb
+    return sb.ifEmpty { null }
 }
 
 @OptIn(ExperimentalContracts::class)
@@ -163,12 +172,86 @@ internal inline fun SysLog.Default.commonLogChunk(
     _print: (chunk: String) -> Boolean,
 ): Boolean {
     contract { callsInPlace(_print, InvocationKind.UNKNOWN) }
-    require(maxLenLog >= 1_000) { "maxLen[$maxLenLog] < 1_000" }
+    require(maxLenLog > 0) { "maxLenLog must be greater than 0" }
 
-    if (formatted.length < maxLenLog) {
-        return _print(formatted.toString())
+    var len = formatted.length
+    while (len > 0 && formatted[len - 1].isWhitespace()) {
+        len--
     }
 
-    // TODO: Implement chunking
-    return _print(formatted.toString())
+    if (len == 0) return false
+
+    if (len < maxLenLog) {
+        @Suppress("ReplaceSubstringWithTake")
+        val final = when {
+            len == formatted.length -> formatted.toString()
+            formatted is StringBuilder -> formatted.apply { setLength(len) }.toString()
+            else -> formatted.substring(0, len)
+        }
+        return _print(final)
+    }
+
+    // Need to chunk in blocks of maxLenLog. In order to maximize output,
+    // find the last line for that chunk, trim whitespace off the end, then
+    // send it. If no lines are found, the last whitespace character is used
+    // so the breakpoint is not mid-word. If no whitespace is found to use
+    // as the breakpoint, then and only then will the entire chunk be used.
+    var iStart = 0
+    var iLimit = maxLenLog
+    val proxy = object : CharSequence {
+        override val length: Int get() = iLimit - iStart
+        override fun get(index: Int): Char = formatted[iStart + index]
+        override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = error("unused")
+        override fun toString(): String = formatted.substring(iStart, iLimit)
+    }
+
+    var somethingWasPrinted = false
+    while (iStart < len) {
+        var iBreakPoint: Int
+
+        if (iLimit >= len) {
+            // Last chunk. Only trim whitespace from end if it's present.
+            iLimit = len
+            iBreakPoint = proxy.length
+        } else {
+            // Search for a breakpoint of CR or LF
+            iBreakPoint = proxy.indexOfLast { it == CR || it == LF }
+            if (iBreakPoint == -1) {
+                // No new line to use as breakpoint. Find the last
+                // whitespace to use so the breakpoint is not in the
+                // middle of a word or something.
+                iBreakPoint = proxy.indexOfLast { it.isWhitespace() }
+
+                if (iBreakPoint == -1) {
+                    // No whitespace either. Send the whole thing.
+                    // indexOfLast for iTrimmed will pop out immediately.
+                    iBreakPoint = proxy.length
+                }
+            }
+        }
+
+        val hasBreakPoint = iBreakPoint != proxy.length
+
+        // Trim whitespace from the end
+        iLimit = iStart + iBreakPoint
+        val iTrimmed = proxy.indexOfLast { !it.isWhitespace() }
+        if (iTrimmed != -1) {
+            // A chunk with the end trimmed of whitespace was found.
+            iLimit = (iStart + iTrimmed + 1)
+            if (!_print(proxy.toString())) return false
+            somethingWasPrinted = true
+        }/* else {
+            // Entire chunk was whitespace
+        }*/
+
+        iStart += iBreakPoint
+        // If there was a breakpoint found, do not want to
+        // include the new line or whitespace character at
+        // that index in the next chunk. Skip it.
+        if (hasBreakPoint) iStart++
+
+        iLimit = iStart + maxLenLog
+    }
+
+    return somethingWasPrinted
 }

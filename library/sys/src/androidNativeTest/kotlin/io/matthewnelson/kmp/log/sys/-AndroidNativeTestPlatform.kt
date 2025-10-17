@@ -18,6 +18,7 @@ package io.matthewnelson.kmp.log.sys
 import io.matthewnelson.kmp.log.Log
 import platform.posix.android_get_device_api_level
 
+actual fun isNative(): Boolean = true
 actual fun deviceApiLevel(): Int = android_get_device_api_level()
 
 actual val IS_LOGGABLE_REQUIRED_API_LEVEL: Int = 30
