@@ -19,7 +19,9 @@ import io.matthewnelson.kmp.log.Log
 
 internal val IS_NODE_JS: Boolean by lazy { isNodeJsInternal() }
 
-internal const val CODE_IS_NODE_JS: String =
+internal val node_process: ModuleProcess? by lazy { if (IS_NODE_JS) nodeModuleProcess() else null }
+
+internal const val CODE_IS_NODE_JS_INTERNAL: String =
 """
 (typeof process !== 'undefined' 
     && process.versions != null 
@@ -30,11 +32,15 @@ internal const val CODE_IS_NODE_JS: String =
     && window.process.versions.node != null)
 """
 
-internal const val CODE_MODULE_PROCESS: String = "eval('require')('process')"
+internal const val CODE_NODE_MODULE_PROCESS: String = "eval('require')('process')"
 
 internal expect fun isNodeJsInternal(): Boolean
+
 internal expect fun nodeModuleProcess(): ModuleProcess
 
-// For SysLog, and hidden behind Log.Root context
+/**
+ * For SysLog, and hidden behind Log.Root context
+ * @suppress
+ * */
 @Deprecated("For internal use only. Do not use.", level = DeprecationLevel.ERROR)
 public fun Log.Root.isNodeJs(): Boolean = IS_NODE_JS

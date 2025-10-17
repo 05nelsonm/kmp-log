@@ -18,17 +18,12 @@
 package io.matthewnelson.kmp.log.internal
 
 import io.matthewnelson.kmp.log.Log
-import io.matthewnelson.kmp.log.internal.node.IS_NODE_JS
-import io.matthewnelson.kmp.log.internal.node.nodeModuleProcess
+import io.matthewnelson.kmp.log.internal.node.node_process
 
 // Throw exception on JsBrowser
-internal actual inline fun Log.AbortHandler.aborterAcceptsMessages(): Boolean = !IS_NODE_JS
+internal actual inline fun Log.AbortHandler.aborterAcceptsMessages(): Boolean = node_process == null
 
 internal actual inline fun Log.AbortHandler.doAbort(t: Throwable?): Boolean {
-    if (IS_NODE_JS) {
-        nodeModuleProcess().abort()
-    } else {
-        throw (t ?: Throwable("ABORT"))
-    }
+    node_process?.abort() ?: throw (t ?: Throwable("ABORT"))
     return true
 }

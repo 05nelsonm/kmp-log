@@ -33,10 +33,10 @@ internal inline fun SysLog.Default.jvmLogPrint(
     t: Throwable?,
 ): Boolean {
     val formatted = run {
-        val now = Date()
+        val now = Date(System.currentTimeMillis())
         val dateTime = SYS_LOG_TIME_FORMAT.format(now)
-        commonFormatLog(level, domain, tag, msg, t, dateTime, omitLastNewLine = false)
-    }.toString()
+        commonFormatLogOrNull(level, domain, tag, msg, t, dateTime, omitLastNewLine = false)
+    } ?: return false
 
     try {
         when (level) {
@@ -46,7 +46,7 @@ internal inline fun SysLog.Default.jvmLogPrint(
             Level.Warn,
             Level.Error,
             Level.Fatal -> System.err
-        }.print(formatted)
+        }.print(formatted.toString())
         return true
     } catch (_: Throwable) {
         return false

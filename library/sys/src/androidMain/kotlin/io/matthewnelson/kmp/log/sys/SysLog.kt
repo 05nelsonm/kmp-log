@@ -61,6 +61,8 @@ public actual open class SysLog private actual constructor(
             Level.Error -> android.util.Log.ERROR
             Level.Fatal -> android.util.Log.ASSERT
         }
+
+        private const val MAX_LEN_LOG: Int = 4_000
     }
 
     actual override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
@@ -71,7 +73,7 @@ public actual open class SysLog private actual constructor(
 
         val priority = level.toPriority()
         val _tag = androidDomainTag(Build.VERSION.SDK_INT, domain, tag)
-        return androidLogChunk(msg, t) { chunk ->
+        return androidLogChunk(msg, t, MAX_LEN_LOG) { chunk ->
             android.util.Log.println(priority, _tag, chunk) > 0
         }
     }

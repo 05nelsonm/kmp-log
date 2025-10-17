@@ -22,7 +22,6 @@ import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
-private const val MAX_LEN_LOG: Int = 4000
 private const val MAX_LEN_TAG: Int = 23
 
 internal inline fun SysLog.Default.androidDomainTag(
@@ -39,6 +38,7 @@ internal inline fun SysLog.Default.androidDomainTag(
 internal inline fun SysLog.Default.androidLogChunk(
     msg: String?,
     t: Throwable?,
+    maxLenLog: Int,
     _print: (chunk: String) -> Boolean,
 ): Boolean {
     contract { callsInPlace(_print, InvocationKind.UNKNOWN) }
@@ -55,14 +55,18 @@ internal inline fun SysLog.Default.androidLogChunk(
 
     if (msg != null) sb.append(msg)
     if (stack != null) {
+        // Trim whitespace from end of msg (if present) so that
+        // there's no whitespace between it and the stack trace,
+        // except for the new line character.
+        while (sb.isNotEmpty() && sb.last().isWhitespace()) {
+            sb.setLength(sb.length - 1)
+        }
         if (sb.isNotEmpty()) sb.appendLine()
         sb.append(stack)
     }
 
-    // trim
-    while (sb.isNotEmpty() && sb.last().isWhitespace()) {
-        sb.setLength(sb.length - 1)
-    }
+    // No need to worry about trimming whitespace from end here,
+    // commonLogChunk will do it.
 
-    return commonLogChunk(sb, MAX_LEN_LOG, _print)
+    return commonLogChunk(sb, maxLenLog, _print)
 }

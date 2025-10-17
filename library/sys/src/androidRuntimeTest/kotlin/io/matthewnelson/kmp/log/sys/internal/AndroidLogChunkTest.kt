@@ -17,32 +17,33 @@ package io.matthewnelson.kmp.log.sys.internal
 
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.SysLog
-import io.matthewnelson.kmp.log.sys.deviceApiLevel
 import io.matthewnelson.kmp.log.sys.isNative
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 
-class AndroidTagTest {
+class AndroidLogChunkTest {
+
+    private companion object {
+        private const val CHARS: String = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+-/"
+    }
 
     @Test
-    fun givenTag_whenAndroidApi25OrBelow_thenIsTruncatedIfTooLong() {
-        var tag = if (isNative()) "Native-" else "NonNative-"
-        while (tag.length < 30) { tag += "A" }
-        val sdkInt = deviceApiLevel()
-        val actual = SysLog.androidDomainTag(sdkInt, domain = null, tag)
-        if (sdkInt <= 25) {
-            assertEquals(23, actual.length)
-            assertNotEquals(tag, actual)
-        } else {
-            assertEquals(tag, actual)
+    fun givenAndroid_whenLogExceeds4000Characters_thenIsChunked() {
+        val log = StringBuilder()
+        var line = 0
+        while (log.length < 6_000) {
+            log.append("LINE[").append(line++).append("] ")
+            repeat(87) {
+                val i = Random.nextInt(from = 0, until = CHARS.length)
+                log.append(CHARS[i])
+            }
+            log.append(". CHARS[").append(log.length + 2).appendLine(']')
         }
-
         Log.installOrThrow(SysLog)
         try {
-            val result = Log.Logger.of(tag = tag).i {
-                "Test tag of length[${tag.length}] works on all API levels and will not cause an exception"
-            }
+            val tag = "Chunking" + if (isNative()) "Native" else "NonNative"
+            val result = Log.Logger.of(tag = tag).i(log.toString())
             assertEquals(1, result)
         } finally {
             Log.uninstallOrThrow(SysLog)

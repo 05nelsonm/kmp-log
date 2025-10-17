@@ -18,6 +18,7 @@ package io.matthewnelson.kmp.log.sys
 import android.os.Build
 import io.matthewnelson.kmp.log.Log
 
+actual fun isNative(): Boolean = false
 actual fun deviceApiLevel(): Int = Build.VERSION.SDK_INT
 
 actual val IS_LOGGABLE_REQUIRED_API_LEVEL: Int = 0
