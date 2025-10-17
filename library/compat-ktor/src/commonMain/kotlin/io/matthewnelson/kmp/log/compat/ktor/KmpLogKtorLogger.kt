@@ -27,9 +27,7 @@ import io.matthewnelson.kmp.log.Log
  * @see [asKtorLogger]
  * @see [asKmpLogLoggerOrThrow]
  * */
-public expect class KmpLogKtorLogger private constructor(
-    delegate: Log.Logger,
-): Logger {
+public expect class KmpLogKtorLogger: Logger {
 
     public val delegate: Log.Logger
 

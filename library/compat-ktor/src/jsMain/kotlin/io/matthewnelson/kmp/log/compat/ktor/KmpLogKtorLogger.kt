@@ -32,7 +32,7 @@ import io.matthewnelson.kmp.log.compat.ktor.internal.nonJvmTrace
 import io.matthewnelson.kmp.log.compat.ktor.internal.nonJvmWarn
 
 // js
-public actual class KmpLogKtorLogger private actual constructor(
+public actual class KmpLogKtorLogger private constructor(
     public actual val delegate: Log.Logger,
 ): Logger {
 
