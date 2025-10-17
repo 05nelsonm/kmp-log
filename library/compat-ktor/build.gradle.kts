@@ -38,6 +38,6 @@ kmpConfiguration {
             }
         }
 
-        configureKotlinVersion(jsWasmJs = KotlinVersion.KOTLIN_2_0)
+        configureKotlinVersion(KotlinVersion.KOTLIN_2_0)
     }
 }

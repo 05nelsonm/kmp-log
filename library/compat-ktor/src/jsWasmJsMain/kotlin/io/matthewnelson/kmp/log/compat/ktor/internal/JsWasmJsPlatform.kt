@@ -13,7 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-package io.matthewnelson.kmp.log.compat.ktor
+package io.matthewnelson.kmp.log.compat.ktor.internal
 
-@Suppress("UNUSED")
-internal fun stub() { /* no-op */ }
+import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.compat.ktor.KmpLogKtorLogger
+
+internal fun ((Log.Logger) -> KmpLogKtorLogger).jsWasmJsOf(
+    logger: Log.Logger,
+): KmpLogKtorLogger {
+    // TODO: Cache instances?
+    return this(logger)
+}
