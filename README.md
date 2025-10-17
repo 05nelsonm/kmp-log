@@ -133,6 +133,9 @@ dependencies {
 
     // If you need to convert Log.Logger to org.slf4j.Logger
     implementation("io.matthewnelson.kmp-log:compat-slf4j:$v")
+
+    // If you need to convert Log.Logger to io.ktor.util.logging.Logger
+    implementation("io.matthewnelson.kmp-log:compat-ktor:$v")
 }
 ```
 

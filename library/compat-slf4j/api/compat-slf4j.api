@@ -2,6 +2,8 @@ public final class io/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger : org
 	public static final field Compat Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger$Compat;
 	public final field delegate Lio/matthewnelson/kmp/log/Log$Logger;
 	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Logger;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public static final fun asKtorLogger (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
+	public static final fun asSLF4JLogger (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
 	public fun debug (Ljava/lang/String;)V
 	public fun debug (Ljava/lang/String;Ljava/lang/Object;)V
 	public fun debug (Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
@@ -23,7 +25,6 @@ public final class io/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger : org
 	public fun error (Lorg/slf4j/Marker;Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
 	public fun error (Lorg/slf4j/Marker;Ljava/lang/String;Ljava/lang/Throwable;)V
 	public fun error (Lorg/slf4j/Marker;Ljava/lang/String;[Ljava/lang/Object;)V
-	public static final fun get (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
 	public fun getName ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun info (Ljava/lang/String;)V
@@ -71,7 +72,8 @@ public final class io/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger : org
 }
 
 public final class io/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger$Compat {
-	public final fun get (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
+	public final fun asKtorLogger (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
+	public final fun asSLF4JLogger (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
 	public final fun of (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
 }
 

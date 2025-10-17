@@ -1,0 +1,35 @@
+// Klib ABI Dump
+// Targets: [androidNativeArm32, androidNativeArm64, androidNativeX64, androidNativeX86, iosArm64, iosSimulatorArm64, iosX64, js, linuxArm64, linuxX64, macosArm64, macosX64, mingwX64, tvosArm64, tvosSimulatorArm64, tvosX64, wasmJs, watchosArm32, watchosArm64, watchosDeviceArm64, watchosSimulatorArm64, watchosX64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.matthewnelson.kmp-log:compat-ktor>
+final class io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger : io.ktor.util.logging/Logger { // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger|null[0]
+    final val delegate // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.delegate|{}delegate[0]
+        final fun <get-delegate>(): io.matthewnelson.kmp.log/Log.Logger // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.delegate.<get-delegate>|<get-delegate>(){}[0]
+    final val level // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.level|{}level[0]
+        final fun <get-level>(): io.ktor.util.logging/LogLevel // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.level.<get-level>|<get-level>(){}[0]
+
+    final fun debug(kotlin/String) // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.debug|debug(kotlin.String){}[0]
+    final fun debug(kotlin/String, kotlin/Throwable) // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.debug|debug(kotlin.String;kotlin.Throwable){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.equals|equals(kotlin.Any?){}[0]
+    final fun error(kotlin/String) // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.error|error(kotlin.String){}[0]
+    final fun error(kotlin/String, kotlin/Throwable) // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.error|error(kotlin.String;kotlin.Throwable){}[0]
+    final fun hashCode(): kotlin/Int // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.hashCode|hashCode(){}[0]
+    final fun info(kotlin/String) // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.info|info(kotlin.String){}[0]
+    final fun info(kotlin/String, kotlin/Throwable) // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.info|info(kotlin.String;kotlin.Throwable){}[0]
+    final fun toString(): kotlin/String // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.toString|toString(){}[0]
+    final fun trace(kotlin/String) // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.trace|trace(kotlin.String){}[0]
+    final fun trace(kotlin/String, kotlin/Throwable) // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.trace|trace(kotlin.String;kotlin.Throwable){}[0]
+    final fun warn(kotlin/String) // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.warn|warn(kotlin.String){}[0]
+    final fun warn(kotlin/String, kotlin/Throwable) // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.warn|warn(kotlin.String;kotlin.Throwable){}[0]
+
+    final object Compat { // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.Compat|null[0]
+        final fun of(io.matthewnelson.kmp.log/Log.Logger): io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.Compat.of|of(io.matthewnelson.kmp.log.Log.Logger){}[0]
+        final inline fun (io.matthewnelson.kmp.log/Log.Logger).asKtorLogger(): io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.Compat.asKtorLogger|asKtorLogger@io.matthewnelson.kmp.log.Log.Logger(){}[0]
+    }
+}
+
+final fun (io.ktor.util.logging/Logger).io.matthewnelson.kmp.log.compat.ktor/asKmpLogLoggerOrThrow(): io.matthewnelson.kmp.log/Log.Logger // io.matthewnelson.kmp.log.compat.ktor/asKmpLogLoggerOrThrow|asKmpLogLoggerOrThrow@io.ktor.util.logging.Logger(){}[0]
