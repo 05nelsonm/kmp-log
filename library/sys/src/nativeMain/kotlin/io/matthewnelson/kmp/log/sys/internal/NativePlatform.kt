@@ -34,8 +34,8 @@ import kotlin.contracts.contract
 
 internal fun SysLog.Default.nativeDateTime(): CharSequence? {
     val dateTime = IntArray(7)
-    @Suppress("RemoveRedundantCallsOfConversionMethods")
     @OptIn(ExperimentalForeignApi::class)
+    @Suppress("RemoveRedundantCallsOfConversionMethods")
     val ret = dateTime.usePinned { pinned ->
         kmp_log_local_date_time(date_time = pinned.addressOf(0))
     }.toInt()

@@ -43,8 +43,7 @@ internal inline fun SysLog.Default.commonDomainTag(
     tag: String,
 ): String {
     if (domain == null) return tag
-    var capacity = domain.length + 2 + tag.length
-    val sb = StringBuilder(++capacity)
+    val sb = StringBuilder(domain.length + 2 + tag.length + 1)
     return commonDomainTag(sb, domain, tag).toString()
 }
 

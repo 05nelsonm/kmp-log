@@ -15,5 +15,5 @@
  **/
 package io.matthewnelson.kmp.log.internal.node
 
-internal actual fun isNodeJsInternal(): Boolean = js(CODE_IS_NODE_JS)
-internal actual fun nodeModuleProcess(): ModuleProcess = js(CODE_MODULE_PROCESS)
+internal actual fun isNodeJsInternal(): Boolean = js(CODE_IS_NODE_JS_INTERNAL)
+internal actual fun nodeModuleProcess(): ModuleProcess = js(CODE_NODE_MODULE_PROCESS)

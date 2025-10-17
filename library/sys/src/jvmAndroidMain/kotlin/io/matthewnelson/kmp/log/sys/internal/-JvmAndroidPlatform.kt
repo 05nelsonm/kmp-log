@@ -33,7 +33,7 @@ internal inline fun SysLog.Default.jvmLogPrint(
     t: Throwable?,
 ): Boolean {
     val formatted = run {
-        val now = Date()
+        val now = Date(System.currentTimeMillis())
         val dateTime = SYS_LOG_TIME_FORMAT.format(now)
         commonFormatLog(level, domain, tag, msg, t, dateTime, omitLastNewLine = false)
     }.toString()
