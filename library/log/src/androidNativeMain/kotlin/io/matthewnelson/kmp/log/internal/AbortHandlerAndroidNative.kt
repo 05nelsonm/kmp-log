@@ -29,6 +29,8 @@ import platform.posix.RTLD_NEXT
 import platform.posix.abort
 import platform.posix.dlsym
 
+private const val MAX_LEN_LOG: Int = 1_000
+
 // Normally one would not want to hold onto a function pointer reference
 // statically, but it's from glibc which is not going to be hot reloaded
 // or anything w/o this process terminating, so.
@@ -57,7 +59,7 @@ internal actual inline fun Log.AbortHandler.doAbort(t: Throwable?): Boolean {
         return true
     }
     var msg = t?.stackTraceToString()?.trimEnd()
-    if (msg != null && msg.length > 4_000) msg = msg.take(4_000)
+    if (msg != null && msg.length > MAX_LEN_LOG) msg = msg.take(MAX_LEN_LOG)
     ___android_log_call_aborter.invoke(msg?.cstr)
     return true
 }
