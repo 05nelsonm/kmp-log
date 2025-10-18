@@ -64,15 +64,15 @@ fun main() {
     Log.Root.install(SysLog.Default)
     val doSomethingResult = MyClass().doSomething("Hello!")
 
-    // Ability to define a "domain", such as 'kmp-log:log', separate
-    // from the tag (helpful for library developers to allow their
-    // users the ability to filter by entire domains).
+    // Ability to define a domain separate from the tag, which
+    // can be helpful for library developers, as users can simply
+    // filter out logs by their domain. Alternatively, can be used
+    // to whitelist domains for certain Log implementations.
     val logger = Log.Logger.of(domain = "your.library:thing", tag = "Main")
 
     val numberOfLogInstancesThatLoggedThisThing = logger.log(
         level = Log.Level.Info,
         msg = "MyClass.doSomething returned $doSomethingResult",
-        t = null,
     )
     assertEquals(1, numberOfLogInstancesThatLoggedThisThing)
 

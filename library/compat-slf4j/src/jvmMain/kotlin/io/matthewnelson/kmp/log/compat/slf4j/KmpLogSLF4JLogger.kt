@@ -19,10 +19,13 @@ package io.matthewnelson.kmp.log.compat.slf4j
 
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.Log.Level
+import io.matthewnelson.kmp.log.d
+import io.matthewnelson.kmp.log.e
+import io.matthewnelson.kmp.log.i
+import io.matthewnelson.kmp.log.log
+import io.matthewnelson.kmp.log.v
+import io.matthewnelson.kmp.log.w
 import org.slf4j.Marker
-import kotlin.contracts.ExperimentalContracts
-import kotlin.contracts.InvocationKind
-import kotlin.contracts.contract
 
 /**
  * Convert [Log.Logger] to [org.slf4j.Logger].
@@ -71,146 +74,86 @@ public class KmpLogSLF4JLogger private constructor(
     public override fun isTraceEnabled(): Boolean = delegate.isLoggable(Level.Verbose)
     public override fun isTraceEnabled(marker: Marker?): Boolean = isTraceEnabled()
 
-    public override fun trace(message: String) { delegate.v(message, t = null) }
-    public override fun trace(message: String, cause: Throwable) { delegate.v(message, cause) }
-    public override fun trace(marker: Marker?, message: String?) { delegate.v(message, t = null) }
-    public override fun trace(marker: Marker?, message: String?, cause: Throwable?) { delegate.v(message, cause) }
+    public override fun trace(message: String) { delegate.v(t = null, msg = message) }
+    public override fun trace(message: String, cause: Throwable) { delegate.v(t = cause, msg = message) }
+    public override fun trace(marker: Marker?, message: String?) { delegate.v(t = null, msg = message) }
+    public override fun trace(marker: Marker?, message: String?, cause: Throwable?) { delegate.v(t = cause, msg = message) }
 
-    public override fun trace(format: String?, arg: Any?) {
-        format.log(Level.Verbose) { java.lang.String.format(it, arg) }
-    }
-    public override fun trace(format: String?, arg1: Any?, arg2: Any?) {
-        format.log(Level.Verbose) { java.lang.String.format(it, arg1, arg2) }
-    }
-    public override fun trace(format: String?, vararg arguments: Any?) {
-        format.log(Level.Verbose) { java.lang.String.format(it, arguments) }
-    }
+    public override fun trace(format: String?, arg: Any?) { delegate.v(t = null, format, arg) }
+    public override fun trace(format: String?, arg1: Any?, arg2: Any?) { delegate.v(t = null, format, arg1, arg2) }
+    public override fun trace(format: String?, vararg arguments: Any?) { delegate.log(Level.Verbose, arguments, t = null, format) }
 
-    public override fun trace(marker: Marker?, format: String?, arg: Any?) {
-        format.log(Level.Verbose) { java.lang.String.format(it, arg) }
-    }
-    public override fun trace(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) {
-        format.log(Level.Verbose) { java.lang.String.format(it, arg1, arg2) }
-    }
-    public override fun trace(marker: Marker?, format: String?, vararg arguments: Any?) {
-        format.log(Level.Verbose) { java.lang.String.format(it, arguments) }
-    }
+    public override fun trace(marker: Marker?, format: String?, arg: Any?) { delegate.v(t = null, format, arg) }
+    public override fun trace(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.v(t = null, format, arg1, arg2) }
+    public override fun trace(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Verbose, arguments, t = null, format) }
 
     // DEBUG
     public override fun isDebugEnabled(): Boolean = delegate.isLoggable(Level.Debug)
     public override fun isDebugEnabled(marker: Marker?): Boolean = isDebugEnabled()
 
-    public override fun debug(message: String) { delegate.d(message, t = null) }
-    public override fun debug(message: String, cause: Throwable) { delegate.d(message, cause) }
-    public override fun debug(marker: Marker?, message: String?) { delegate.d(message, t = null) }
-    public override fun debug(marker: Marker?, message: String?, cause: Throwable?) { delegate.d(message, cause) }
+    public override fun debug(message: String) { delegate.d(t = null, msg = message) }
+    public override fun debug(message: String, cause: Throwable) { delegate.d(t = cause, msg = message) }
+    public override fun debug(marker: Marker?, message: String?) { delegate.d(t = null, msg = message) }
+    public override fun debug(marker: Marker?, message: String?, cause: Throwable?) { delegate.d(t = cause, msg = message) }
 
-    public override fun debug(format: String?, arg: Any?) {
-        format.log(Level.Debug) { java.lang.String.format(it, arg) }
-    }
-    public override fun debug(format: String?, arg1: Any?, arg2: Any?) {
-        format.log(Level.Debug) { java.lang.String.format(it, arg1, arg2) }
-    }
-    public override fun debug(format: String?, vararg arguments: Any?) {
-        format.log(Level.Debug) { java.lang.String.format(it, arguments) }
-    }
+    public override fun debug(format: String?, arg: Any?) { delegate.d(t = null, format, arg) }
+    public override fun debug(format: String?, arg1: Any?, arg2: Any?) { delegate.d(t = null, format, arg1, arg2) }
+    public override fun debug(format: String?, vararg arguments: Any?) { delegate.log(Level.Debug, arguments, t = null, format) }
 
-    public override fun debug(marker: Marker?, format: String?, arg: Any?) {
-        format.log(Level.Debug) { java.lang.String.format(it, arg) }
-    }
-    public override fun debug(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) {
-        format.log(Level.Debug) { java.lang.String.format(it, arg1, arg2) }
-    }
-    public override fun debug(marker: Marker?, format: String?, vararg arguments: Any?) {
-        format.log(Level.Debug) { java.lang.String.format(it, arguments) }
-    }
+    public override fun debug(marker: Marker?, format: String?, arg: Any?) { delegate.d(t = null, format, arg) }
+    public override fun debug(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.d(t = null, format, arg1, arg2) }
+    public override fun debug(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Debug, arguments, t = null, format) }
 
     // INFO
     public override fun isInfoEnabled(): Boolean = delegate.isLoggable(Level.Info)
     public override fun isInfoEnabled(marker: Marker?): Boolean = isInfoEnabled()
 
-    public override fun info(message: String) { delegate.i(message, t = null) }
-    public override fun info(message: String, cause: Throwable) { delegate.i(message, cause) }
-    public override fun info(marker: Marker?, message: String?) { delegate.i(message, t = null) }
-    public override fun info(marker: Marker?, message: String?, cause: Throwable?) { delegate.i(message, cause) }
+    public override fun info(message: String) { delegate.i(t = null, msg = message) }
+    public override fun info(message: String, cause: Throwable) { delegate.i(t = cause, msg = message) }
+    public override fun info(marker: Marker?, message: String?) { delegate.i(t = null, msg = message) }
+    public override fun info(marker: Marker?, message: String?, cause: Throwable?) { delegate.i(t = cause, msg = message) }
 
-    public override fun info(format: String?, arg: Any?) {
-        format.log(Level.Info) { java.lang.String.format(it, arg) }
-    }
-    public override fun info(format: String?, arg1: Any?, arg2: Any?) {
-        format.log(Level.Info) { java.lang.String.format(it, arg1, arg2) }
-    }
-    public override fun info(format: String?, vararg arguments: Any?) {
-        format.log(Level.Info) { java.lang.String.format(it, arguments) }
-    }
+    public override fun info(format: String?, arg: Any?) { delegate.i(t = null, format, arg) }
+    public override fun info(format: String?, arg1: Any?, arg2: Any?) { delegate.i(t = null, format, arg1, arg2) }
+    public override fun info(format: String?, vararg arguments: Any?) { delegate.log(Level.Info, arguments, t = null, format) }
 
-    public override fun info(marker: Marker?, format: String?, arg: Any?) {
-        format.log(Level.Info) { java.lang.String.format(it, arg) }
-    }
-    public override fun info(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) {
-        format.log(Level.Info) { java.lang.String.format(it, arg1, arg2) }
-    }
-    public override fun info(marker: Marker?, format: String?, vararg arguments: Any?) {
-        format.log(Level.Info) { java.lang.String.format(it, arguments) }
-    }
+    public override fun info(marker: Marker?, format: String?, arg: Any?) { delegate.i(t = null, format, arg) }
+    public override fun info(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.i(t = null, format, arg1, arg2) }
+    public override fun info(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Info, arguments, t = null, format) }
 
     // WARN
     public override fun isWarnEnabled(): Boolean = delegate.isLoggable(Level.Warn)
     public override fun isWarnEnabled(marker: Marker?): Boolean = isWarnEnabled()
 
-    public override fun warn(message: String) { delegate.w(message, t = null) }
-    public override fun warn(message: String, cause: Throwable) { delegate.w(message, cause) }
-    public override fun warn(marker: Marker?, message: String?) { delegate.w(message, t = null) }
-    public override fun warn(marker: Marker?, message: String?, cause: Throwable?) { delegate.w(message, cause) }
+    public override fun warn(message: String) { delegate.w(t = null, msg = message) }
+    public override fun warn(message: String, cause: Throwable) { delegate.w(t = cause, msg = message) }
+    public override fun warn(marker: Marker?, message: String?) { delegate.w(t = null, msg = message) }
+    public override fun warn(marker: Marker?, message: String?, cause: Throwable?) { delegate.w(t = cause, msg = message) }
 
-    public override fun warn(format: String?, arg: Any?) {
-        format.log(Level.Warn) { java.lang.String.format(it, arg) }
-    }
-    public override fun warn(format: String?, arg1: Any?, arg2: Any?) {
-        format.log(Level.Warn) { java.lang.String.format(it, arg1, arg2) }
-    }
-    public override fun warn(format: String?, vararg arguments: Any?) {
-        format.log(Level.Warn) { java.lang.String.format(it, arguments) }
-    }
+    public override fun warn(format: String?, arg: Any?) { delegate.w(t = null, format, arg) }
+    public override fun warn(format: String?, arg1: Any?, arg2: Any?) { delegate.w(t = null, format, arg1, arg2) }
+    public override fun warn(format: String?, vararg arguments: Any?) { delegate.log(Level.Warn, arguments, t = null, format) }
 
-    public override fun warn(marker: Marker?, format: String?, arg: Any?) {
-        format.log(Level.Warn) { java.lang.String.format(it, arg) }
-    }
-    public override fun warn(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) {
-        format.log(Level.Warn) { java.lang.String.format(it, arg1, arg2) }
-    }
-    public override fun warn(marker: Marker?, format: String?, vararg arguments: Any?) {
-        format.log(Level.Warn) { java.lang.String.format(it, arguments) }
-    }
+    public override fun warn(marker: Marker?, format: String?, arg: Any?) { delegate.w(t = null, format, arg) }
+    public override fun warn(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.w(t = null, format, arg1, arg2) }
+    public override fun warn(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Warn, arguments, t = null, format) }
 
     // ERROR
     public override fun isErrorEnabled(): Boolean = delegate.isLoggable(Level.Error)
     public override fun isErrorEnabled(marker: Marker?): Boolean = isErrorEnabled()
 
-    public override fun error(message: String) { delegate.e(message, t = null) }
-    public override fun error(message: String, cause: Throwable) { delegate.e(message, cause) }
-    public override fun error(marker: Marker?, message: String?) { delegate.e(message, t = null) }
-    public override fun error(marker: Marker?, message: String?, cause: Throwable?) { delegate.e(message, cause) }
+    public override fun error(message: String) { delegate.e(t = null, msg = message) }
+    public override fun error(message: String, cause: Throwable) { delegate.e(t = cause, msg = message) }
+    public override fun error(marker: Marker?, message: String?) { delegate.e(t = null, msg = message) }
+    public override fun error(marker: Marker?, message: String?, cause: Throwable?) { delegate.e(t = cause, msg = message) }
 
-    public override fun error(format: String?, arg: Any?) {
-        format.log(Level.Error) { java.lang.String.format(it, arg) }
-    }
-    public override fun error(format: String?, arg1: Any?, arg2: Any?) {
-        format.log(Level.Error) { java.lang.String.format(it, arg1, arg2) }
-    }
-    public override fun error(format: String?, vararg arguments: Any?) {
-        format.log(Level.Error) { java.lang.String.format(it, arguments) }
-    }
+    public override fun error(format: String?, arg: Any?) { delegate.e(t = null, format, arg) }
+    public override fun error(format: String?, arg1: Any?, arg2: Any?) { delegate.e(t = null, format, arg1, arg2) }
+    public override fun error(format: String?, vararg arguments: Any?) { delegate.log(Level.Error, arguments, t = null, format) }
 
-    public override fun error(marker: Marker?, format: String?, arg: Any?) {
-        format.log(Level.Error) { java.lang.String.format(it, arg) }
-    }
-    public override fun error(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) {
-        format.log(Level.Error) { java.lang.String.format(it, arg1, arg2) }
-    }
-    public override fun error(marker: Marker?, format: String?, vararg arguments: Any?) {
-        format.log(Level.Error) { java.lang.String.format(it, arguments) }
-    }
+    public override fun error(marker: Marker?, format: String?, arg: Any?) { delegate.e(t = null, format, arg) }
+    public override fun error(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.e(t = null, format, arg1, arg2) }
+    public override fun error(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Error, arguments, t = null, format) }
 
     /** @suppress */
     public override fun equals(other: Any?): Boolean {
@@ -229,13 +172,5 @@ public class KmpLogSLF4JLogger private constructor(
         return delegate.toString()
             .replaceBefore('[', "KmpLogSLF4JLogger")
             .replaceAfterLast('@', hashCode().toString())
-    }
-
-    @OptIn(ExperimentalContracts::class)
-    private inline fun String?.log(level: Level, block: (f: String) -> String) {
-        contract { callsInPlace(block, InvocationKind.AT_MOST_ONCE) }
-        // Log.Root ignores null/empty Strings and will simply return 0
-        if (isNullOrEmpty()) return
-        delegate.log(level) { block(this) }
     }
 }
