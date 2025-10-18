@@ -1,0 +1,11 @@
+$dokka.format:html-v1
+$dokka.linkExtension:html
+$dokka.location:io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger/level/#/PointingToDeclaration/compat-ktor/io.matthewnelson.kmp.log.compat.ktor/-kmp-log-ktor-logger/[wasm-js]level.html
+module:library/compat-ktor
+io.matthewnelson.kmp.log.compat.ktor
+module:library/compat-slf4j
+io.matthewnelson.kmp.log.compat.slf4j
+module:library/log
+io.matthewnelson.kmp.log
+module:library/sys
+io.matthewnelson.kmp.log.sys
