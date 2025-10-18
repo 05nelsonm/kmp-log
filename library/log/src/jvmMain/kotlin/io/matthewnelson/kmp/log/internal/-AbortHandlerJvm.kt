@@ -20,6 +20,7 @@ package io.matthewnelson.kmp.log.internal
 import io.matthewnelson.kmp.log.Log
 import kotlin.system.exitProcess
 
+private const val ANDROID_MAX_LEN_LOG: Int = 4_000
 private const val SIGABRT = 6
 
 private val ANDROID_LOG_WTF by lazy {
@@ -43,7 +44,7 @@ internal actual inline fun Log.AbortHandler.doAbort(t: Throwable?): Boolean {
     val wtf = ANDROID_LOG_WTF
     return if (wtf != null) {
         var msg = t?.stackTraceToString()?.trimEnd()
-        if (msg != null && msg.length > 4_000) msg = msg.take(4_000)
+        if (msg != null && msg.length > ANDROID_MAX_LEN_LOG) msg = msg.take(ANDROID_MAX_LEN_LOG)
         (wtf.invoke(null, null, msg) as Int) > 0
     } else {
 

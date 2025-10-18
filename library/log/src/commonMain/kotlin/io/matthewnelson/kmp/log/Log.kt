@@ -306,7 +306,8 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun v(lazyMsg: () -> Any): Int {
+        @JvmName("-v")
+        public inline fun v(lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return v(t = null, lazyMsg)
         }
@@ -321,7 +322,8 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun v(t: Throwable?, lazyMsg: () -> Any): Int {
+        @JvmName("-v")
+        public inline fun v(t: Throwable?, lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Verbose, t, lazyMsg)
         }
@@ -370,7 +372,8 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun d(lazyMsg: () -> Any): Int {
+        @JvmName("-d")
+        public inline fun d(lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return d(t = null, lazyMsg)
         }
@@ -385,7 +388,8 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun d(t: Throwable?, lazyMsg: () -> Any): Int {
+        @JvmName("-d")
+        public inline fun d(t: Throwable?, lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Debug, t, lazyMsg)
         }
@@ -433,7 +437,8 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun i(lazyMsg: () -> Any): Int {
+        @JvmName("-i")
+        public inline fun i(lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return i(t = null, lazyMsg)
         }
@@ -448,7 +453,8 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun i(t: Throwable?, lazyMsg: () -> Any): Int {
+        @JvmName("-i")
+        public inline fun i(t: Throwable?, lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Info, t, lazyMsg)
         }
@@ -496,7 +502,8 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun w(lazyMsg: () -> Any): Int {
+        @JvmName("-w")
+        public inline fun w(lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return w(t = null, lazyMsg)
         }
@@ -511,7 +518,8 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun w(t: Throwable?, lazyMsg: () -> Any): Int {
+        @JvmName("-w")
+        public inline fun w(t: Throwable?, lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Warn, t, lazyMsg)
         }
@@ -559,7 +567,8 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun e(lazyMsg: () -> Any): Int {
+        @JvmName("-e")
+        public inline fun e(lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return e(t = null, lazyMsg)
         }
@@ -574,7 +583,8 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun e(t: Throwable?, lazyMsg: () -> Any): Int {
+        @JvmName("-e")
+        public inline fun e(t: Throwable?, lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Error, t, lazyMsg)
         }
@@ -642,7 +652,8 @@ public abstract class Log {
          *
          * @see [AbortHandler]
          * */
-        public inline fun wtf(lazyMsg: () -> Any): Int {
+        @JvmName("-wtf")
+        public inline fun wtf(lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return wtf(t = null, lazyMsg)
         }
@@ -662,7 +673,8 @@ public abstract class Log {
          *
          * @see [AbortHandler]
          * */
-        public inline fun wtf(t: Throwable?, lazyMsg: () -> Any): Int {
+        @JvmName("-wtf")
+        public inline fun wtf(t: Throwable?, lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(Level.Fatal, t, lazyMsg)
         }
@@ -716,7 +728,8 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun log(level: Level, lazyMsg: () -> Any): Int {
+        @JvmName("-log")
+        public inline fun log(level: Level, lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             return log(level, t = null, lazyMsg)
         }
@@ -732,10 +745,11 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun log(level: Level, t: Throwable?, lazyMsg: () -> Any): Int {
+        @JvmName("-log")
+        public inline fun log(level: Level, t: Throwable?, lazyMsg: () -> Any?): Int {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             if (!isLoggable(level)) return 0
-            val msg = lazyMsg().toString()
+            val msg = lazyMsg()?.toString()
             return log(level, msg, t)
         }
 
