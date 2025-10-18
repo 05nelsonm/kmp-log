@@ -63,32 +63,32 @@ public final class io/matthewnelson/kmp/log/Log$Logger {
 	public static final fun checkDomain (Ljava/lang/String;)Ljava/lang/String;
 	public static final fun checkTag (Ljava/lang/String;)Ljava/lang/String;
 	public final fun d (Ljava/lang/String;)I
-	public final fun d (Ljava/lang/String;Ljava/lang/Throwable;)I
 	public final fun d (Ljava/lang/Throwable;)I
+	public final fun d (Ljava/lang/Throwable;Ljava/lang/String;)I
 	public final fun e (Ljava/lang/String;)I
-	public final fun e (Ljava/lang/String;Ljava/lang/Throwable;)I
 	public final fun e (Ljava/lang/Throwable;)I
+	public final fun e (Ljava/lang/Throwable;Ljava/lang/String;)I
 	public fun equals (Ljava/lang/Object;)Z
 	public fun hashCode ()I
 	public final fun i (Ljava/lang/String;)I
-	public final fun i (Ljava/lang/String;Ljava/lang/Throwable;)I
 	public final fun i (Ljava/lang/Throwable;)I
+	public final fun i (Ljava/lang/Throwable;Ljava/lang/String;)I
 	public final fun isLoggable (Lio/matthewnelson/kmp/log/Log$Level;)Z
 	public final fun log (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/String;)I
-	public final fun log (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/String;Ljava/lang/Throwable;)I
 	public final fun log (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/Throwable;)I
+	public final fun log (Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/Throwable;Ljava/lang/String;)I
 	public static final fun of (Ljava/lang/String;)Lio/matthewnelson/kmp/log/Log$Logger;
 	public static final fun of (Ljava/lang/String;Ljava/lang/String;)Lio/matthewnelson/kmp/log/Log$Logger;
 	public fun toString ()Ljava/lang/String;
 	public final fun v (Ljava/lang/String;)I
-	public final fun v (Ljava/lang/String;Ljava/lang/Throwable;)I
 	public final fun v (Ljava/lang/Throwable;)I
+	public final fun v (Ljava/lang/Throwable;Ljava/lang/String;)I
 	public final fun w (Ljava/lang/String;)I
-	public final fun w (Ljava/lang/String;Ljava/lang/Throwable;)I
 	public final fun w (Ljava/lang/Throwable;)I
+	public final fun w (Ljava/lang/Throwable;Ljava/lang/String;)I
 	public final fun wtf (Ljava/lang/String;)I
-	public final fun wtf (Ljava/lang/String;Ljava/lang/Throwable;)I
 	public final fun wtf (Ljava/lang/Throwable;)I
+	public final fun wtf (Ljava/lang/Throwable;Ljava/lang/String;)I
 }
 
 public final class io/matthewnelson/kmp/log/Log$Logger$Companion {
@@ -109,5 +109,30 @@ public final class io/matthewnelson/kmp/log/Log$Root {
 	public final fun uninstallAll (Z)V
 	public final fun uninstallOrThrow (Lio/matthewnelson/kmp/log/Log;)V
 	public final fun uninstallOrThrow (Ljava/lang/String;)V
+}
+
+public final class io/matthewnelson/kmp/log/LogJvm {
+	public static final fun d (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;)I
+	public static final fun d (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)I
+	public static final fun d (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;[Ljava/lang/Object;)I
+	public static final fun e (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;)I
+	public static final fun e (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)I
+	public static final fun e (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;[Ljava/lang/Object;)I
+	public static final fun i (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;)I
+	public static final fun i (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)I
+	public static final fun i (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;[Ljava/lang/Object;)I
+	public static final fun log (Lio/matthewnelson/kmp/log/Log$Logger;Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;)I
+	public static final fun log (Lio/matthewnelson/kmp/log/Log$Logger;Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)I
+	public static final fun log (Lio/matthewnelson/kmp/log/Log$Logger;Lio/matthewnelson/kmp/log/Log$Level;Ljava/lang/Throwable;Ljava/lang/String;[Ljava/lang/Object;)I
+	public static final fun log (Lio/matthewnelson/kmp/log/Log$Logger;Lio/matthewnelson/kmp/log/Log$Level;[Ljava/lang/Object;Ljava/lang/Throwable;Ljava/lang/String;)I
+	public static final fun v (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;)I
+	public static final fun v (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)I
+	public static final fun v (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;[Ljava/lang/Object;)I
+	public static final fun w (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;)I
+	public static final fun w (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)I
+	public static final fun w (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;[Ljava/lang/Object;)I
+	public static final fun wtf (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;)I
+	public static final fun wtf (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)I
+	public static final fun wtf (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;[Ljava/lang/Object;)I
 }
 

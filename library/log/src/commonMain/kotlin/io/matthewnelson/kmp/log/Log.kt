@@ -93,7 +93,8 @@ public abstract class Log {
          *
          * **NOTE:** [Log] implementations should not abort or exit the program
          * when processing a log at this level; that is left to [AbortHandler]
-         * if it is installed.
+         * if it is installed. [Log] implementations should commit the data to
+         * their logs immediately for this [Level].
          * */
         Fatal,
     }
@@ -105,11 +106,17 @@ public abstract class Log {
      *
      * e.g.
      *
-     *     MyLogger.wtf(msg = null, t = null) // Ignored
-     *     MyLogger.wtf(msg = "") // Ignored
-     *     MyLogger.wtf { "" } // Ignored
-     *     MyLogger.wtf(t = null) { "" } // Ignored
-     *     MyLogger.wtf { "CRASH ME!" }
+     *     MyLogger.wtf(t = null, msg = null)       // Ignored
+     *     MyLogger.wtf(t = null, msg = "")         // Ignored
+     *     MyLogger.wtf(msg = "")                   // Ignored
+     *     MyLogger.wtf { null }                    // Ignored
+     *     MyLogger.wtf { "" }                      // Ignored
+     *     MyLogger.wtf(t = null) { null }          // Ignored
+     *     MyLogger.wtf(t = null) { "" }            // Ignored
+     *     MyLogger.wtf {
+     *         "This will be logged by all installed [Log] instances"
+     *         " and then abort (if Log.AbortHandler is installed)."
+     *     }
      *
      * @see [of]
      * */
@@ -273,7 +280,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun v(msg: String): Int = v(msg, t = null)
+        public inline fun v(msg: String): Int = v(t = null, msg)
 
         /**
          * Send a [Level.Verbose] log message to all [Log] instances installed at [Root].
@@ -282,7 +289,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun v(t: Throwable): Int = v(msg = null, t)
+        public inline fun v(t: Throwable): Int = v(t, msg = null)
 
         /**
          * Send a [Level.Verbose] log message to all [Log] instances installed at [Root].
@@ -295,7 +302,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun v(msg: String?, t: Throwable?): Int = log(Level.Verbose, msg, t)
+        public inline fun v(t: Throwable?, msg: String?): Int = log(Level.Verbose, t, msg)
 
         /**
          * Send a [Level.Verbose] log message to all [Log] instances installed at [Root]. If
@@ -338,7 +345,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun d(msg: String): Int = d(msg, t = null)
+        public inline fun d(msg: String): Int = d(t = null, msg)
 
         /**
          * Send a [Level.Debug] log message to all [Log] instances installed at [Root].
@@ -347,7 +354,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun d(t: Throwable): Int = d(msg = null, t)
+        public inline fun d(t: Throwable): Int = d(t, msg = null)
 
         /**
          * Send a [Level.Debug] log message to all [Log] instances installed at [Root]. If
@@ -361,7 +368,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun d(msg: String?, t: Throwable?): Int = log(Level.Debug, msg, t)
+        public inline fun d(t: Throwable?, msg: String?): Int = log(Level.Debug, t, msg)
 
         /**
          * Send a [Level.Debug] log message to all [Log] instances installed at [Root]. If
@@ -404,7 +411,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun i(msg: String): Int = i(msg, t = null)
+        public inline fun i(msg: String): Int = i(t = null, msg)
 
         /**
          * Send a [Level.Info] log message to all [Log] instances installed at [Root].
@@ -413,7 +420,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun i(t: Throwable): Int = i(msg = null, t)
+        public inline fun i(t: Throwable): Int = i(t, msg = null)
 
         /**
          * Send a [Level.Info] log message to all [Log] instances installed at [Root].
@@ -426,7 +433,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun i(msg: String?, t: Throwable?): Int = log(Level.Info, msg, t)
+        public inline fun i(t: Throwable?, msg: String?): Int = log(Level.Info, t, msg)
 
         /**
          * Send a [Level.Info] log message to all [Log] instances installed at [Root]. If
@@ -469,7 +476,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun w(msg: String): Int = w(msg, t = null)
+        public inline fun w(msg: String): Int = w(t = null, msg)
 
         /**
          * Send a [Level.Warn] log message to all [Log] instances installed at [Root].
@@ -478,7 +485,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun w(t: Throwable): Int = w(msg = null, t)
+        public inline fun w(t: Throwable): Int = w(t, msg = null)
 
         /**
          * Send a [Level.Warn] log message to all [Log] instances installed at [Root].
@@ -491,7 +498,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun w(msg: String?, t: Throwable?): Int = log(Level.Warn, msg, t)
+        public inline fun w(t: Throwable?, msg: String?): Int = log(Level.Warn, t, msg)
 
         /**
          * Send a [Level.Warn] log message to all [Log] instances installed at [Root]. If
@@ -534,7 +541,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun e(msg: String): Int = e(msg, t = null)
+        public inline fun e(msg: String): Int = e(t = null, msg)
 
         /**
          * Send a [Level.Error] log message to all [Log] instances installed at [Root].
@@ -543,7 +550,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun e(t: Throwable): Int = e(msg = null, t)
+        public inline fun e(t: Throwable): Int = e(t, msg = null)
 
         /**
          * Send a [Level.Error] log message to all [Log] instances installed at [Root].
@@ -556,7 +563,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun e(msg: String?, t: Throwable?): Int = log(Level.Error, msg, t)
+        public inline fun e(t: Throwable?, msg: String?): Int = log(Level.Error, t, msg)
 
         /**
          * Send a [Level.Error] log message to all [Log] instances installed at [Root]. If
@@ -596,7 +603,7 @@ public abstract class Log {
          * possible to mitigate unnecessary `String` creation.
          *
          * **NOTE:** If [AbortHandler] is installed at [Root] (the default configuration),
-         * this will cause the program to exit.
+         * this will cause the program to abort.
          *
          * @param [msg] The message to log.
          *
@@ -604,13 +611,13 @@ public abstract class Log {
          *
          * @see [AbortHandler]
          * */
-        public inline fun wtf(msg: String): Int = wtf(msg, t = null)
+        public inline fun wtf(msg: String): Int = wtf(t = null, msg)
 
         /**
          * Send a [Level.Fatal] log message to all [Log] instances installed at [Root].
          *
          * **NOTE:** If [AbortHandler] is installed at [Root] (the default configuration),
-         * this will cause the program to exit.
+         * this will cause the program to abort.
          *
          * @param [t] The error to log.
          *
@@ -618,7 +625,7 @@ public abstract class Log {
          *
          * @see [AbortHandler]
          * */
-        public inline fun wtf(t: Throwable): Int = wtf(msg = null, t)
+        public inline fun wtf(t: Throwable): Int = wtf(t, msg = null)
 
         /**
          * Send a [Level.Fatal] log message to all [Log] instances installed at [Root].
@@ -627,7 +634,7 @@ public abstract class Log {
          * possible to mitigate unnecessary `String` creation.
          *
          * **NOTE:** If [AbortHandler] is installed at [Root] (the default configuration),
-         * this will cause the program to exit.
+         * this will cause the program to abort.
          *
          * @param [msg] The message to log.
          * @param [t] The error to log.
@@ -636,7 +643,7 @@ public abstract class Log {
          *
          * @see [AbortHandler]
          * */
-        public inline fun wtf(msg: String?, t: Throwable?): Int = log(Level.Fatal, msg, t)
+        public inline fun wtf(t: Throwable?, msg: String?): Int = log(Level.Fatal, t, msg)
 
         /**
          * Send a [Level.Fatal] log message to all [Log] instances installed at [Root]. If
@@ -644,7 +651,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * **NOTE:** If [AbortHandler] is installed at [Root] (the default configuration),
-         * this will cause the program to exit.
+         * this will cause the program to abort.
          *
          * @param [lazyMsg] The message to log.
          *
@@ -664,7 +671,7 @@ public abstract class Log {
          * and [lazyMsg] will not be invoked.
          *
          * **NOTE:** If [AbortHandler] is installed at [Root] (the default configuration),
-         * this will cause the program to exit.
+         * this will cause the program to abort.
          *
          * @param [lazyMsg] The message to log.
          * @param [t] The error to log or `null`.
@@ -690,7 +697,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun log(level: Level, msg: String): Int = log(level, msg, t = null)
+        public inline fun log(level: Level, msg: String): Int = log(level, t = null, msg)
 
         /**
          * Send a log message for specified [Level] to all [Log] instances installed at [Root].
@@ -703,7 +710,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public inline fun log(level: Level, t: Throwable): Int = log(level, msg = null, t)
+        public inline fun log(level: Level, t: Throwable): Int = log(level, t, msg = null)
 
         /**
          * Send a log message for specified [Level] to all [Log] instances installed at [Root].
@@ -716,7 +723,7 @@ public abstract class Log {
          *
          * @return The number of [Log] instances that logged the data.
          * */
-        public fun log(level: Level, msg: String?, t: Throwable?): Int = Root.log(logger = this, level, msg, t)
+        public fun log(level: Level, t: Throwable?, msg: String?): Int = Root.log(logger = this, level, t, msg)
 
         /**
          * Send a log message for specified [Level] to all [Log] instances installed at [Root].
@@ -750,7 +757,7 @@ public abstract class Log {
             contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
             if (!isLoggable(level)) return 0
             val msg = lazyMsg()?.toString()
-            return log(level, msg, t)
+            return log(level, t, msg)
         }
 
         /**
@@ -796,7 +803,9 @@ public abstract class Log {
     }
 
     /**
-     * The root location for which all [Log] instances are installed.
+     * The root location for which all [Log] instances are installed. By default, only
+     * [AbortHandler] is available; [Log] implementations must be installed for logging
+     * to occur.
      * */
     public companion object Root {
 
@@ -981,7 +990,7 @@ public abstract class Log {
             return false
         }
 
-        private fun log(logger: Logger, level: Level, msg: String?, t: Throwable?): Int {
+        private fun log(logger: Logger, level: Level, t: Throwable?, msg: String?): Int {
             val m = if (msg.isNullOrEmpty()) null else msg
             if (m == null && t == null) return 0
             var loggedBy = 0

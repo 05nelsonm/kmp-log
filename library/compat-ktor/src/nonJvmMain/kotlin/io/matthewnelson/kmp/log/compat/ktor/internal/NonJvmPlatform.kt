@@ -27,11 +27,11 @@ internal inline fun KmpLogKtorLogger.nonJvmFindMinLevelOrNull(): Log.Level? {
     return null
 }
 
-internal inline fun KmpLogKtorLogger.nonJvmTrace(msg: String?, t: Throwable?) { delegate.v(msg, t) }
-internal inline fun KmpLogKtorLogger.nonJvmDebug(msg: String?, t: Throwable?) { delegate.d(msg, t) }
-internal inline fun KmpLogKtorLogger.nonJvmInfo(msg: String?, t: Throwable?) { delegate.i(msg, t) }
-internal inline fun KmpLogKtorLogger.nonJvmWarn(msg: String?, t: Throwable?) { delegate.w(msg, t) }
-internal inline fun KmpLogKtorLogger.nonJvmError(msg: String?, t: Throwable?) { delegate.e(msg, t) }
+internal inline fun KmpLogKtorLogger.nonJvmTrace(msg: String?, t: Throwable?) { delegate.v(t, msg) }
+internal inline fun KmpLogKtorLogger.nonJvmDebug(msg: String?, t: Throwable?) { delegate.d(t, msg) }
+internal inline fun KmpLogKtorLogger.nonJvmInfo(msg: String?, t: Throwable?) { delegate.i(t, msg) }
+internal inline fun KmpLogKtorLogger.nonJvmWarn(msg: String?, t: Throwable?) { delegate.w(t, msg) }
+internal inline fun KmpLogKtorLogger.nonJvmError(msg: String?, t: Throwable?) { delegate.e(t, msg) }
 
 internal inline fun KmpLogKtorLogger.nonJvmEquals(other: Any?): Boolean {
     if (other !is KmpLogKtorLogger) return false

@@ -32,6 +32,26 @@ import io.matthewnelson.kmp.log.Log
  *
  * **NOTE:** On Android & AndroidNative API 25 and below, [Logger.domain] is never used
  * and [Logger.tag] will be truncated (if necessary) to 23 characters.
+ *
+ * **NOTE:** On Android, AndroidNative, Js/WasmJs Node, and Js/WasmJs Browser, there are
+ * log length limitations of `4_000`, `1_000`, `8_000`, and `2_000` characters, respectively.
+ * In the event a log exceeds the maximum, [SysLog] will log in chunks of the maximum
+ * allowable size, using the last available new line character (i.e. `\n`) for each chunk.
+ * If no new line character is available, then splitting by last available whitespace occurs.
+ * Lastly, if no whitespace is available, the maximum allowable length is used.
+ *
+ * Except for Android & AndroidNative (Logcat has its own format that it applies), the same
+ * format is applied for all other platforms. It resembles Android Logcat almost identically.
+ *
+ * e.g.
+ *
+ *     Log.install(SysLog.Default)
+ *     Log.Logger.of(tag = "YourLogger").i("Hello World!")
+ *     Log.Logger.of(domain = "your.domain", tag = "YourLogger2").w("Yo!")
+ *
+ *     // 10-17 22:19:16.179 D [kmp-log:log]Log.Root: SysLog[min=Verbose, max=Fatal, uid=io.matthewnelson.kmp.log.sys.SysLog].onInstall()
+ *     // 10-17 22:19:16.179 I YourLogger: Hello World!
+ *     // 10-17 22:19:16.181 W [your.domain]YourLogger2: Yo!
  * */
 public expect open class SysLog private constructor(
     min: Level = Level.Debug,

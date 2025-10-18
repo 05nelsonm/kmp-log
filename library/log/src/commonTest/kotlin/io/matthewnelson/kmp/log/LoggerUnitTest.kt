@@ -216,8 +216,8 @@ class LoggerUnitTest {
             Root.installOrThrow(log)
             LOG.v("1")
             LOG.v(Throwable("2"))
-            LOG.v(null, Throwable("3"))
-            LOG.v("4", Throwable("4"))
+            LOG.v( Throwable("3"), null)
+            LOG.v(Throwable("4"), "4")
             LOG.v { "5" }
             LOG.v(Throwable("6")) { "6" }
             val logs = log.logs
@@ -238,8 +238,8 @@ class LoggerUnitTest {
             Root.installOrThrow(log)
             LOG.d("1")
             LOG.d(Throwable("2"))
-            LOG.d(null, Throwable("3"))
-            LOG.d("4", Throwable("4"))
+            LOG.d( Throwable("3"), null)
+            LOG.d(Throwable("4"), "4")
             LOG.d { "5" }
             LOG.d(Throwable("6")) { "6" }
             val logs = log.logs
@@ -260,8 +260,8 @@ class LoggerUnitTest {
             Root.installOrThrow(log)
             LOG.i("1")
             LOG.i(Throwable("2"))
-            LOG.i(null, Throwable("3"))
-            LOG.i("4", Throwable("4"))
+            LOG.i( Throwable("3"), null)
+            LOG.i(Throwable("4"), "4")
             LOG.i { "5" }
             LOG.i(Throwable("6")) { "6" }
             val logs = log.logs
@@ -282,8 +282,8 @@ class LoggerUnitTest {
             Root.installOrThrow(log)
             LOG.w("1")
             LOG.w(Throwable("2"))
-            LOG.w(null, Throwable("3"))
-            LOG.w("4", Throwable("4"))
+            LOG.w( Throwable("3"), null)
+            LOG.w(Throwable("4"), "4")
             LOG.w { "5" }
             LOG.w(Throwable("6")) { "6" }
             val logs = log.logs
@@ -304,8 +304,8 @@ class LoggerUnitTest {
             Root.installOrThrow(log)
             LOG.e("1")
             LOG.e(Throwable("2"))
-            LOG.e(null, Throwable("3"))
-            LOG.e("4", Throwable("4"))
+            LOG.e( Throwable("3"), null)
+            LOG.e(Throwable("4"), "4")
             LOG.e { "5" }
             LOG.e(Throwable("6")) { "6" }
             val logs = log.logs
@@ -327,8 +327,8 @@ class LoggerUnitTest {
             Root.uninstallOrThrow(Log.AbortHandler.UID)
             LOG.wtf("1")
             LOG.wtf(Throwable("2"))
-            LOG.wtf(null, Throwable("3"))
-            LOG.wtf("4", Throwable("4"))
+            LOG.wtf( Throwable("3"), null)
+            LOG.wtf(Throwable("4"), "4")
             LOG.wtf { "5" }
             LOG.wtf(Throwable("6")) { "6" }
             val logs = log.logs
@@ -360,7 +360,7 @@ class LoggerUnitTest {
         try {
             val log = TestLog(uid = "msg_empty")
             Root.installOrThrow(log)
-            assertEquals(0, LOG.wtf("", null))
+            assertEquals(0, LOG.wtf(null, ""))
             assertEquals(0, log.logs?.size)
         } finally {
             Root.uninstallOrThrow("msg_empty")
