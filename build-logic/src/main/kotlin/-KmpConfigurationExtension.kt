@@ -140,6 +140,7 @@ fun KmpConfigurationContainerDsl.androidLibrary(
 fun KmpConfigurationContainerDsl.configureKotlinVersion(
     common: KotlinVersion = KotlinVersion.KOTLIN_1_9,
     jsWasmJs: KotlinVersion? = null,
+    wasi: KotlinVersion? = null,
 ) {
     kotlin {
         compilerOptions {
@@ -152,10 +153,22 @@ fun KmpConfigurationContainerDsl.configureKotlinVersion(
     kotlin {
         if (jsWasmJs == null) return@kotlin
         sourceSets.configureEach {
-            if (name.startsWith("js") || name.startsWith("wasm")) {
+            if (name.startsWith("js") || name.startsWith("wasmJs")) {
                 languageSettings {
                     apiVersion = jsWasmJs.version
                     languageVersion = jsWasmJs.version
+                }
+            }
+        }
+    }
+
+    kotlin {
+        if (wasi == null) return@kotlin
+        sourceSets.configureEach {
+            if (name.startsWith("wasmWasi")) {
+                languageSettings {
+                    apiVersion = wasi.version
+                    languageVersion = wasi.version
                 }
             }
         }

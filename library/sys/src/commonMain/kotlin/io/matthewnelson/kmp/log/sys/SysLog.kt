@@ -40,8 +40,10 @@ import io.matthewnelson.kmp.log.Log
  * If no new line character is available, then splitting by last available whitespace occurs.
  * Lastly, if no whitespace is available, the maximum allowable length is used.
  *
- * Except for Android & AndroidNative (Logcat has its own format that it applies), the same
- * format is applied for all other platforms. It resembles Android Logcat almost identically.
+ * Except for Android & AndroidNative (Logcat has its own format), the same format is applied
+ * for all other platforms; it resembles Android Logcat almost identically. Do note that time
+ * is displayed using local time, with the caveat of WasmWasi which is in `UTC` and indicates
+ * so with the trailing `Z` character (e.g. `10-17 22:19:16.179Z`).
  *
  * e.g.
  *

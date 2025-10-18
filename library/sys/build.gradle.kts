@@ -17,6 +17,7 @@ import com.android.build.gradle.tasks.MergeSourceSetFolders
 import com.android.ddmlib.AndroidDebugBridge
 import com.android.ddmlib.NullOutputReceiver
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
     id("configuration")
@@ -189,6 +190,6 @@ kmpConfiguration {
             }
         }
 
-        configureKotlinVersion()
+        configureKotlinVersion(wasi = KotlinVersion.KOTLIN_2_1)
     }
 }
