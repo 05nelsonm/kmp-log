@@ -83,4 +83,16 @@ class SysLogUnitTest {
             Log.uninstallOrThrow(SysLog.UID)
         }
     }
+
+    @Test
+    fun givenSysLog_whenLogIsAllWhitespace_thenDoesNotLog() {
+        Log.install(SysLog)
+        try {
+            assertEquals(true, LOG.isLoggable(Level.Error))
+            assertEquals(0, LOG.e("    "))
+            assertEquals(0, LOG.e("\n"))
+        } finally {
+            Log.uninstall(SysLog)
+        }
+    }
 }
