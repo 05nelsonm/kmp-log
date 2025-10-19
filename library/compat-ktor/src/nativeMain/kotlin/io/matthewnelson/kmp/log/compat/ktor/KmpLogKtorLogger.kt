@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING", "UNUSED", "NOTHING_TO_INLINE")
+@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
 
 package io.matthewnelson.kmp.log.compat.ktor
 
@@ -35,8 +35,6 @@ public actual abstract class KmpLogKtorLogger private constructor(
 ): io.ktor.util.logging.Logger {
 
     public actual companion object Compat {
-
-        public actual inline fun Log.Logger.asKtorLogger(): KmpLogKtorLogger = of(this)
 
         public actual fun of(
             logger: Log.Logger,

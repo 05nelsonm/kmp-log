@@ -33,11 +33,6 @@ public expect abstract class KmpLogKtorLogger: io.ktor.util.logging.Logger {
     public companion object Compat {
 
         /**
-         * An alias for [of].
-         * */
-        public inline fun Log.Logger.asKtorLogger(): KmpLogKtorLogger
-
-        /**
          * Creates a new [KmpLogKtorLogger] instance.
          * */
         public fun of(

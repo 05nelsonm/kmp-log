@@ -14,12 +14,18 @@
  * limitations under the License.
  **/
 @file:JvmName("CompatKtor")
+@file:Suppress("NOTHING_TO_INLINE", "RedundantCompanionReference")
 
 package io.matthewnelson.kmp.log.compat.ktor
 
 import io.ktor.util.logging.Logger
 import io.matthewnelson.kmp.log.Log
 import kotlin.jvm.JvmName
+
+/**
+ * An alias for [KmpLogKtorLogger.of]
+ * */
+public inline fun Log.Logger.asKtorLogger(): KmpLogKtorLogger = KmpLogKtorLogger.Compat.of(this)
 
 /**
  * Helper for converting Ktor's [Logger] back to [KmpLogKtorLogger] to retrieve its

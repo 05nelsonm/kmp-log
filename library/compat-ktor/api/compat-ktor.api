@@ -1,4 +1,5 @@
 public final class io/matthewnelson/kmp/log/compat/ktor/CompatKtor {
 	public static final fun asKmpLogLoggerOrThrow (Lorg/slf4j/Logger;)Lio/matthewnelson/kmp/log/Log$Logger;
+	public static final fun asKtorLogger (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
 }
 

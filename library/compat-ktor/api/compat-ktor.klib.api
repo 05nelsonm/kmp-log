@@ -16,8 +16,8 @@ abstract class io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger : io.ktor.u
 
     final object Compat { // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.Compat|null[0]
         final fun of(io.matthewnelson.kmp.log/Log.Logger): io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.Compat.of|of(io.matthewnelson.kmp.log.Log.Logger){}[0]
-        final inline fun (io.matthewnelson.kmp.log/Log.Logger).asKtorLogger(): io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger // io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger.Compat.asKtorLogger|asKtorLogger@io.matthewnelson.kmp.log.Log.Logger(){}[0]
     }
 }
 
 final fun (io.ktor.util.logging/Logger).io.matthewnelson.kmp.log.compat.ktor/asKmpLogLoggerOrThrow(): io.matthewnelson.kmp.log/Log.Logger // io.matthewnelson.kmp.log.compat.ktor/asKmpLogLoggerOrThrow|asKmpLogLoggerOrThrow@io.ktor.util.logging.Logger(){}[0]
+final inline fun (io.matthewnelson.kmp.log/Log.Logger).io.matthewnelson.kmp.log.compat.ktor/asKtorLogger(): io.matthewnelson.kmp.log.compat.ktor/KmpLogKtorLogger // io.matthewnelson.kmp.log.compat.ktor/asKtorLogger|asKtorLogger@io.matthewnelson.kmp.log.Log.Logger(){}[0]

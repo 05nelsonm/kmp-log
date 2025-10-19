@@ -153,13 +153,6 @@ public abstract class KmpLogSLF4JLogger private constructor(
                 override fun error(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Error, arguments, t = null, format) }
             }
         }
-
-        /**
-         * So [KmpLogSLF4JLogger] can be used in `:compat-ktor` as a `typealias` for `KmpLogKtorLogger`.
-         * @suppress
-         * */
-        @JvmStatic
-        public inline fun Log.Logger.asKtorLogger(): KmpLogSLF4JLogger = of(this)
     }
 
     /** @suppress */
