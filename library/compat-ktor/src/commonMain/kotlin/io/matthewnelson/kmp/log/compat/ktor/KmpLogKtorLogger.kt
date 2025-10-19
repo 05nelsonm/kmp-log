@@ -17,7 +17,6 @@
 
 package io.matthewnelson.kmp.log.compat.ktor
 
-import io.ktor.util.logging.Logger
 import io.matthewnelson.kmp.log.Log
 
 /**
@@ -27,7 +26,7 @@ import io.matthewnelson.kmp.log.Log
  * @see [asKtorLogger]
  * @see [asKmpLogLoggerOrThrow]
  * */
-public expect class KmpLogKtorLogger: Logger {
+public expect abstract class KmpLogKtorLogger: io.ktor.util.logging.Logger {
 
     public val delegate: Log.Logger
 
@@ -46,25 +45,10 @@ public expect class KmpLogKtorLogger: Logger {
         ): KmpLogKtorLogger
     }
 
-    public override fun trace(message: String)
-    public override fun trace(message: String, cause: Throwable)
-
-    public override fun debug(message: String)
-    public override fun debug(message: String, cause: Throwable)
-
-    public override fun info(message: String)
-    public override fun info(message: String, cause: Throwable)
-
-    public override fun warn(message: String)
-    public override fun warn(message: String, cause: Throwable)
-
-    public override fun error(message: String)
-    public override fun error(message: String, cause: Throwable)
-
     /** @suppress */
-    public override fun equals(other: Any?): Boolean
+    public final override fun equals(other: Any?): Boolean
     /** @suppress */
-    public override fun hashCode(): Int
+    public final override fun hashCode(): Int
     /** @suppress */
-    public override fun toString(): String
+    public final override fun toString(): String
 }
