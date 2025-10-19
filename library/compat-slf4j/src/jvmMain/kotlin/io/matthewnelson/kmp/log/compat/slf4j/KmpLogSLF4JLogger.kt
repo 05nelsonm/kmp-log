@@ -35,7 +35,7 @@ import org.slf4j.Marker
  * @see [of]
  * @see [asSLF4JLogger]
  * */
-public class KmpLogSLF4JLogger private constructor(
+public abstract class KmpLogSLF4JLogger private constructor(
     @JvmField
     public val delegate: Log.Logger,
 ): org.slf4j.Logger {
@@ -56,7 +56,102 @@ public class KmpLogSLF4JLogger private constructor(
             logger: Log.Logger,
         ): KmpLogSLF4JLogger {
             // TODO: Cache instances?
-            return KmpLogSLF4JLogger(logger)
+
+            // The reason for all the fuckery is due to Ktor's Logger interface
+            // expect/actual not honoring org.slf4j.Logger's nullability and function
+            // argument names for its Jvm source set. So, these functions are defined
+            // here in order to maintain compatibility and also utilize KmpLogSLF4JLogger
+            // as a typealias for KmpLogKtorLogger in :compat-ktor.
+            return object : KmpLogSLF4JLogger(logger) {
+
+                private val _name = delegate.domain?.let { "[$it]${delegate.tag}" } ?: delegate.tag
+                public override fun getName(): String = _name
+
+                // TRACE
+                override fun isTraceEnabled(): Boolean = delegate.isLoggable(Level.Verbose)
+                override fun isTraceEnabled(marker: Marker?): Boolean = isTraceEnabled()
+
+                override fun trace(msg: String?) { delegate.v(t = null, msg = msg) }
+                override fun trace(msg: String?, t: Throwable?) { delegate.v(t = t, msg = msg) }
+                override fun trace(marker: Marker?, msg: String?) { delegate.v(t = null, msg = msg) }
+                override fun trace(marker: Marker?, msg: String?, t: Throwable?) { delegate.v(t = t, msg = msg) }
+
+                override fun trace(format: String?, arg: Any?) { delegate.v(t = null, format, arg) }
+                override fun trace(format: String?, arg1: Any?, arg2: Any?) { delegate.v(t = null, format, arg1, arg2) }
+                override fun trace(format: String?, vararg arguments: Any?) { delegate.log(Level.Verbose, arguments, t = null, format) }
+
+                override fun trace(marker: Marker?, format: String?, arg: Any?) { delegate.v(t = null, format, arg) }
+                override fun trace(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.v(t = null, format, arg1, arg2) }
+                override fun trace(marker: Marker?, format: String?, vararg argArray: Any?) { delegate.log(Level.Verbose, argArray, t = null, format) }
+
+                // DEBUG
+                override fun isDebugEnabled(): Boolean = delegate.isLoggable(Level.Debug)
+                override fun isDebugEnabled(marker: Marker?): Boolean = isDebugEnabled()
+
+                override fun debug(msg: String?) { delegate.d(t = null, msg = msg) }
+                override fun debug(msg: String?, t: Throwable?) { delegate.d(t = t, msg = msg) }
+                override fun debug(marker: Marker?, msg: String?) { delegate.d(t = null, msg = msg) }
+                override fun debug(marker: Marker?, msg: String?, t: Throwable?) { delegate.d(t = t, msg = msg) }
+
+                override fun debug(format: String?, arg: Any?) { delegate.d(t = null, format, arg) }
+                override fun debug(format: String?, arg1: Any?, arg2: Any?) { delegate.d(t = null, format, arg1, arg2) }
+                override fun debug(format: String?, vararg arguments: Any?) { delegate.log(Level.Debug, arguments, t = null, format) }
+
+                override fun debug(marker: Marker?, format: String?, arg: Any?) { delegate.d(t = null, format, arg) }
+                override fun debug(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.d(t = null, format, arg1, arg2) }
+                override fun debug(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Debug, arguments, t = null, format) }
+
+                // INFO
+                override fun isInfoEnabled(): Boolean = delegate.isLoggable(Level.Info)
+                override fun isInfoEnabled(marker: Marker?): Boolean = isInfoEnabled()
+
+                override fun info(msg: String?) { delegate.i(t = null, msg = msg) }
+                override fun info(msg: String?, t: Throwable?) { delegate.i(t = t, msg = msg) }
+                override fun info(marker: Marker?, msg: String?) { delegate.i(t = null, msg = msg) }
+                override fun info(marker: Marker?, msg: String?, t: Throwable?) { delegate.i(t = t, msg = msg) }
+
+                override fun info(format: String?, arg: Any?) { delegate.i(t = null, format, arg) }
+                override fun info(format: String?, arg1: Any?, arg2: Any?) { delegate.i(t = null, format, arg1, arg2) }
+                override fun info(format: String?, vararg arguments: Any?) { delegate.log(Level.Info, arguments, t = null, format) }
+
+                override fun info(marker: Marker?, format: String?, arg: Any?) { delegate.i(t = null, format, arg) }
+                override fun info(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.i(t = null, format, arg1, arg2) }
+                override fun info(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Info, arguments, t = null, format) }
+
+                // WARN
+                override fun isWarnEnabled(): Boolean = delegate.isLoggable(Level.Warn)
+                override fun isWarnEnabled(marker: Marker?): Boolean = isWarnEnabled()
+
+                override fun warn(msg: String?) { delegate.w(t = null, msg = msg) }
+                override fun warn(msg: String?, t: Throwable?) { delegate.w(t = t, msg = msg) }
+                override fun warn(marker: Marker?, msg: String?) { delegate.w(t = null, msg = msg) }
+                override fun warn(marker: Marker?, msg: String?, t: Throwable?) { delegate.w(t = t, msg = msg) }
+
+                override fun warn(format: String?, arg: Any?) { delegate.w(t = null, format, arg) }
+                override fun warn(format: String?, arg1: Any?, arg2: Any?) { delegate.w(t = null, format, arg1, arg2) }
+                override fun warn(format: String?, vararg arguments: Any?) { delegate.log(Level.Warn, arguments, t = null, format) }
+
+                override fun warn(marker: Marker?, format: String?, arg: Any?) { delegate.w(t = null, format, arg) }
+                override fun warn(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.w(t = null, format, arg1, arg2) }
+                override fun warn(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Warn, arguments, t = null, format) }
+
+                // ERROR
+                override fun isErrorEnabled(): Boolean = delegate.isLoggable(Level.Error)
+                override fun isErrorEnabled(marker: Marker?): Boolean = isErrorEnabled()
+
+                override fun error(msg: String?) { delegate.e(t = null, msg = msg) }
+                override fun error(msg: String?, t: Throwable?) { delegate.e(t = t, msg = msg) }
+                override fun error(marker: Marker?, msg: String?) { delegate.e(t = null, msg = msg) }
+                override fun error(marker: Marker?, msg: String?, t: Throwable?) { delegate.e(t = t, msg = msg) }
+
+                override fun error(format: String?, arg: Any?) { delegate.e(t = null, format, arg) }
+                override fun error(format: String?, arg1: Any?, arg2: Any?) { delegate.e(t = null, format, arg1, arg2) }
+                override fun error(format: String?, vararg arguments: Any?) { delegate.log(Level.Error, arguments, t = null, format) }
+
+                override fun error(marker: Marker?, format: String?, arg: Any?) { delegate.e(t = null, format, arg) }
+                override fun error(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.e(t = null, format, arg1, arg2) }
+                override fun error(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Error, arguments, t = null, format) }
+            }
         }
 
         /**
@@ -67,108 +162,20 @@ public class KmpLogSLF4JLogger private constructor(
         public inline fun Log.Logger.asKtorLogger(): KmpLogSLF4JLogger = of(this)
     }
 
-    private val _name = delegate.domain?.let { "[$it]${delegate.tag}" } ?: delegate.tag
-    public override fun getName(): String = _name
-
-    // TRACE
-    public override fun isTraceEnabled(): Boolean = delegate.isLoggable(Level.Verbose)
-    public override fun isTraceEnabled(marker: Marker?): Boolean = isTraceEnabled()
-
-    public override fun trace(message: String) { delegate.v(t = null, msg = message) }
-    public override fun trace(message: String, cause: Throwable) { delegate.v(t = cause, msg = message) }
-    public override fun trace(marker: Marker?, message: String?) { delegate.v(t = null, msg = message) }
-    public override fun trace(marker: Marker?, message: String?, cause: Throwable?) { delegate.v(t = cause, msg = message) }
-
-    public override fun trace(format: String?, arg: Any?) { delegate.v(t = null, format, arg) }
-    public override fun trace(format: String?, arg1: Any?, arg2: Any?) { delegate.v(t = null, format, arg1, arg2) }
-    public override fun trace(format: String?, vararg arguments: Any?) { delegate.log(Level.Verbose, arguments, t = null, format) }
-
-    public override fun trace(marker: Marker?, format: String?, arg: Any?) { delegate.v(t = null, format, arg) }
-    public override fun trace(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.v(t = null, format, arg1, arg2) }
-    public override fun trace(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Verbose, arguments, t = null, format) }
-
-    // DEBUG
-    public override fun isDebugEnabled(): Boolean = delegate.isLoggable(Level.Debug)
-    public override fun isDebugEnabled(marker: Marker?): Boolean = isDebugEnabled()
-
-    public override fun debug(message: String) { delegate.d(t = null, msg = message) }
-    public override fun debug(message: String, cause: Throwable) { delegate.d(t = cause, msg = message) }
-    public override fun debug(marker: Marker?, message: String?) { delegate.d(t = null, msg = message) }
-    public override fun debug(marker: Marker?, message: String?, cause: Throwable?) { delegate.d(t = cause, msg = message) }
-
-    public override fun debug(format: String?, arg: Any?) { delegate.d(t = null, format, arg) }
-    public override fun debug(format: String?, arg1: Any?, arg2: Any?) { delegate.d(t = null, format, arg1, arg2) }
-    public override fun debug(format: String?, vararg arguments: Any?) { delegate.log(Level.Debug, arguments, t = null, format) }
-
-    public override fun debug(marker: Marker?, format: String?, arg: Any?) { delegate.d(t = null, format, arg) }
-    public override fun debug(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.d(t = null, format, arg1, arg2) }
-    public override fun debug(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Debug, arguments, t = null, format) }
-
-    // INFO
-    public override fun isInfoEnabled(): Boolean = delegate.isLoggable(Level.Info)
-    public override fun isInfoEnabled(marker: Marker?): Boolean = isInfoEnabled()
-
-    public override fun info(message: String) { delegate.i(t = null, msg = message) }
-    public override fun info(message: String, cause: Throwable) { delegate.i(t = cause, msg = message) }
-    public override fun info(marker: Marker?, message: String?) { delegate.i(t = null, msg = message) }
-    public override fun info(marker: Marker?, message: String?, cause: Throwable?) { delegate.i(t = cause, msg = message) }
-
-    public override fun info(format: String?, arg: Any?) { delegate.i(t = null, format, arg) }
-    public override fun info(format: String?, arg1: Any?, arg2: Any?) { delegate.i(t = null, format, arg1, arg2) }
-    public override fun info(format: String?, vararg arguments: Any?) { delegate.log(Level.Info, arguments, t = null, format) }
-
-    public override fun info(marker: Marker?, format: String?, arg: Any?) { delegate.i(t = null, format, arg) }
-    public override fun info(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.i(t = null, format, arg1, arg2) }
-    public override fun info(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Info, arguments, t = null, format) }
-
-    // WARN
-    public override fun isWarnEnabled(): Boolean = delegate.isLoggable(Level.Warn)
-    public override fun isWarnEnabled(marker: Marker?): Boolean = isWarnEnabled()
-
-    public override fun warn(message: String) { delegate.w(t = null, msg = message) }
-    public override fun warn(message: String, cause: Throwable) { delegate.w(t = cause, msg = message) }
-    public override fun warn(marker: Marker?, message: String?) { delegate.w(t = null, msg = message) }
-    public override fun warn(marker: Marker?, message: String?, cause: Throwable?) { delegate.w(t = cause, msg = message) }
-
-    public override fun warn(format: String?, arg: Any?) { delegate.w(t = null, format, arg) }
-    public override fun warn(format: String?, arg1: Any?, arg2: Any?) { delegate.w(t = null, format, arg1, arg2) }
-    public override fun warn(format: String?, vararg arguments: Any?) { delegate.log(Level.Warn, arguments, t = null, format) }
-
-    public override fun warn(marker: Marker?, format: String?, arg: Any?) { delegate.w(t = null, format, arg) }
-    public override fun warn(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.w(t = null, format, arg1, arg2) }
-    public override fun warn(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Warn, arguments, t = null, format) }
-
-    // ERROR
-    public override fun isErrorEnabled(): Boolean = delegate.isLoggable(Level.Error)
-    public override fun isErrorEnabled(marker: Marker?): Boolean = isErrorEnabled()
-
-    public override fun error(message: String) { delegate.e(t = null, msg = message) }
-    public override fun error(message: String, cause: Throwable) { delegate.e(t = cause, msg = message) }
-    public override fun error(marker: Marker?, message: String?) { delegate.e(t = null, msg = message) }
-    public override fun error(marker: Marker?, message: String?, cause: Throwable?) { delegate.e(t = cause, msg = message) }
-
-    public override fun error(format: String?, arg: Any?) { delegate.e(t = null, format, arg) }
-    public override fun error(format: String?, arg1: Any?, arg2: Any?) { delegate.e(t = null, format, arg1, arg2) }
-    public override fun error(format: String?, vararg arguments: Any?) { delegate.log(Level.Error, arguments, t = null, format) }
-
-    public override fun error(marker: Marker?, format: String?, arg: Any?) { delegate.e(t = null, format, arg) }
-    public override fun error(marker: Marker?, format: String?, arg1: Any?, arg2: Any?) { delegate.e(t = null, format, arg1, arg2) }
-    public override fun error(marker: Marker?, format: String?, vararg arguments: Any?) { delegate.log(Level.Error, arguments, t = null, format) }
-
     /** @suppress */
-    public override fun equals(other: Any?): Boolean {
+    public final override fun equals(other: Any?): Boolean {
         if (other !is KmpLogSLF4JLogger) return false
         return other.delegate == this.delegate
     }
     /** @suppress */
-    public override fun hashCode(): Int {
+    public final override fun hashCode(): Int {
         var result = 17
         result = result * 31 + this::class.hashCode()
         result = result * 31 + delegate.hashCode()
         return result
     }
     /** @suppress */
-    public override fun toString(): String {
+    public final override fun toString(): String {
         return delegate.toString()
             .replaceBefore('[', "KmpLogSLF4JLogger")
             .replaceAfterLast('@', hashCode().toString())
