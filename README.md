@@ -26,12 +26,16 @@ A small, simple, highly extensible logging library for Kotlin Multiplatform. Ins
 by [Timber][url-timber], and the unfortunate state of available logging libraries for 
 Kotlin Multiplatform.
 
-By default, the only `Log` instance available from `Log.Root` is the `Log.AbortHandler` 
+By default, the only `Log` instance available from `Log.Root` is the `Log.AbortHandler`, 
 which only accepts `Log.Level.Fatal` logs and will abort the process in a system dependant
 manner after the log is captured. Simply `Log.Root.uninstall` it to disable. Other than
 that, no logging happens unless you choose to `Log.Root.install` a `Log`.
 
-API docs available at [https://kmp-log.matthewnelson.io][url-docs]
+Logger compatibility dependencies are available for:
+ - [Ktor](library/compat-ktor/README.md)
+ - [SLF4J](library/compat-slf4j/README.md)
+
+API docs are available at [https://kmp-log.matthewnelson.io][url-docs]
 
 ### Usage
 
@@ -74,12 +78,11 @@ fun main() {
     // Optionally, define a Log.Logger.domain, separate from its tag.
     // This is useful for library developers as users can receive
     // granular insight into the library's interworkings, if and only
-    // if there is a Log instance installed (only Log.AbortHandler is
-    // by default for handling Log.Level.Fatal).
+    // if there is a Log instance installed.
     //
-    // The domain can be used in Log.isLoggable implementations to either
+    // The domain can be used by Log.isLoggable implementations to either
     // blacklist or whitelist logging for the entire domain.
-    val logger = Log.Logger.of(domain = "my-library:submodule", tag = "Main")
+    val logger = Log.Logger.of(tag = "Main", domain = "my-library:submodule")
 
     // Return values of all Log.Logger functions indicate if logging happened.
     val numberOfLogInstancesThatLoggedThisThing = logger.log(
@@ -155,17 +158,17 @@ fun main() {
 ```kotlin
 // build.gradle.kts
 dependencies {
-    val v = "0.1.0-alpha01"
-    implementation("io.matthewnelson.kmp-log:log:$v")
+    val vKmpLog = "0.1.0-alpha01"
+    implementation("io.matthewnelson.kmp-log:log:$vKmpLog")
     
     // If you need SysLog
-    implementation("io.matthewnelson.kmp-log:sys:$v")
+    implementation("io.matthewnelson.kmp-log:sys:$vKmpLog")
 
     // If you need to convert Log.Logger to org.slf4j.Logger
-    implementation("io.matthewnelson.kmp-log:compat-slf4j:$v")
+    implementation("io.matthewnelson.kmp-log:compat-slf4j:$vKmpLog")
 
     // If you need to convert Log.Logger to io.ktor.util.logging.Logger
-    implementation("io.matthewnelson.kmp-log:compat-ktor:$v")
+    implementation("io.matthewnelson.kmp-log:compat-ktor:$vKmpLog")
 }
 ```
 

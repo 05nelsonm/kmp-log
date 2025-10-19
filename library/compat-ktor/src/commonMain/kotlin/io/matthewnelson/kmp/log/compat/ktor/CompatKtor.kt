@@ -23,7 +23,7 @@ import io.matthewnelson.kmp.log.Log
 import kotlin.jvm.JvmName
 
 /**
- * An alias for [KmpLogKtorLogger.of]
+ * An alias for [KmpLogKtorLogger.of].
  * */
 public inline fun Log.Logger.asKtorLogger(): KmpLogKtorLogger = KmpLogKtorLogger.Compat.of(this)
 
