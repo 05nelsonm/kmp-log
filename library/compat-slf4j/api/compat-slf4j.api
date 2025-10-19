@@ -2,7 +2,6 @@ public abstract class io/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger : 
 	public static final field Compat Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger$Compat;
 	public final field delegate Lio/matthewnelson/kmp/log/Log$Logger;
 	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Logger;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public static final fun asKtorLogger (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
 	public static final fun asSLF4JLogger (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
 	public final fun equals (Ljava/lang/Object;)Z
 	public final fun hashCode ()I
@@ -11,7 +10,6 @@ public abstract class io/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger : 
 }
 
 public final class io/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger$Compat {
-	public final fun asKtorLogger (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
 	public final fun asSLF4JLogger (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
 	public final fun of (Lio/matthewnelson/kmp/log/Log$Logger;)Lio/matthewnelson/kmp/log/compat/slf4j/KmpLogSLF4JLogger;
 }

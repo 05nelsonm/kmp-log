@@ -16,7 +16,6 @@
 package io.matthewnelson.kmp.log.compat.ktor
 
 import io.matthewnelson.kmp.log.Log
-import io.matthewnelson.kmp.log.compat.ktor.KmpLogKtorLogger.Compat.asKtorLogger
 import io.matthewnelson.kmp.log.compat.ktor.internal.nonJvmFindMinLevelOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,7 +23,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
-class KmpLogKtorLoggerUnitTest {
+class KmpLogKtorLoggerNonJvmUnitTest {
 
     @Test
     fun givenLogger_whenEquals_thenIsAsExpected() {
