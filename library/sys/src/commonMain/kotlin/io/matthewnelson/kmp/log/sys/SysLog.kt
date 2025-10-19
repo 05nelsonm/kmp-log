@@ -36,9 +36,10 @@ import io.matthewnelson.kmp.log.Log
  * **NOTE:** On Android, AndroidNative, Js/WasmJs Node, and Js/WasmJs Browser, there are
  * log length limitations of `4_000`, `1_000`, `8_000`, and `2_000` characters, respectively.
  * In the event a log exceeds the maximum, [SysLog] will log in chunks of the maximum
- * allowable size, using the last available new line character (i.e. `\n`) for each chunk.
- * If no new line character is available, then splitting by last available whitespace occurs.
- * Lastly, if no whitespace is available, the maximum allowable length is used.
+ * allowable size using the last available new line character (i.e. `\r` or `\n`) in each
+ * chunk. If no new line characters are available, then the last available whitespace is
+ * used as to not split mid-word. Lastly, if no whitespace is available, the maximum allowable
+ * length is chunked; undesirable, but highly unlikely to happen.
  *
  * Except for Android & AndroidNative (Logcat has its own format), the same format is applied
  * for all other platforms; it resembles Android Logcat almost identically. Do note that time

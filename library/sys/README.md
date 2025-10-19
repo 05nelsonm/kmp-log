@@ -1,6 +1,6 @@
 # Module sys
 
-A `Log` implementation that formats, then prints the logs.
+A `Log` implementation that formats, then prints the logs to system locations.
 
 e.g.
 

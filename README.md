@@ -22,54 +22,66 @@
 ![badge-platform-watchos]
 ![badge-platform-windows]
 
-A small, simple yet highly configurable/extensible, logging library for Kotlin Multiplatform. Inspired 
-by [the OG -> Timber][url-timber], as well as the sad state of available logging libraries for Kotlin 
-Multiplatform.
+A small, simple, highly extensible logging library for Kotlin Multiplatform. Inspired 
+by [Timber][url-timber], and the unfortunate state of available logging libraries for 
+Kotlin Multiplatform.
+
+By default, the only `Log` instance available from `Log.Root` is the `Log.AbortHandler` 
+which only accepts `Log.Level.Fatal` logs and will abort the process in a system dependant
+manner after the log is captured. Simply `Log.Root.uninstall` it to disable. Other than
+that, no logging happens unless you choose to `Log.Root.install` a `Log`.
 
 API docs available at [https://kmp-log.matthewnelson.io][url-docs]
 
 ### Usage
 
+1) `Log.Root.install` desired `Log` instance(s) at application startup.
+2) Create `Log.Logger` instances throughout your codebase and log to them.
+
 ```kotlin
 class MyClass {
-    companion object {
+    private companion object {
+        // Setup Log.Logger instances.
         private val LOG = Log.Logger.of(tag = "MyClass")
     }
 
     fun doSomething(withThis: String): Int {
         var result = withThis.length
-        result += LOG.v { "Something has been done with $withThis by $this" }
-        result += LOG.d { "Something has been done with $withThis by $this" }
-        result += LOG.i { "Something has been done with $withThis by $this" }
-        result += LOG.w { "Something has been done with $withThis by $this" }
-        result += LOG.e { "Something has been done with $withThis by $this" }
 
-        // Don't do this. It is for example purposes only...
-        if (!Log.AbortHandler.isInstalled) {
-
-            // Log.Level.Fatal (i.e. 'wtf') logs will abort the process if the
-            // Log.AbortHandler is installed at Log.Root (by default, it is
-            // the only one).
-            result += LOG.wtf {
-                "This will be logged (if a Log instance is installed)," +
-                "but not abort (no AbortHandler)."
-            }
-        }
-
+        // Lazy logging with inline functions to mitigate
+        // unnecessary String creation. If no Log instances
+        // are installed to accept logs from this Log.Logger
+        // and at the specified level, then nothing happens.
+        //
+        // Jvm/Android extension functions are also available
+        // for lazy logging via String.format
+        result += LOG.v { "Log.Level.Verbose >> $withThis" }
+        result += LOG.d { "Log.Level.Debug   >> $withThis" }
+        result += LOG.i { "Log.Level.Info    >> $withThis" }
+        result += LOG.w { "Log.Level.Warn    >> $withThis" }
+        result += LOG.e { "Log.Level.Error   >> $withThis" }
+//        result += LOG.wtf { "Log.Level.Fatal >> $withThis" }
         return result
     }
 }
 
 fun main() {
+    // Install desired Log implementation(s) at startup
     Log.Root.install(SysLog.Default)
+
     val doSomethingResult = MyClass().doSomething("Hello!")
 
-    // Ability to define a domain separate from the tag, which
-    // can be helpful for library developers, as users can simply
-    // filter out logs by their domain. Alternatively, can be used
-    // to whitelist domains for certain Log implementations.
-    val logger = Log.Logger.of(domain = "your.library:thing", tag = "Main")
+    // Optionally, define a Log.Logger.domain, separate from its tag.
+    // This is useful for library developers as users can receive
+    // granular insight into the library's interworkings, if and only
+    // if there is a Log instance installed (only Log.AbortHandler is
+    // by default for handling Log.Level.Fatal).
+    //
+    // The domain can be used in Log.isLoggable implementations to either
+    // blacklist or whitelist logging for the entire domain.
+    val logger = Log.Logger.of(domain = "my-library:submodule", tag = "Main")
 
+    // Return values of all Log.Logger functions indicate if logging happened.
     val numberOfLogInstancesThatLoggedThisThing = logger.log(
         level = Log.Level.Info,
         msg = "MyClass.doSomething returned $doSomethingResult",
@@ -77,9 +89,11 @@ fun main() {
     assertEquals(1, numberOfLogInstancesThatLoggedThisThing)
 
     Log.Root.uninstall(SysLog.Default)
-    assertEquals(0, logger.e { throw IllegalStateException("Will not happen") })
+    assertEquals(0, logger.e { throw IllegalStateException("Won't happen...") })
 
+    // Create your own Log implementation(s) and install them.
     Log.Root.install(object : Log(uid = "MyOwnLog", min = Level.Warn) {
+        // See docs.
         override fun log(
             level: Level,
             domain: String?,
@@ -87,18 +101,27 @@ fun main() {
             msg: String?,
             t: Throwable?,
         ): Boolean {
-            // ...
-            return true
+            var wasLogged = true
+            // Format & log data. If something happened and
+            // no data could be logged, return false instead.
+            return wasLogged
         }
 
-        // Optional overrides...
+        // Optional override... See docs.
         override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
-            return domain == "your.library:thing"
+            // e.g. Whitelist logging to this Log instance by specific domain
+            return domain == "my-library:submodule"
         }
-        override fun onInstall() { /* ... */ }
-        override fun onUninstall() { /* ... */ }
+        // Optional override... See docs.
+        override fun onInstall() { /* allocate resources */ }
+        // Optional override... See docs.
+        override fun onUninstall() { /* deallocate resources */ }
     })
 
+    // Log.Level.Fatal logging that works how you want it to. By default,
+    // Log.AbortHandler (if installed) is always the last Log instances
+    // that gets logged to and only accepts Log.Level.Fatal logs. Simply
+    // uninstall it to disable.
     assertEquals(2, Log.Root.installed().size)
     assertTrue(Log.AbortHandler.isInstalled)
     Log.Root.uninstallAll(evenAbortHandler = true)
@@ -108,13 +131,20 @@ fun main() {
     Log.Root.install(Log.AbortHandler)
     Log.Root.installOrThrow(SysLog.of(min = Level.Fatal))
 
-    assertEquals(0, logger.e(Throwable()) { "Nope.." })
+    assertEquals(0, logger.e(Throwable()) { "Still nothing.." })
+
     
-    // Log.AbortHandler will be the final Log instance to log, which
-    // will abort the process for the Log.Level.Fatal error. So, this
-    // won't return, but for the example, the return value would be 2
-    // as SysLog & Log.AbortHandler logged the log.
+    // This won't return because Log.AbortHandler will abort the process,
+    // but for the sake of the example the return value would be 2, as
+    // SysLog & Log.AbortHandler logged the log.
     assertEquals(2, logger.wtf { "ABORT!" })
+
+    Log.Root.uninstallAll(evenAbortHandler = false)
+
+    // If no other Log instances captured the Log.Level.Fatal log, then
+    // Log.AbortHandler will create an exception and use Throwable.printStackTrace
+    // before aborting.
+    assertEquals(1, logger.wtf { "ABORT AGAIN!" })
 }
 ```
 
