@@ -30,6 +30,11 @@ import io.matthewnelson.kmp.log.Log
  *     - Android: [__android_log_print](https://cs.android.com/android/platform/superproject/+/android-latest-release:system/logging/liblog/include/android/log.h;l=115)
  *     - Darwin/Linux/MinGW: [fprintf](https://www.man7.org/linux/man-pages/man3/fprintf.3p.html) to `stdout`/`stderr`
  *
+ * **NOTE:** This [Log] implementation is meant for **non-production** environments. Logging
+ * to `stdout`/`stderr` in production is violence. For this reason, [Default.min] is configured
+ * with [Log.Level.Debug]. If you DO happen to choose violence for your production environment,
+ * [SysLog.of] should be used to configure a more appropriate minimum [Log.Level].
+ *
  * **NOTE:** On Android & AndroidNative API 25 and below, [Logger.domain] is never used
  * and [Logger.tag] will be truncated (if necessary) to 23 characters.
  *
@@ -50,7 +55,7 @@ import io.matthewnelson.kmp.log.Log
  *
  *     Log.install(SysLog.Default)
  *     Log.Logger.of(tag = "YourLogger").i("Hello World!")
- *     Log.Logger.of(domain = "your.domain", tag = "YourLogger2").w("Yo!")
+ *     Log.Logger.of(tag = "YourLogger2", domain = "your.domain").w("Yo!")
  *
  *     // 10-17 22:19:16.179 D [kmp-log:log]Log.Root: SysLog[min=Verbose, max=Fatal, uid=io.matthewnelson.kmp.log.sys.SysLog].onInstall()
  *     // 10-17 22:19:16.179 I YourLogger: Hello World!

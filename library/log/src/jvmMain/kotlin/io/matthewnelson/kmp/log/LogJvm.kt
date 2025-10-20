@@ -22,6 +22,8 @@ import io.matthewnelson.kmp.log.Log.Level
 import io.matthewnelson.kmp.log.internal.withFormatter
 import java.util.Formatter
 import java.util.IllegalFormatException
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 
 /**
  * Send a [Level.Verbose] log message to all [Log] instances installed at [Log.Root]. If
@@ -324,6 +326,8 @@ public inline fun Log.Logger.wtf(t: Throwable?, format: String?, vararg argument
  * */
 public fun Log.Logger.log(level: Level, t: Throwable?, format: String?, arg: Any?): Int {
     return log(level, t, format) { unformatted ->
+        // Formatter.format uses vararg, so calling lazily means
+        // underlying Array is not created unnecessarily for the 1 arg.
         unformatted.withFormatter(_format = { s -> format(s, arg) })
     }
 }
@@ -345,6 +349,8 @@ public fun Log.Logger.log(level: Level, t: Throwable?, format: String?, arg: Any
  * */
 public fun Log.Logger.log(level: Level, t: Throwable?, format: String?, arg1: Any?, arg2: Any?): Int {
     return log(level, t, format) { unformatted ->
+        // Formatter.format uses vararg, so calling lazily means
+        // underlying Array is not created unnecessarily for the 2 args.
         unformatted.withFormatter(_format = { s -> format(s, arg1, arg2) })
     }
 }
@@ -387,6 +393,7 @@ public fun Log.Logger.log(level: Level, arguments: Array<out Any?>, t: Throwable
 }
 
 private inline fun Log.Logger.log(level: Level, t: Throwable?, format: String?, block: (unformatted: String) -> String): Int {
+    contract { callsInPlace(block, InvocationKind.AT_MOST_ONCE) }
     // Must check for null/empty String & null Throwable here b/c the Log.Logger.log inline
     // function would check Log.Logger.isLoggable before invoking its block parameter, which
     // in our case may be unnecessary if we have no String to format.
