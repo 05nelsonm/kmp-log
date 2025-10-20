@@ -106,15 +106,15 @@ public abstract class Log {
      *
      * e.g.
      *
-     *     MyLogger.wtf(t = null, msg = null)       // Ignored
-     *     MyLogger.wtf(t = null, msg = "")         // Ignored
-     *     MyLogger.wtf(msg = "")                   // Ignored
-     *     MyLogger.wtf { null }                    // Ignored
-     *     MyLogger.wtf { "" }                      // Ignored
-     *     MyLogger.wtf(t = null) { null }          // Ignored
-     *     MyLogger.wtf(t = null) { "" }            // Ignored
-     *     MyLogger.wtf {
-     *         "This will be logged by all installed [Log] instances"
+     *     myLogger.wtf(t = null, msg = null)       // Ignored
+     *     myLogger.wtf(t = null, msg = "")         // Ignored
+     *     myLogger.wtf(msg = "")                   // Ignored
+     *     myLogger.wtf { null }                    // Ignored
+     *     myLogger.wtf { "" }                      // Ignored
+     *     myLogger.wtf(t = null) { null }          // Ignored
+     *     myLogger.wtf(t = null) { "" }            // Ignored
+     *     myLogger.wtf {
+     *         "This will be logged by all installed Log instances"
      *         " and then abort (if Log.AbortHandler is installed)."
      *     }
      *

@@ -173,7 +173,7 @@ dependencies {
 ```
 
 <!-- TAG_VERSION -->
-[badge-latest]: https://img.shields.io/badge/latest--release-0.1.0-alpha01-blue.svg?style=flat
+[badge-latest]: https://img.shields.io/badge/latest--release-0.1.0--alpha01-blue.svg?style=flat
 [badge-license]: https://img.shields.io/badge/license-Apache%20License%202.0-blue.svg?style=flat
 
 <!-- TAG_DEPENDENCIES -->
