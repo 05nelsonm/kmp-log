@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
+@file:Suppress("UnstableApiUsage")
 rootProject.name = "kmp-log"
 
 pluginManagement {
@@ -20,6 +21,27 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
         google()
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+    }
+
+    val vCatalogKC = rootDir
+        .resolve("gradle")
+        .resolve("libs.versions.toml")
+        .readLines()
+        .first { it.startsWith("kotlincrypto-catalog ") }
+        .substringAfter('"')
+        .substringBeforeLast('"')
+
+    versionCatalogs {
+        create("kotlincrypto") {
+            // https://github.com/KotlinCrypto/version-catalog/blob/master/gradle/kotlincrypto.versions.toml
+            from("org.kotlincrypto:version-catalog:$vCatalogKC")
+        }
     }
 }
 
@@ -34,7 +56,7 @@ if (CHECK_PUBLICATION != null) {
     arrayOf(
         "compat-ktor",
         "compat-slf4j",
-//        "file",
+        "file",
         "log",
         "sys",
     ).forEach { name ->
