@@ -21,7 +21,8 @@ plugins {
 }
 
 kmpConfiguration {
-    configureShared(java9ModuleName = "io.matthewnelson.kmp.log.file", publish = true) {
+    // TODO: publish = true && :tools:check-publication build.gradle.kts
+    configureShared(java9ModuleName = "io.matthewnelson.kmp.log.file", publish = false) {
         js {
             target {
                 browser {
@@ -43,8 +44,11 @@ kmpConfiguration {
             sourceSetMain {
                 dependencies {
                     api(project(":library:log"))
+                    implementation(libs.encoding.base16)
+                    implementation(libs.immutable.collections)
                     implementation(libs.kmp.file.async)
                     implementation(libs.kotlinx.coroutines.core)
+                    implementation(kotlincrypto.hash.blake2)
                 }
             }
             sourceSetTest {

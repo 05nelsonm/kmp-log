@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-package io.matthewnelson.kmp.log.file
+package io.matthewnelson.kmp.log.file.internal
 
-@Suppress("UNUSED")
-internal fun stub() { /* no-op */ }
+import io.matthewnelson.kmp.log.Log
+
+internal expect inline fun Log.Root.isDesktop(): Boolean
