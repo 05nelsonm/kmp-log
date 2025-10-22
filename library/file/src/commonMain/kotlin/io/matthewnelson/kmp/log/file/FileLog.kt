@@ -16,6 +16,7 @@
 package io.matthewnelson.kmp.log.file
 
 import io.matthewnelson.encoding.base16.Base16
+import io.matthewnelson.encoding.core.Decoder.Companion.decodeToByteArray
 import io.matthewnelson.encoding.core.Encoder.Companion.encodeToString
 import io.matthewnelson.immutable.collections.toImmutableSet
 import io.matthewnelson.kmp.file.File
@@ -27,6 +28,7 @@ import io.matthewnelson.kmp.file.resolve
 import io.matthewnelson.kmp.file.toFile
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
+import io.matthewnelson.kmp.log.file.internal.UTF8
 import io.matthewnelson.kmp.log.file.internal.isDesktop
 import org.kotlincrypto.hash.blake2.BLAKE2s
 import kotlin.jvm.JvmField
@@ -356,7 +358,7 @@ public class FileLog: Log {
             val files0Hash = run {
                 // Will produce a 12 byte digest which comes out to 24 characters when base16 encoded
                 val blake2s = BLAKE2s(96)
-                val digest = blake2s.digest(files.elementAt(0).path.encodeToByteArray())
+                val digest = blake2s.digest(files.elementAt(0).path.decodeToByteArray(UTF8))
                 blake2s.update(digest)
                 blake2s.digestInto(digest, destOffset = 0)
                 digest.encodeToString(Base16)
