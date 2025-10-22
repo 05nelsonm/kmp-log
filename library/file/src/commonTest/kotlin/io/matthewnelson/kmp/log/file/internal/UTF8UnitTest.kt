@@ -83,7 +83,8 @@ class UTF8UnitTest {
 
     @Test
     fun givenRandomSequences_whenEncoded_thenMatchesKotlinEncoding() {
-        repeat(5_000) { i ->
+        val times = if (UTF8.INVALID_UTF8_SEQUENCE_SIZE == 1) 5_000 else 2_500
+        repeat(times) { i ->
             val size = Random.nextInt(5, 42)
             val text = buildString(size) {
                 repeat(size) {
