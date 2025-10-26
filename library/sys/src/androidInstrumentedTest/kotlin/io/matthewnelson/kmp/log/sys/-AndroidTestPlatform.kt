@@ -22,6 +22,6 @@ actual fun isNative(): Boolean = false
 actual fun deviceApiLevel(): Int = Build.VERSION.SDK_INT
 
 actual val IS_LOGGABLE_REQUIRED_API_LEVEL: Int = 0
-actual fun SysLog.Default.androidIsLoggable(level: Log.Level, domain: String?, tag: String): Boolean? {
+actual fun SysLog.Companion.androidIsLoggable(level: Log.Level, domain: String?, tag: String): Boolean? {
     return isLoggableOrNull(level, domain, tag)
 }

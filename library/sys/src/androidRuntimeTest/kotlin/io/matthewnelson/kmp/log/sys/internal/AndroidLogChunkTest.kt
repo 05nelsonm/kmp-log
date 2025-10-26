@@ -40,13 +40,13 @@ class AndroidLogChunkTest {
             }
             log.append(". CHARS[").append(log.length + 2).appendLine(']')
         }
-        Log.installOrThrow(SysLog)
+        Log.installOrThrow(SysLog.Debug)
         try {
             val tag = "Chunking" + if (isNative()) "Native" else "NonNative"
             val result = Log.Logger.of(tag = tag).i(log.toString())
             assertEquals(1, result)
         } finally {
-            Log.uninstallOrThrow(SysLog)
+            Log.uninstallOrThrow(SysLog.UID)
         }
     }
 }

@@ -27,11 +27,12 @@ import io.matthewnelson.kmp.log.sys.internal.commonOf
 import io.matthewnelson.kmp.log.sys.internal.jvmLogPrint
 
 // android
-public actual open class SysLog private actual constructor(
-    min: Level /* = Level.Debug */,
-): Log(UID, min) {
+public actual class SysLog private actual constructor(min: Level): Log(SYS_LOG_UID, min) {
 
-    public actual companion object Default: SysLog() {
+    public actual companion object {
+
+        @JvmField
+        public actual val Debug: SysLog = SysLog(Level.Debug)
 
         public actual const val UID: String = SYS_LOG_UID
 
@@ -78,7 +79,7 @@ public actual open class SysLog private actual constructor(
         }
     }
 
-    actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
+    actual override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
         return isLoggableOrNull(level, domain, tag) ?: true
     }
 }

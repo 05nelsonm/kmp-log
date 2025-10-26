@@ -24,7 +24,7 @@ import kotlin.contracts.contract
 
 private const val MAX_LEN_TAG: Int = 23
 
-internal inline fun SysLog.Default.androidDomainTag(
+internal inline fun SysLog.Companion.androidDomainTag(
     DEVICE_SDK_INT: Int,
     domain: String?,
     tag: String,
@@ -35,7 +35,7 @@ internal inline fun SysLog.Default.androidDomainTag(
 }
 
 @OptIn(ExperimentalContracts::class)
-internal inline fun SysLog.Default.androidLogChunk(
+internal inline fun SysLog.Companion.androidLogChunk(
     msg: String?,
     t: Throwable?,
     maxLenLog: Int,

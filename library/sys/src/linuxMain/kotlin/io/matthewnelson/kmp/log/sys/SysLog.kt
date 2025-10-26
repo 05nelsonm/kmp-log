@@ -25,11 +25,11 @@ import io.matthewnelson.kmp.log.sys.internal.nativeIsLoggable
 import io.matthewnelson.kmp.log.sys.internal.nativeLogPrint
 
 // linux
-public actual open class SysLog private actual constructor(
-    min: Level /* = Level.Debug */,
-): Log(UID, min) {
+public actual class SysLog private actual constructor(min: Level): Log(SYS_LOG_UID, min) {
 
-    public actual companion object Default: SysLog() {
+    public actual companion object {
+
+        public actual val Debug: SysLog = SysLog(Level.Debug)
 
         public actual const val UID: String = SYS_LOG_UID
 
@@ -40,11 +40,11 @@ public actual open class SysLog private actual constructor(
         ): SysLog = ::SysLog.commonOf(min)
     }
 
-    actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
+    actual override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         return nativeLogPrint(level, domain, tag, msg, t)
     }
 
-    actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
+    actual override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
         return nativeIsLoggable(level)
     }
 }

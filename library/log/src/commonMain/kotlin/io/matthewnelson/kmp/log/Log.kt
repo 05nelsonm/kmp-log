@@ -51,7 +51,7 @@ import kotlin.jvm.JvmSynthetic
  *
  *     val logger = Log.Logger.of(tag = "Example")
  *     logger.i { "This will not be logged" }
- *     Log.Root.install(SysLog.Default)
+ *     Log.Root.install(SysLog.Debug)
  *     logger.i { "This WILL be logged" }
  *     Log.Root.uninstall(SysLog.UID)
  *
@@ -1246,14 +1246,7 @@ public abstract class Log {
     }
     /** @suppress */
     public final override fun toString(): String {
-        var name = this::class.simpleName ?: "Log"
-        when {
-            name == "Default" -> when (uid) {
-                // An unfortunate side effect of not having KClass<*>.qualifiedName
-                // available from commonMain (Js/WasmJs/WasmWasi)
-                "io.matthewnelson.kmp.log.sys.SysLog" -> name = "SysLog.Default"
-            }
-        }
+        val name = this::class.simpleName ?: "Log"
         return "$name[min=$min, max=$max, uid=$uid]"
     }
 

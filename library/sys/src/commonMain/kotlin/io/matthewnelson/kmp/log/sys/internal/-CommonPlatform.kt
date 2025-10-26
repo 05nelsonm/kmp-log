@@ -24,23 +24,22 @@ import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
-// NOTE: Never modify. If so, update SysLog.Default.UID documentation, and Log.toString()
+// NOTE: Never modify. If so, update SysLog.Companion.UID documentation
 internal const val SYS_LOG_UID: String = "io.matthewnelson.kmp.log.sys.SysLog"
 internal const val CR: Char = '\r'
 internal const val LF: Char = '\n'
 
-@Suppress("RedundantCompanionReference")
 internal inline fun ((min: Level) -> SysLog).commonOf(
     min: Level,
 ): SysLog {
-    if (min != SysLog.Default.min) return this(min)
-    return SysLog.Default
+    if (min != SysLog.Debug.min) return this(min)
+    return SysLog.Debug
 }
 
-internal inline fun SysLog.Default.commonIsInstalled(): Boolean = Log.Root[UID] != null
+internal inline fun SysLog.Companion.commonIsInstalled(): Boolean = Log.Root[UID] != null
 
 // TODO: Move to :log as Log.Util.simpleDomainTag?
-internal inline fun SysLog.Default.commonDomainTag(
+internal inline fun SysLog.Companion.commonDomainTag(
     domain: String?,
     tag: String,
 ): String {
@@ -49,7 +48,7 @@ internal inline fun SysLog.Default.commonDomainTag(
     return commonDomainTag(sb, domain, tag).toString()
 }
 
-internal inline fun SysLog.Default.commonDomainTag(
+internal inline fun SysLog.Companion.commonDomainTag(
     sb: StringBuilder,
     domain: String?,
     tag: String,
@@ -60,7 +59,7 @@ internal inline fun SysLog.Default.commonDomainTag(
     append(tag)
 }
 
-internal inline fun SysLog.Default.commonFormatDateTime(
+internal inline fun SysLog.Companion.commonFormatDateTime(
     month: Int,     // 1-12
     day: Int,       // 1-31
     hours: Int,     // 0-23
@@ -90,7 +89,7 @@ internal inline fun SysLog.Default.commonFormatDateTime(
 
 // TODO: Move to :log as Log.Util.simpleFormat?
 // Returns `null` if empty (no data to log)
-internal inline fun SysLog.Default.commonFormatLogOrNull(
+internal inline fun SysLog.Companion.commonFormatLogOrNull(
     level: Level,
     domain: String?,
     tag: String,
@@ -166,7 +165,7 @@ internal inline fun SysLog.Default.commonFormatLogOrNull(
 
 @OptIn(ExperimentalContracts::class)
 @Throws(IllegalArgumentException::class)
-internal inline fun SysLog.Default.commonLogChunk(
+internal inline fun SysLog.Companion.commonLogChunk(
     formatted: CharSequence,
     maxLenLog: Int,
     _print: (chunk: String) -> Boolean,

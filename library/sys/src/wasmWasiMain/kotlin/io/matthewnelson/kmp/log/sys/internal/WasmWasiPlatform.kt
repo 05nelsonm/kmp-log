@@ -24,7 +24,7 @@ import kotlin.time.ExperimentalTime
 // logging, and to instead increase the supported KotlinVersion for Wasi
 // from KOTLIN_1_9 to KOTLIN_2_1 and use the stdlib's Instant.
 // See: https://github.com/Kotlin/kotlinx-datetime/tree/v0.6.2#note-about-time-zones-in-wasmwasi
-internal fun SysLog.Default.wasiDateTime(): CharSequence? {
+internal fun SysLog.Companion.wasiDateTime(): CharSequence? {
     // 2023-01-02T23:40:57.120Z
     val iso8601 = try {
         @OptIn(ExperimentalTime::class)
