@@ -79,7 +79,7 @@ kmpConfiguration {
             with(sourceSets) {
                 // All targets except wasmWasi
                 arrayOf(
-                    "jvmAndroid"
+                    "jvmAndroid",
                     "jsWasmJs",
                     "native",
                 ).forEach { name ->
