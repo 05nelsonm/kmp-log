@@ -27,11 +27,11 @@ import kotlin.wasm.unsafe.UnsafeWasmMemoryApi
 import kotlin.wasm.unsafe.withScopedMemoryAllocator
 
 // wasmWasi
-public actual open class SysLog private actual constructor(
-    min: Level /* = Level.Debug */,
-): Log(UID, min) {
+public actual class SysLog private actual constructor(min: Level): Log(SYS_LOG_UID, min) {
 
-    public actual companion object Default: SysLog() {
+    public actual companion object {
+
+        public actual val Debug: SysLog = SysLog(Level.Debug)
 
         public actual const val UID: String = SYS_LOG_UID
 
@@ -45,7 +45,7 @@ public actual open class SysLog private actual constructor(
         private const val STDERR_FILENO: Int = 2
     }
 
-    actual final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
+    actual override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         val formatted = run {
             val dateTime = wasiDateTime()
             commonFormatLogOrNull(level, domain, tag, msg, t, dateTime, omitLastNewLine = false) ?: return false
@@ -83,7 +83,7 @@ public actual open class SysLog private actual constructor(
         }
     }
 
-    actual final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
+    actual override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
         return super.isLoggable(level, domain, tag)
     }
 }

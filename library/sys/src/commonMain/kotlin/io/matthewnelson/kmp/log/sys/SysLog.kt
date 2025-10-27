@@ -31,7 +31,7 @@ import io.matthewnelson.kmp.log.Log
  *     - Darwin/Linux/MinGW: [fprintf](https://www.man7.org/linux/man-pages/man3/fprintf.3p.html) to `stdout`/`stderr`
  *
  * **NOTE:** This [Log] implementation is meant for **non-production** environments. Logging
- * to `stdout`/`stderr` in production is violence. For this reason, [Default.min] is configured
+ * to `stdout`/`stderr` in production is violence. For this reason, [Debug] is configured
  * with [Log.Level.Debug]. If you DO happen to choose violence for your production environment,
  * [SysLog.of] should be used to configure a more appropriate minimum [Log.Level].
  *
@@ -53,22 +53,22 @@ import io.matthewnelson.kmp.log.Log
  *
  * e.g.
  *
- *     Log.install(SysLog.Default)
+ *     Log.install(SysLog.Debug)
  *     Log.Logger.of(tag = "YourLogger").i("Hello World!")
  *     Log.Logger.of(tag = "YourLogger2", domain = "your.domain").w("Yo!")
  *
- *     // 10-17 22:19:16.179 D [kmp-log:log]Log.Root: SysLog[min=Verbose, max=Fatal, uid=io.matthewnelson.kmp.log.sys.SysLog].onInstall()
+ *     // 10-17 22:19:16.179 D [kmp-log:log]Log.Root: SysLog[min=Debug, max=Fatal, uid=io.matthewnelson.kmp.log.sys.SysLog].onInstall()
  *     // 10-17 22:19:16.179 I YourLogger: Hello World!
  *     // 10-17 22:19:16.181 W [your.domain]YourLogger2: Yo!
  * */
-public expect open class SysLog private constructor(
-    min: Level = Level.Debug,
-): Log {
+public expect class SysLog private constructor(min: Level): Log {
 
-    /**
-     * The default [SysLog] implementation with [SysLog.min] set to [Level.Debug].
-     * */
-    public companion object Default: SysLog {
+    public companion object {
+
+        /**
+         * A static instance of [SysLog], configured with [Level.Debug].
+         * */
+        public val Debug: SysLog
 
         /**
          * The [SysLog.uid] (i.e. `io.matthewnelson.kmp.log.sys.SysLog`).
@@ -84,14 +84,14 @@ public expect open class SysLog private constructor(
 
         /**
          * Instantiate a new [SysLog] instance with the specified minimum [Level]. If
-         * [Level] specified is the same as [Default], then [Default] will be returned.
+         * [Level] specified is the same as [Debug], then [Debug] will be returned.
          * */
         public fun of(
             min: Level,
         ): SysLog
     }
 
-    final override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean
+    override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean
 
-    final override fun isLoggable(level: Level, domain: String?, tag: String): Boolean
+    override fun isLoggable(level: Level, domain: String?, tag: String): Boolean
 }

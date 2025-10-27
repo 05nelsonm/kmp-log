@@ -33,23 +33,24 @@ class SysLogUnitTest {
     fun givenSysLog_whenUid_thenIsAsExpected() {
         val expected = "io.matthewnelson.kmp.log.sys.SysLog"
         assertEquals(expected, SysLog.UID)
-        assertEquals(expected, SysLog.uid)
+        assertEquals(expected, SysLog.Debug.uid)
     }
 
     @Test
-    fun givenSysLog_whenDefaultConstructor_thenMinIsLevelDebug() {
-        assertEquals(Level.Debug, SysLog.min)
+    fun givenSysLog_whenDebug_thenMinIsLevelDebug() {
+        assertEquals(Level.Debug, SysLog.Debug.min)
     }
 
     @Test
-    fun givenSysLog_whenOfWithNonDefaultValue_thenReturnsNewInstance() {
+    fun givenSysLog_whenOfWithNonDebugValue_thenReturnsNewInstance() {
         val actual = SysLog.of(min = Level.Info)
-        assertNotEquals(SysLog.Default, actual)
+        assertNotEquals(SysLog.Debug, actual)
     }
 
     @Test
-    fun givenSysLog_whenDefault_thenToStringStartsWithSysLogDotDefault() {
-        assertTrue(SysLog.toString().startsWith("SysLog.Default["))
+    fun givenSysLog_whenOfWithDebugValue_thenReturnsDebugInstance() {
+        val actual = SysLog.of(min = Level.Debug)
+        assertEquals(SysLog.Debug, actual)
     }
 
     @Test
@@ -60,10 +61,10 @@ class SysLogUnitTest {
     @Test
     fun givenIsInstalled_whenIsInstalled_thenReturnsTrue() {
         try {
-            Log.installOrThrow(SysLog)
+            Log.installOrThrow(SysLog.Debug)
             assertTrue(SysLog.isInstalled)
         } finally {
-            Log.uninstall(SysLog)
+            Log.uninstall(SysLog.UID)
         }
     }
 
@@ -86,13 +87,13 @@ class SysLogUnitTest {
 
     @Test
     fun givenSysLog_whenLogIsAllWhitespace_thenDoesNotLog() {
-        Log.install(SysLog)
+        Log.install(SysLog.Debug)
         try {
             assertEquals(true, LOG.isLoggable(Level.Error))
             assertEquals(0, LOG.e("    "))
             assertEquals(0, LOG.e("\n"))
         } finally {
-            Log.uninstall(SysLog)
+            Log.uninstall(SysLog.UID)
         }
     }
 }

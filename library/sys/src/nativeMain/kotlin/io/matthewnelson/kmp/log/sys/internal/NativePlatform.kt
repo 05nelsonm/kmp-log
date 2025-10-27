@@ -32,7 +32,7 @@ import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
-internal fun SysLog.Default.nativeDateTime(): CharSequence? {
+internal fun SysLog.Companion.nativeDateTime(): CharSequence? {
     val dateTime = IntArray(7)
     @OptIn(ExperimentalForeignApi::class)
     @Suppress("RemoveRedundantCallsOfConversionMethods")
@@ -54,7 +54,7 @@ internal fun SysLog.Default.nativeDateTime(): CharSequence? {
 // NOTE: Cannot be utilized for androidNative because
 // /proc/self/fd/{0/1/2} point to /dev/null
 @OptIn(ExperimentalContracts::class, ExperimentalForeignApi::class)
-internal inline fun SysLog.Default.nativeLogPrint(
+internal inline fun SysLog.Companion.nativeLogPrint(
     level: Level,
     domain: String?,
     tag: String,
@@ -74,10 +74,10 @@ internal inline fun SysLog.Default.nativeLogPrint(
 // NOTE: Cannot be utilized for androidNative because
 // /proc/self/fd/{0/1/2} point to /dev/null
 @OptIn(ExperimentalForeignApi::class)
-internal inline fun SysLog.Default.nativeIsLoggable(level: Level): Boolean = stdioOrNull(level) != null
+internal inline fun SysLog.Companion.nativeIsLoggable(level: Level): Boolean = stdioOrNull(level) != null
 
 @OptIn(ExperimentalForeignApi::class)
-internal inline fun SysLog.Default.stdioOrNull(level: Level): CPointer<FILE>? = when (level) {
+internal inline fun SysLog.Companion.stdioOrNull(level: Level): CPointer<FILE>? = when (level) {
     Level.Verbose,
     Level.Debug,
     Level.Info -> stdout

@@ -74,7 +74,7 @@ class MyClass {
 
 fun main() {
     // Install desired Log implementation(s) at startup
-    Log.Root.install(SysLog.Default)
+    Log.Root.install(SysLog.Debug)
 
     val doSomethingResult = MyClass().doSomething("Hello!")
 
@@ -94,7 +94,7 @@ fun main() {
     )
     assertEquals(1, numberOfLogInstancesThatLoggedThisThing)
 
-    Log.Root.uninstall(SysLog.Default)
+    Log.Root.uninstall(SysLog.Debug)
     assertEquals(0, logger.e { throw IllegalStateException("Won't happen...") })
 
     // Create your own Log implementation(s) and install them.

@@ -38,14 +38,14 @@ class AndroidTagTest {
             assertEquals(tag, actual)
         }
 
-        Log.installOrThrow(SysLog)
+        Log.installOrThrow(SysLog.Debug)
         try {
             val result = Log.Logger.of(tag = tag).i {
                 "Test tag of length[${tag.length}] works on all API levels and will not cause an exception"
             }
             assertEquals(1, result)
         } finally {
-            Log.uninstallOrThrow(SysLog)
+            Log.uninstallOrThrow(SysLog.UID)
         }
     }
 }

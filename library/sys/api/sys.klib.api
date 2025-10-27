@@ -6,17 +6,16 @@
 // - Show declarations: true
 
 // Library unique name: <io.matthewnelson.kmp-log:sys>
-open class io.matthewnelson.kmp.log.sys/SysLog : io.matthewnelson.kmp.log/Log { // io.matthewnelson.kmp.log.sys/SysLog|null[0]
-    final fun isLoggable(io.matthewnelson.kmp.log/Log.Level, kotlin/String?, kotlin/String): kotlin/Boolean // io.matthewnelson.kmp.log.sys/SysLog.isLoggable|isLoggable(io.matthewnelson.kmp.log.Log.Level;kotlin.String?;kotlin.String){}[0]
-    final fun log(io.matthewnelson.kmp.log/Log.Level, kotlin/String?, kotlin/String, kotlin/String?, kotlin/Throwable?): kotlin/Boolean // io.matthewnelson.kmp.log.sys/SysLog.log|log(io.matthewnelson.kmp.log.Log.Level;kotlin.String?;kotlin.String;kotlin.String?;kotlin.Throwable?){}[0]
+final class io.matthewnelson.kmp.log.sys/SysLog : io.matthewnelson.kmp.log/Log { // io.matthewnelson.kmp.log.sys/SysLog|null[0]
+    final object Companion { // io.matthewnelson.kmp.log.sys/SysLog.Companion|null[0]
+        final const val UID // io.matthewnelson.kmp.log.sys/SysLog.Companion.UID|{}UID[0]
+            final fun <get-UID>(): kotlin/String // io.matthewnelson.kmp.log.sys/SysLog.Companion.UID.<get-UID>|<get-UID>(){}[0]
 
-    final object Default : io.matthewnelson.kmp.log.sys/SysLog { // io.matthewnelson.kmp.log.sys/SysLog.Default|null[0]
-        final const val UID // io.matthewnelson.kmp.log.sys/SysLog.Default.UID|{}UID[0]
-            final fun <get-UID>(): kotlin/String // io.matthewnelson.kmp.log.sys/SysLog.Default.UID.<get-UID>|<get-UID>(){}[0]
+        final val Debug // io.matthewnelson.kmp.log.sys/SysLog.Companion.Debug|{}Debug[0]
+            final fun <get-Debug>(): io.matthewnelson.kmp.log.sys/SysLog // io.matthewnelson.kmp.log.sys/SysLog.Companion.Debug.<get-Debug>|<get-Debug>(){}[0]
+        final val isInstalled // io.matthewnelson.kmp.log.sys/SysLog.Companion.isInstalled|{}isInstalled[0]
+            final fun <get-isInstalled>(): kotlin/Boolean // io.matthewnelson.kmp.log.sys/SysLog.Companion.isInstalled.<get-isInstalled>|<get-isInstalled>(){}[0]
 
-        final val isInstalled // io.matthewnelson.kmp.log.sys/SysLog.Default.isInstalled|{}isInstalled[0]
-            final fun <get-isInstalled>(): kotlin/Boolean // io.matthewnelson.kmp.log.sys/SysLog.Default.isInstalled.<get-isInstalled>|<get-isInstalled>(){}[0]
-
-        final fun of(io.matthewnelson.kmp.log/Log.Level): io.matthewnelson.kmp.log.sys/SysLog // io.matthewnelson.kmp.log.sys/SysLog.Default.of|of(io.matthewnelson.kmp.log.Log.Level){}[0]
+        final fun of(io.matthewnelson.kmp.log/Log.Level): io.matthewnelson.kmp.log.sys/SysLog // io.matthewnelson.kmp.log.sys/SysLog.Companion.of|of(io.matthewnelson.kmp.log.Log.Level){}[0]
     }
 }

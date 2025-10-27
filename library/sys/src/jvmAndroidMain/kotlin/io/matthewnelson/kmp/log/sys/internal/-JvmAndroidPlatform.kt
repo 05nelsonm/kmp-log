@@ -25,7 +25,7 @@ import java.util.Locale
 
 internal val SYS_LOG_TIME_FORMAT = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
 
-internal inline fun SysLog.Default.jvmLogPrint(
+internal inline fun SysLog.Companion.jvmLogPrint(
     level: Level,
     domain: String?,
     tag: String,
