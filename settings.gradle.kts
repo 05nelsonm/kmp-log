@@ -56,7 +56,7 @@ if (CHECK_PUBLICATION != null) {
     arrayOf(
         "compat-ktor",
         "compat-slf4j",
-        "file",
+//        "file",
         "log",
         "sys",
     ).forEach { name ->
