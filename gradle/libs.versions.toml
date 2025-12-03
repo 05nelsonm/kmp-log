@@ -4,18 +4,18 @@ androidx-test-core          = "1.5.0" # Do not upgrade. Next version requires mi
 #noinspection GradleDependency
 androidx-test-runner        = "1.5.2" # Do not upgrade. Next version requires minSdk 19+
 
-encoding                    = "2.5.0"
+encoding                    = "2.6.0-SNAPSHOT"
 
 immutable                   = "0.3.0"
 
-gradle-android              = "8.11.2"
+gradle-android              = "8.12.3"
 gradle-binary-compat        = "0.18.1"
-gradle-dokka                = "2.0.0"
+gradle-dokka                = "2.1.0"
 gradle-kmp-configuration    = "0.5.2"
-gradle-kotlin               = "2.2.20"
-gradle-publish-maven        = "0.34.0"
+gradle-kotlin               = "2.2.21"
+gradle-publish-maven        = "0.35.0"
 
-kmp-file                    = "0.5.1-SNAPSHOT"
+kmp-file                    = "0.6.0-SNAPSHOT"
 kmp-process                 = "0.4.0"
 kotlincrypto-catalog        = "0.8.0" # Utilized from settings.gradle.kts
 kotlinx-coroutines          = "1.10.2"
@@ -27,6 +27,7 @@ slf4j                       = "2.0.16" # Do not upgrade unless upgrading ktor
 
 [libraries]
 encoding-base16             = { module = "io.matthewnelson.encoding:base16", version.ref = "encoding" }
+encoding-utf8               = { module = "io.matthewnelson.encoding:utf8", version.ref = "encoding" }
 
 immutable-collections       = { module = "io.matthewnelson.immutable:collections", version.ref = "immutable" }
 

@@ -18,6 +18,7 @@ package io.matthewnelson.kmp.log.file
 import io.matthewnelson.encoding.base16.Base16
 import io.matthewnelson.encoding.core.Decoder.Companion.decodeToByteArray
 import io.matthewnelson.encoding.core.Encoder.Companion.encodeToString
+import io.matthewnelson.encoding.utf8.UTF8
 import io.matthewnelson.immutable.collections.toImmutableSet
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.IOException
@@ -28,7 +29,6 @@ import io.matthewnelson.kmp.file.resolve
 import io.matthewnelson.kmp.file.toFile
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
-import io.matthewnelson.kmp.log.file.internal.UTF8
 import io.matthewnelson.kmp.log.file.internal.isDesktop
 import org.kotlincrypto.hash.blake2.BLAKE2s
 import kotlin.jvm.JvmField
