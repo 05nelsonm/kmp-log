@@ -1,6 +1,12 @@
 $dokka.format:html-v1
 $dokka.linkExtension:html
-
+$dokka.location:io.matthewnelson.kmp.log//d/io.matthewnelson.kmp.log.Log.Logger#kotlin.Throwable?#kotlin.String?#kotlin.Any?/PointingToDeclaration/log/io.matthewnelson.kmp.log/[jvm]d.html
+$dokka.location:io.matthewnelson.kmp.log//e/io.matthewnelson.kmp.log.Log.Logger#kotlin.Throwable?#kotlin.String?#kotlin.Any?/PointingToDeclaration/log/io.matthewnelson.kmp.log/[jvm]e.html
+$dokka.location:io.matthewnelson.kmp.log//i/io.matthewnelson.kmp.log.Log.Logger#kotlin.Throwable?#kotlin.String?#kotlin.Any?/PointingToDeclaration/log/io.matthewnelson.kmp.log/[jvm]i.html
+$dokka.location:io.matthewnelson.kmp.log//log/io.matthewnelson.kmp.log.Log.Logger#io.matthewnelson.kmp.log.Log.Level#kotlin.Throwable?#kotlin.String?#kotlin.Any?/PointingToDeclaration/log/io.matthewnelson.kmp.log/[jvm]log.html
+$dokka.location:io.matthewnelson.kmp.log//v/io.matthewnelson.kmp.log.Log.Logger#kotlin.Throwable?#kotlin.String?#kotlin.Any?/PointingToDeclaration/log/io.matthewnelson.kmp.log/[jvm]v.html
+$dokka.location:io.matthewnelson.kmp.log//w/io.matthewnelson.kmp.log.Log.Logger#kotlin.Throwable?#kotlin.String?#kotlin.Any?/PointingToDeclaration/log/io.matthewnelson.kmp.log/[jvm]w.html
+$dokka.location:io.matthewnelson.kmp.log//wtf/io.matthewnelson.kmp.log.Log.Logger#kotlin.Throwable?#kotlin.String?#kotlin.Any?/PointingToDeclaration/log/io.matthewnelson.kmp.log/[jvm]wtf.html
 module:library/compat-ktor
 io.matthewnelson.kmp.log.compat.ktor
 module:library/compat-slf4j
