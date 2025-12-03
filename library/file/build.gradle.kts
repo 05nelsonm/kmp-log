@@ -45,6 +45,7 @@ kmpConfiguration {
                 dependencies {
                     api(project(":library:log"))
                     implementation(libs.encoding.base16)
+                    implementation(libs.encoding.utf8)
                     implementation(libs.immutable.collections)
                     implementation(libs.kmp.file.async)
                     implementation(libs.kotlinx.coroutines.core)
