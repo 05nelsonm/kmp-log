@@ -3,10 +3,10 @@
 [![badge-latest]][url-latest]
 
 [![badge-kotlin]][url-kotlin]
+[![badge-immutable]][url-immutable]
 <!-- TODO: Uncomment when :library:file is re-enabled
 [![badge-coroutines]][url-coroutines]
 [![badge-encoding]][url-encoding]
-[![badge-immutable]][url-immutable]
 [![badge-kmp-file]][url-kmp-file]
 [![badge-kotlincrypto-hash]][url-kotlincrypto-hash]
 -->
