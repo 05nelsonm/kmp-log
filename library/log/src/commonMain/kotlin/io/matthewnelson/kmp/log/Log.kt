@@ -17,6 +17,7 @@
 
 package io.matthewnelson.kmp.log
 
+import io.matthewnelson.immutable.collections.immutableListOf
 import io.matthewnelson.kmp.log.internal.ABORT_HANDLER_UID
 import io.matthewnelson.kmp.log.internal.aborterAcceptsMessages
 import io.matthewnelson.kmp.log.internal.commonCheckDomain
@@ -810,41 +811,47 @@ public abstract class Log {
     public companion object Root {
 
         /**
-         * Returns a list of all [Log] instances that are currently installed.
+         * The currently installed [Log] instances.
+         *
+         * @return An immutable list of currently installed [Log] instances.
          * */
         @JvmStatic
-        public fun installed(): List<Log> = LOGS._ARRAY.toList()
+        public fun installed(): List<Log> = LOGS.list()
 
         /**
-         * Returns the [Log] instance currently installed where [Log.uid] matches that
-         * which is specified, or `null` if no [Log] instances are found.
+         * Retrieve an installed [Log] instance by its [Log.uid].
+         *
+         * @param [uid] The [Log.uid] to search for.
+         *
+         * @return The [Log] instance, or `null` if no [Log] instances with the [uid]
+         *   are found.
          * */
         @JvmStatic
-        public operator fun get(uid: String): Log? = LOGS._ARRAY.firstOrNull { it.uid == uid }
+        public operator fun get(uid: String): Log? = LOGS.array().firstOrNull { it.uid == uid }
 
         /**
          * Install a [Log] instance.
          *
          * @param [log] The [Log] instance to install.
          *
-         * @return `true` if the [Log] instance was installed, or `false` if a [Log]
-         *   instance with the same [Log.uid] is already installed.
+         * @return `true` if the [Log] instance has been installed, or `false` if it has not
+         *   been installed due to a [Log] with the same [Log.uid] already being installed.
          *
          * @see [installOrThrow]
          * */
         @JvmStatic
         public fun install(log: Log): Boolean {
             LOGS.withLockAndReentryGuard {
-                val logs = _ARRAY
+                val logs = array()
                 if (logs.firstOrNull { it.uid == log.uid } != null) return false
                 if (log.uid == AbortHandler.uid) {
                     require(log == AbortHandler) { "$log is not $AbortHandler" }
                     // Always install AbortHandler as the last instance
-                    _ARRAY = arrayOf(*logs, log)
+                    update(installed = arrayOf(*logs, log))
                     return true
                 }
                 log.doOnInstall()
-                _ARRAY = arrayOf(log, *logs)
+                update(installed = arrayOf(log, *logs))
                 return true
             }
         }
@@ -875,13 +882,14 @@ public abstract class Log {
         @JvmStatic
         public fun uninstallAll(evenAbortHandler: Boolean) {
             LOGS.withLockAndReentryGuard {
-                val logs = _ARRAY
+                val logs = array()
                 if (logs.isEmpty()) return
-                _ARRAY = when {
+                val resized: Array<Log> = when {
                     evenAbortHandler -> emptyArray()
                     logs.contains(AbortHandler) -> if (logs.size == 1) return else arrayOf(AbortHandler)
                     else -> emptyArray()
                 }
+                update(installed = resized)
                 var threw: Throwable? = null
                 logs.forEach { log ->
                     try {
@@ -924,18 +932,18 @@ public abstract class Log {
         @JvmStatic
         public fun uninstall(uid: String): Boolean {
             LOGS.withLockAndReentryGuard {
-                val logs = _ARRAY
+                val logs = array()
                 val index = logs.indexOfFirst { it.uid == uid }
                 if (index == -1) return false
-                _ARRAY = if (logs.size == 1) {
-                    emptyArray()
+                if (logs.size == 1) {
+                    update(installed = emptyArray())
                 } else {
                     val list = ArrayList<Log>(logs.size - 1)
                     for (i in logs.indices) {
                         if (i == index) continue
                         list.add(logs[i])
                     }
-                    list.toTypedArray()
+                    update(installed = list.toTypedArray())
                 }
                 logs[index].doOnUninstall()
                 return true
@@ -984,7 +992,7 @@ public abstract class Log {
         private val LOGS by lazy { Logs() }
 
         private fun isLoggable(logger: Logger, level: Level): Boolean {
-            LOGS._ARRAY.forEach { log ->
+            LOGS.array().forEach { log ->
                 if (log.isLoggable(logger, level)) return true
             }
             return false
@@ -994,7 +1002,7 @@ public abstract class Log {
             val m = if (msg.isNullOrEmpty()) null else msg
             if (m == null && t == null) return 0
             var loggedBy = 0
-            LOGS._ARRAY.forEach { log ->
+            LOGS.array().forEach { log ->
                 if (!log.isLoggable(logger, level)) return@forEach
                 val tOrFatal = if (loggedBy == 0 && level == AbortHandler.max && log == AbortHandler) {
                     // AbortHandler will always be installed as the last Log instance.
@@ -1041,20 +1049,35 @@ public abstract class Log {
         // throws a fit due to AbortController.INSTANCE being null.
         @Suppress("PropertyName")
         private class Logs {
+
+            @Volatile
+            @Deprecated("Use array/list/update", level = DeprecationLevel.ERROR)
+            var _INSTALLED: Pair<Array<Log>, List<Log>> = Pair(arrayOf(AbortHandler), immutableListOf(AbortHandler))
+
+            @Deprecated("Use withLockAndReentryGuard", level = DeprecationLevel.ERROR)
             val LOCK = newLock()
-
-            // All modifications are guarded by withLockAndReentryGuard
             @Volatile
-            var _ARRAY: Array<Log> = arrayOf(AbortHandler)
-
-            // For guarding against Logs calling install/uninstall functions
-            // from their onInstall/onUninstall implementations.
-            @Volatile
+            @Deprecated("Use withLockAndReentryGuard", level = DeprecationLevel.ERROR)
             var _REENTRY_GUARD: Boolean = false
+
+            inline fun array(): Array<Log> {
+                @Suppress("DEPRECATION_ERROR")
+                return _INSTALLED.first
+            }
+            inline fun list(): List<Log> {
+                @Suppress("DEPRECATION_ERROR")
+                return _INSTALLED.second
+            }
+            inline fun update(installed: Array<Log>) {
+                @Suppress("DEPRECATION_ERROR")
+                _INSTALLED = installed to immutableListOf(*installed)
+            }
         }
 
+        @Throws(IllegalStateException::class)
         private inline fun <R> Logs.withLockAndReentryGuard(block: Logs.() -> R): R {
             contract { callsInPlace(block, InvocationKind.AT_MOST_ONCE) }
+            @Suppress("DEPRECATION_ERROR")
             LOCK.withLock {
                 check(!_REENTRY_GUARD) {
                     "Log.Root.{install/uninstall} functions cannot be called from Log.{onInstall/onUninstall}"
