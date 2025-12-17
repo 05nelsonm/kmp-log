@@ -30,6 +30,11 @@ kmpConfiguration {
         }
 
         common {
+            sourceSetMain {
+                dependencies {
+                    implementation(libs.immutable.collections)
+                }
+            }
             sourceSetTest {
                 dependencies {
                     implementation(libs.kotlinx.coroutines.test)

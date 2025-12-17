@@ -3,10 +3,10 @@
 [![badge-latest]][url-latest]
 
 [![badge-kotlin]][url-kotlin]
+[![badge-immutable]][url-immutable]
 <!-- TODO: Uncomment when :library:file is re-enabled
 [![badge-coroutines]][url-coroutines]
 [![badge-encoding]][url-encoding]
-[![badge-immutable]][url-immutable]
 [![badge-kmp-file]][url-kmp-file]
 [![badge-kotlincrypto-hash]][url-kotlincrypto-hash]
 -->
@@ -181,9 +181,9 @@ dependencies {
 
 <!-- TAG_DEPENDENCIES -->
 [badge-coroutines]: https://img.shields.io/badge/kotlinx.coroutines-1.10.2-blue.svg?logo=kotlin
-[badge-encoding]: https://img.shields.io/badge/encoding-2.6.0--SNAPSHOT-blue.svg?style=flat
+[badge-encoding]: https://img.shields.io/badge/encoding-2.6.0-blue.svg?style=flat
 [badge-immutable]: https://img.shields.io/badge/immutable-0.3.0-blue.svg?style=flat
-[badge-kmp-file]: https://img.shields.io/badge/kmp--file-0.6.0--SNAPSHOT-blue.svg?style=flat
+[badge-kmp-file]: https://img.shields.io/badge/kmp--file-0.6.0-blue.svg?style=flat
 [badge-kotlin]: https://img.shields.io/badge/kotlin-2.2.21-blue.svg?logo=kotlin
 [badge-kotlincrypto-hash]: https://img.shields.io/badge/KotlinCrypto.hash-0.8.0-blue.svg?style=flat
 
