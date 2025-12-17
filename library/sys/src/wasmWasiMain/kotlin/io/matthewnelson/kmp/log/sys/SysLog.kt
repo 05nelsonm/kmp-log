@@ -17,12 +17,15 @@
 
 package io.matthewnelson.kmp.log.sys
 
+import io.matthewnelson.encoding.core.Decoder.Companion.decodeBuffered
+import io.matthewnelson.encoding.utf8.UTF8
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.sys.internal.SYS_LOG_UID
 import io.matthewnelson.kmp.log.sys.internal.commonFormatLogOrNull
 import io.matthewnelson.kmp.log.sys.internal.commonIsInstalled
 import io.matthewnelson.kmp.log.sys.internal.commonOf
 import io.matthewnelson.kmp.log.sys.internal.wasiDateTime
+import kotlin.wasm.unsafe.Pointer
 import kotlin.wasm.unsafe.UnsafeWasmMemoryApi
 import kotlin.wasm.unsafe.withScopedMemoryAllocator
 
@@ -48,8 +51,8 @@ public actual class SysLog private actual constructor(min: Level): Log(SYS_LOG_U
     actual override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         val formatted = run {
             val dateTime = wasiDateTime()
-            commonFormatLogOrNull(level, domain, tag, msg, t, dateTime, omitLastNewLine = false) ?: return false
-        }.toString().encodeToByteArray()
+            commonFormatLogOrNull(level, domain, tag, msg, t, dateTime, omitLastNewLine = false)
+        } ?: return false
 
         val fd = when (level) {
             Level.Verbose,
@@ -60,26 +63,11 @@ public actual class SysLog private actual constructor(min: Level): Log(SYS_LOG_U
             Level.Fatal -> STDERR_FILENO
         }
 
-        @OptIn(UnsafeWasmMemoryApi::class)
-        withScopedMemoryAllocator { alloc ->
-            val data = alloc.allocate(formatted.size)
-            for (i in formatted.indices) {
-                (data + i).storeByte(formatted[i])
-            }
-            val iovec = alloc.allocate(Int.SIZE_BYTES * 2)
-            iovec.storeInt(data.address.toInt())
-            (iovec + Int.SIZE_BYTES).storeInt(formatted.size)
-            val result = alloc.allocate(Int.SIZE_BYTES)
-
-            val ret = fdWrite(
-                fd = fd,
-                iovecPtr = iovec.address.toInt(),
-                iovecSize = 1,
-                resultPtr = result.address.toInt(),
-            )
-
-            if (ret != 0) return false
-            return result.loadInt() == formatted.size
+        return try {
+            writeLog(formatted, fd)
+            true
+        } catch (_: IllegalStateException) {
+            false
         }
     }
 
@@ -91,3 +79,48 @@ public actual class SysLog private actual constructor(min: Level): Log(SYS_LOG_U
 @Suppress("OPT_IN_USAGE")
 @WasmImport("wasi_snapshot_preview1", "fd_write")
 private external fun fdWrite(fd: Int, iovecPtr: Int, iovecSize: Int, resultPtr: Int): Int
+
+// @Throws(IllegalStateException::class)
+private fun writeLog(formatted: CharSequence, fd: Int) {
+    @OptIn(UnsafeWasmMemoryApi::class)
+    withScopedMemoryAllocator { alloc ->
+        var data: Pointer? = null
+        val iovec = alloc.allocate(Int.SIZE_BYTES * 2)
+        val result = alloc.allocate(Int.SIZE_BYTES)
+
+        formatted.decodeBuffered(
+            decoder = UTF8,
+            throwOnOverflow = false,
+            maxBufSize = 1024 * 2,
+            action = { buf, offset, len ->
+                // Cannot allocate a Pointer for data until we know the actual size
+                // of buf (which will be re-used on every invocation of action).
+                //
+                // decodeBuffered may use a smaller one than what is defined for
+                // maxBufSize if it can one-shot the text to UTF-8 byte transformation.
+                //
+                // Also, it will never be 0 len because commonFormatLogOrNull will
+                // return null instead of an empty StringBuilder, so there is at LEAST 1.
+                if (data == null) data = alloc.allocate(buf.size)
+
+                repeat(len) { i -> (data + i).storeByte(buf[offset + i]) }
+
+                var written = 0
+                while (written < len) {
+                    iovec.storeInt((data + written).address.toInt())
+                    (iovec + Int.SIZE_BYTES).storeInt(len - written)
+
+                    val ret = fdWrite(
+                        fd = fd,
+                        iovecPtr = iovec.address.toInt(),
+                        iovecSize = 1,
+                        resultPtr = result.address.toInt(),
+                    )
+                    check(ret == 0) { "ret != 0" }
+
+                    written += result.loadInt()
+                }
+            }
+        )
+    }
+}
