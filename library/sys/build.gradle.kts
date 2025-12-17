@@ -105,6 +105,12 @@ kmpConfiguration {
             target {
                 nodejs()
             }
+
+            sourceSetMain {
+                dependencies {
+                    implementation(libs.encoding.utf8)
+                }
+            }
         }
 
         common {
