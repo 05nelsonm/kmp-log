@@ -6,8 +6,29 @@ package = io.matthewnelson.kmp.log.internal
 #include <time.h>
 #endif
 
+/**
+ * The size of the int array required by kmp_log_local_date_time
+ **/
+#define KMP_LOG_LOCAL_DATE_TIME_SIZE 7
+
+/**
+ * Retrieves the locally formatted date and time from system sources,
+ * populating the provided date_time integer array in the following
+ * manner.
+ *
+ * Indices:
+ *  - 0: Year
+ *  - 1: Month   (1-12)
+ *  - 2: Day     (1-31)
+ *  - 3: Hours   (0-23)
+ *  - 4: Minutes (0-59)
+ *  - 5: Seconds (0-59)
+ *  - 6: Millis  (0-999)
+ *
+ * Returns 0 on success, -1 otherwise.
+ **/
 int
-kmp_log_local_date_time(int date_time[7])
+kmp_log_local_date_time(int date_time[KMP_LOG_LOCAL_DATE_TIME_SIZE])
 {
   if (!date_time) {
     return -1;

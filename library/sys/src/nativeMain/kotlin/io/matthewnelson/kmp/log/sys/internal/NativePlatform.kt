@@ -18,6 +18,7 @@
 package io.matthewnelson.kmp.log.sys.internal
 
 import io.matthewnelson.kmp.log.Log.Level
+import io.matthewnelson.kmp.log.internal.KMP_LOG_LOCAL_DATE_TIME_SIZE
 import io.matthewnelson.kmp.log.internal.kmp_log_local_date_time
 import io.matthewnelson.kmp.log.sys.SysLog
 import kotlinx.cinterop.CPointer
@@ -33,7 +34,8 @@ import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
 internal fun SysLog.Companion.nativeDateTime(): CharSequence? {
-    val dateTime = IntArray(7)
+    @OptIn(ExperimentalForeignApi::class)
+    val dateTime = IntArray(KMP_LOG_LOCAL_DATE_TIME_SIZE)
     @OptIn(ExperimentalForeignApi::class)
     @Suppress("RemoveRedundantCallsOfConversionMethods")
     val ret = dateTime.usePinned { pinned ->
