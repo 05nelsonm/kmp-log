@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("NOTHING_TO_INLINE")
+@file:Suppress("NOTHING_TO_INLINE", "RedundantCompanionReference")
 
 package io.matthewnelson.kmp.log.compat.ktor.internal
 
@@ -21,7 +21,7 @@ import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.compat.ktor.KmpLogKtorLogger
 
 internal inline fun KmpLogKtorLogger.nonJvmFindMinLevelOrNull(): Log.Level? {
-    Log.Level.entries.forEach { level ->
+    Log.Root.installedLevels().forEach { level ->
         if (delegate.isLoggable(level)) return level
     }
     return null
