@@ -45,4 +45,9 @@ class LocalDateTimeNativeUnitTest {
         assertTrue(dt[5] in 0..59, "index[5]")
         assertTrue(dt[6] in 0..999, "index[6]")
     }
+
+    @Test
+    fun givenKmpLogLocalDateTime_whenNullArgument_thenReturnsNeg1() {
+        assertEquals(-1, kmp_log_local_date_time(null))
+    }
 }
