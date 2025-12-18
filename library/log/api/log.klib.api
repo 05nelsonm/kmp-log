@@ -106,6 +106,7 @@ abstract class io.matthewnelson.kmp.log/Log { // io.matthewnelson.kmp.log/Log|nu
         final fun get(kotlin/String): io.matthewnelson.kmp.log/Log? // io.matthewnelson.kmp.log/Log.Root.get|get(kotlin.String){}[0]
         final fun install(io.matthewnelson.kmp.log/Log): kotlin/Boolean // io.matthewnelson.kmp.log/Log.Root.install|install(io.matthewnelson.kmp.log.Log){}[0]
         final fun installed(): kotlin.collections/List<io.matthewnelson.kmp.log/Log> // io.matthewnelson.kmp.log/Log.Root.installed|installed(){}[0]
+        final fun installedLevels(): kotlin.collections/Set<io.matthewnelson.kmp.log/Log.Level> // io.matthewnelson.kmp.log/Log.Root.installedLevels|installedLevels(){}[0]
         final fun toString(): kotlin/String // io.matthewnelson.kmp.log/Log.Root.toString|toString(){}[0]
         final fun uninstall(kotlin/String): kotlin/Boolean // io.matthewnelson.kmp.log/Log.Root.uninstall|uninstall(kotlin.String){}[0]
         final fun uninstallAll(kotlin/Boolean) // io.matthewnelson.kmp.log/Log.Root.uninstallAll|uninstallAll(kotlin.Boolean){}[0]

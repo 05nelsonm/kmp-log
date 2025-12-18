@@ -135,4 +135,54 @@ class LogUnitTest {
             Root.uninstallAll(evenAbortHandler = false)
         }
     }
+
+    @Test
+    fun givenInstalledLevels_whenNoLogInstalled_thenIsEmpty() {
+        Root.uninstallAll(evenAbortHandler = true)
+        try {
+            assertTrue(Root.installedLevels().isEmpty())
+        } finally {
+            Root.installOrThrow(Log.AbortHandler)
+        }
+    }
+
+    @Test
+    fun givenInstalledLevels_whenLogsInstalled_thenContainsExpectedLevels() {
+        assertEquals(listOf(Log.AbortHandler), Root.installed())
+        assertEquals(setOf(Log.Level.Fatal), Root.installedLevels())
+
+        try {
+            Root.install(
+                TestLog(
+                    uid = "test.log1",
+                    min = Log.Level.Debug,
+                    max = Log.Level.Info,
+                )
+            )
+            assertEquals(
+                setOf(Log.Level.Debug, Log.Level.Info, Log.Level.Fatal),
+                Root.installedLevels(),
+            )
+
+            Root.install(
+                TestLog(
+                    uid = "test.log2",
+                    min = Log.Level.Verbose,
+                    max = Log.Level.Warn,
+                )
+            )
+            assertEquals(
+                setOf(Log.Level.Verbose, Log.Level.Debug, Log.Level.Info, Log.Level.Warn, Log.Level.Fatal),
+                Root.installedLevels(),
+            )
+
+            Root.uninstallAll(evenAbortHandler = false)
+            assertEquals(
+                setOf(Log.Level.Fatal),
+                Root.installedLevels(),
+            )
+        } finally {
+            Root.uninstallAll(evenAbortHandler = false)
+        }
+    }
 }
