@@ -18,6 +18,8 @@
 package io.matthewnelson.kmp.log
 
 import io.matthewnelson.immutable.collections.immutableListOf
+import io.matthewnelson.immutable.collections.immutableSetOf
+import io.matthewnelson.immutable.collections.toImmutableSet
 import io.matthewnelson.kmp.log.internal.ABORT_HANDLER_UID
 import io.matthewnelson.kmp.log.internal.aborterAcceptsMessages
 import io.matthewnelson.kmp.log.internal.commonCheckDomain
@@ -61,6 +63,11 @@ import kotlin.jvm.JvmSynthetic
  * */
 public abstract class Log {
 
+    /**
+     * The level to log at.
+     *
+     * @see [Log.Root.installedLevels]
+     * */
     public enum class Level {
 
         /**
@@ -819,6 +826,18 @@ public abstract class Log {
         public fun installed(): List<Log> = LOGS.list()
 
         /**
+         * All available [Level] to log at for the currently installed [Log] instances.
+         *
+         * **NOTE:** This has no bearing on [Logger.isLoggable]. The purpose of this API
+         * is to provide a more refined set than [Level.entries].
+         *
+         * @return An immutable set of currently available [Level] to log at. Can be
+         *   empty if no [Log] instances are installed.
+         * */
+        @JvmStatic
+        public fun installedLevels(): Set<Level> = LOGS.levels()
+
+        /**
          * Retrieve an installed [Log] instance by its [Log.uid].
          *
          * @param [uid] The [Log.uid] to search for.
@@ -1051,8 +1070,9 @@ public abstract class Log {
         private class Logs {
 
             @Volatile
-            @Deprecated("Use array/list/update", level = DeprecationLevel.ERROR)
-            var _INSTALLED: Pair<Array<Log>, List<Log>> = Pair(arrayOf(AbortHandler), immutableListOf(AbortHandler))
+            @Deprecated("Use array/list/levels/update", level = DeprecationLevel.ERROR)
+            var _INSTALLED: Triple<Array<Log>, List<Log>, Set<Level>> =
+                Triple(arrayOf(AbortHandler), immutableListOf(AbortHandler), immutableSetOf(Level.Fatal))
 
             @Deprecated("Use withLockAndReentryGuard", level = DeprecationLevel.ERROR)
             val LOCK = newLock()
@@ -1068,9 +1088,21 @@ public abstract class Log {
                 @Suppress("DEPRECATION_ERROR")
                 return _INSTALLED.second
             }
-            inline fun update(installed: Array<Log>) {
+            inline fun levels(): Set<Level> {
                 @Suppress("DEPRECATION_ERROR")
-                _INSTALLED = installed to immutableListOf(*installed)
+                return _INSTALLED.third
+            }
+            inline fun update(installed: Array<Log>) {
+                val levels = LinkedHashSet<Level>(Level.entries.size)
+                Level.entries.forEach { level ->
+                    for (log in installed) {
+                        if (level !in log.min..log.max) continue
+                        levels.add(level)
+                        break
+                    }
+                }
+                @Suppress("DEPRECATION_ERROR")
+                _INSTALLED = Triple(installed, immutableListOf(*installed), levels.toImmutableSet())
             }
         }
 
