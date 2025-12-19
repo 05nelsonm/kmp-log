@@ -1139,7 +1139,7 @@ public abstract class Log {
      *  - Js/WasmJs:
      *      - Browser: Throw exception
      *      - Node.js: [process.abort](https://nodejs.org/api/process.html#processabort)
-     *  - WasmWasi: [proc_exit](https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#-proc_exitrval-exitcode)
+     *  - WasmWasi: [proc_exit](https://github.com/WebAssembly/WASI/blob/wasi-0.1/preview1/docs.md#-proc_exitrval-exitcode)
      *  - Native:
      *      - Android:
      *          - API 30+: [__android_log_call_aborter](https://cs.android.com/android/platform/superproject/+/android-latest-release:system/logging/liblog/include/android/log.h;l=336)
