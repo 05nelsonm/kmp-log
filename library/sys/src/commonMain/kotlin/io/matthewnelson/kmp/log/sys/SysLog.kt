@@ -25,7 +25,7 @@ import io.matthewnelson.kmp.log.Log
  * - Android: [android.util.Log.println](https://developer.android.com/reference/android/util/Log#println(int,%20java.lang.String,%20java.lang.String))
  * - Jvm/AndroidUnitTest: [System.out](https://docs.oracle.com/javase/8/docs/api/java/lang/System.html#out)/[System.err](https://docs.oracle.com/javase/8/docs/api/java/lang/System.html#err)
  * - Js/WasmJs: [Console](https://developer.mozilla.org/en-US/docs/Web/API/console)
- * - WasmWasi: [fd_write](https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#-fd_writefd-fd-iovs-ciovec_array---resultsize-errno) to `STDOUT_FILENO`/`STDERR_FILENO`
+ * - WasmWasi: [fd_write](https://github.com/WebAssembly/WASI/blob/wasi-0.1/preview1/docs.md#-fd_writefd-fd-iovs-ciovec_array---resultsize-errno) to `STDOUT_FILENO`/`STDERR_FILENO`
  * - Native:
  *     - Android: [__android_log_print](https://cs.android.com/android/platform/superproject/+/android-latest-release:system/logging/liblog/include/android/log.h;l=115)
  *     - Darwin/Linux/MinGW: [fprintf](https://www.man7.org/linux/man-pages/man3/fprintf.3p.html) to `stdout`/`stderr`
