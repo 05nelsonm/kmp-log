@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## Version 0.1.1 (2025-12-23)
+ - Mitigate unnecessary `List` allocations when `Log.Root.installed` is called by persisting 
+   and returning an immutable one [[#36]][36]
+ - Implements buffered writing of `UTF-8` for `SysLog` `WasmWasi` [[#38]][38]
+ - Adds `Log.Root.installedLevels` function for retrieving a more refined set than 
+   `Log.Level.entries` to use with module `:compat-ktor` non-jvm implementations [[#40]][40]
+ - Adds `KMP_LOG_LOCAL_DATE_TIME_SIZE` definition and documentation to `local_date_time` 
+   cinterop [[#41]][41]
+ - Adds Logger instance caching to modules `:compat-slf4j` and `:compat-ktor` [[#43]][43]
+
 ## Version 0.1.0 (2025-12-03)
  - Update dependencies [[#34]][34]:
      - Kotlin `2.2.20` -> `2.2.21`
@@ -17,3 +27,8 @@
 
 [33]: https://github.com/05nelsonm/kmp-log/pull/33
 [34]: https://github.com/05nelsonm/kmp-log/pull/34
+[36]: https://github.com/05nelsonm/kmp-log/pull/36
+[38]: https://github.com/05nelsonm/kmp-log/pull/38
+[40]: https://github.com/05nelsonm/kmp-log/pull/40
+[41]: https://github.com/05nelsonm/kmp-log/pull/41
+[43]: https://github.com/05nelsonm/kmp-log/pull/43
