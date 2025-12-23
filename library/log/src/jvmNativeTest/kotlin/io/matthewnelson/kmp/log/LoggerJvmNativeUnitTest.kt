@@ -33,7 +33,7 @@ class LoggerJvmNativeUnitTest {
         val before = Log.Logger.size()
 
         val limit = 1_000
-        val loggers = Array(200_000) {
+        val loggers = Array(200 * limit) {
             val i = Random.nextInt(from = 0, until = limit)
             async(Dispatchers.IO) {
                 Log.Logger.of("random_$i")

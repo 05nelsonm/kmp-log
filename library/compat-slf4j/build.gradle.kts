@@ -37,6 +37,11 @@ kmpConfiguration {
                     api(project(":library:log"))
                 }
             }
+            sourceSetTest {
+                dependencies {
+                    implementation(libs.kotlinx.coroutines.test)
+                }
+            }
         }
 
         configureKotlinVersion()

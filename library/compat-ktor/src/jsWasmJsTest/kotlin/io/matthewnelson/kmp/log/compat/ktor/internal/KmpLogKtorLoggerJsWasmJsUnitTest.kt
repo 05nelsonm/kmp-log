@@ -17,20 +17,18 @@ package io.matthewnelson.kmp.log.compat.ktor.internal
 
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.compat.ktor.KmpLogKtorLogger
+import io.matthewnelson.kmp.log.compat.ktor.asKtorLogger
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
-private val LOGGERS = HashMap<Int, KmpLogKtorLogger>(initialCapacity = 10, loadFactor = 1.0F)
+class KmpLogKtorLoggerJsWasmJsUnitTest {
 
-internal fun ((Log.Logger) -> KmpLogKtorLogger).jsWasmJsOf(
-    logger: Log.Logger,
-): KmpLogKtorLogger {
-    val key = logger.hashCode()
-    var ktor = LOGGERS[key]
-    if (ktor == null) {
-        ktor = this(logger)
-        LOGGERS[key] = ktor
+    @Test
+    fun givenLogger_whenCreated_thenInstanceIsCached() {
+        val log = Log.Logger.of("jsWasmJs-cached")
+        log.asKtorLogger()
+        val expected = KmpLogKtorLogger.size()
+        log.asKtorLogger() // Should return cached instance
+        assertEquals(expected, KmpLogKtorLogger.size())
     }
-    return ktor
 }
-
-// Exposed for testing
-internal fun KmpLogKtorLogger.Compat.size(): Int = LOGGERS.size
