@@ -68,13 +68,19 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
-    public val whitelistDomains: Set<String>
+    public val whitelistDomain: Set<String>
 
     /**
      * TODO
      * */
     @JvmField
-    public val whitelistTags: Set<String>
+    public val whitelistDomainNull: Boolean
+
+    /**
+     * TODO
+     * */
+    @JvmField
+    public val whitelistTag: Set<String>
 
     /**
      * TODO
@@ -95,212 +101,164 @@ public class FileLog: Log {
         private var _fileExtension = ""
         private var _maxLogSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
         private var _maxLogs: Byte = if (isDesktop())  5  else 3
-        private val _whitelistDomains = mutableSetOf<String>()
-        private val _whitelistTags = mutableSetOf<String>()
+        private val _whitelistDomain = mutableSetOf<String>()
+        private var _whitelistDomainNull = true
+        private val _whitelistTag = mutableSetOf<String>()
 
         /**
          * DEFAULT: [Level.Info]
          *
          * TODO
          * */
-        public fun min(level: Level): Builder {
-            _min = level
-            return this
-        }
+        public fun min(level: Level): Builder = apply { _min = level }
 
         /**
          * DEFAULT: [Level.Fatal]
          *
          * TODO
          * */
-        public fun max(level: Level): Builder {
-            _max = level
-            return this
-        }
+        public fun max(level: Level): Builder = apply { _max = level }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryGroupReadable(enable: Boolean): Builder {
-            _directoryMode.groupRead = enable
-            return this
-        }
+        public fun directoryGroupReadable(enable: Boolean): Builder = apply { _directoryMode.groupRead = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryGroupWritable(enable: Boolean): Builder {
-            _directoryMode.groupWrite = enable
-            return this
-        }
+        public fun directoryGroupWritable(enable: Boolean): Builder = apply { _directoryMode.groupWrite = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryOtherReadable(enable: Boolean): Builder {
-            _directoryMode.otherRead = enable
-            return this
-        }
+        public fun directoryOtherReadable(enable: Boolean): Builder = apply { _directoryMode.otherRead = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryOtherWritable(enable: Boolean): Builder {
-            _directoryMode.otherWrite = enable
-            return this
-        }
+        public fun directoryOtherWritable(enable: Boolean): Builder = apply { _directoryMode.otherWrite = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileGroupReadable(enable: Boolean): Builder {
-            _fileMode.groupRead = enable
-            return this
-        }
+        public fun fileGroupReadable(enable: Boolean): Builder = apply { _fileMode.groupRead = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileGroupWritable(enable: Boolean): Builder {
-            _fileMode.groupWrite = enable
-            return this
-        }
+        public fun fileGroupWritable(enable: Boolean): Builder = apply { _fileMode.groupWrite = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileOtherReadable(enable: Boolean): Builder {
-            _fileMode.otherRead = enable
-            return this
-        }
+        public fun fileOtherReadable(enable: Boolean): Builder = apply { _fileMode.otherRead = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileOtherWritable(enable: Boolean): Builder {
-            _fileMode.otherWrite = enable
-            return this
-        }
+        public fun fileOtherWritable(enable: Boolean): Builder = apply { _fileMode.otherWrite = enable }
 
         /**
          * DEFAULT: `log`
          *
          * TODO
          * */
-        public fun fileName(name: String): Builder {
-            _fileName = name
-            return this
-        }
+        public fun fileName(name: String): Builder = apply { _fileName = name }
 
         /**
-         * DEFAULT: no extension
+         * DEFAULT: none
          *
          * TODO
          * */
-        public fun fileExtension(name: String): Builder {
-            _fileExtension = name
-            return this
-        }
+        public fun fileExtension(name: String): Builder = apply { _fileExtension = name }
 
         /**
          * DEFAULT:
-         *  - `5 Mb` on Android, AndroidNative, iOS, tvOS, watchOS
+         *  - `5 Mb` on `Android`, `AndroidNative`, `iOS`, `tvOS`, `watchOS`
          *  - `10 Mb` otherwise
          *
          * TODO
          * */
-        public fun maxLogSize(bytes: Long): Builder {
-            _maxLogSize = bytes
-            return this
-        }
+        public fun maxLogSize(bytes: Long): Builder = apply { _maxLogSize = bytes }
 
         /**
          * DEFAULT:
-         *  - `3` on Android, AndroidNative, iOS, tvOS, watchOS
+         *  - `3` on `Android`, `AndroidNative`, `iOS`, `tvOS`, `watchOS`
          *  - `5` otherwise
          *
          * TODO
          * */
-        public fun maxLogs(max: Byte): Builder {
-            _maxLogs = max
-            return this
-        }
+        public fun maxLogs(max: Byte): Builder = apply { _maxLogs = max }
 
         /**
-         * DEFAULT: no domains (i.e. Allow all [Logger.domain])
+         * DEFAULT: empty (i.e. Allow all [Logger.domain])
+         *
+         * TODO
+         * @see [whitelistDomainNull]
+         * */
+        public fun whitelistDomain(domain: String): Builder = apply { _whitelistDomain.add(domain) }
+
+        /**
+         * DEFAULT: empty (i.e. Allow all [Logger.domain])
+         *
+         * TODO
+         * @see [whitelistDomainNull]
+         * */
+        public fun whitelistDomain(vararg domains: String): Builder = apply { _whitelistDomain.addAll(domains) }
+
+        /**
+         * DEFAULT: empty (i.e. Allow all [Logger.domain])
+         *
+         * TODO
+         * @see [whitelistDomainNull]
+         * */
+        public fun whitelistDomain(domains: Collection<String>): Builder = apply { _whitelistDomain.addAll(domains) }
+
+        /**
+         * DEFAULT: `true`
+         *
+         * TODO
+         * @see [whitelistDomain]
+         * */
+        public fun whitelistDomainNull(allow: Boolean): Builder = apply { _whitelistDomainNull = allow }
+
+        /**
+         * DEFAULT: empty (i.e. Allow all [Logger.tag])
          *
          * TODO
          * */
-        public fun whitelistDomain(domain: String): Builder {
-            _whitelistDomains.add(domain)
-            return this
-        }
+        public fun whitelistTag(tag: String): Builder = apply { _whitelistTag.add(tag) }
 
         /**
-         * DEFAULT: no domains (i.e. Allow all [Logger.domain])
+         * DEFAULT: empty (i.e. Allow all [Logger.tag])
          *
          * TODO
          * */
-        public fun whitelistDomain(vararg domains: String): Builder {
-            _whitelistDomains.addAll(domains)
-            return this
-        }
+        public fun whitelistTag(vararg tags: String): Builder = apply { _whitelistTag.addAll(tags) }
 
         /**
-         * DEFAULT: no domains (i.e. Allow all [Logger.domain])
+         * DEFAULT: empty (i.e. Allow all [Logger.tag])
          *
          * TODO
          * */
-        public fun whitelistDomain(domains: Collection<String>): Builder {
-            _whitelistDomains.addAll(domains)
-            return this
-        }
-
-        /**
-         * DEFAULT: no tags (i.e. Allow all [Logger.tag])
-         *
-         * TODO
-         * */
-        public fun whitelistTag(tag: String): Builder {
-            _whitelistTags.add(tag)
-            return this
-        }
-
-        /**
-         * DEFAULT: no tags (i.e. Allow all [Logger.tag])
-         *
-         * TODO
-         * */
-        public fun whitelistTag(vararg tags: String): Builder {
-            _whitelistTags.addAll(tags)
-            return this
-        }
-
-        /**
-         * DEFAULT: no tags (i.e. Allow all [Logger.tag])
-         *
-         * TODO
-         * */
-        public fun whitelistTag(tags: Collection<String>): Builder {
-            _whitelistTags.addAll(tags)
-            return this
-        }
+        public fun whitelistTag(tags: Collection<String>): Builder = apply { _whitelistTag.addAll(tags) }
 
         /**
          * TODO
@@ -328,10 +286,10 @@ public class FileLog: Log {
             require(fileExtension.indexOfFirst { it.isWhitespace() } == -1) { "fileExtension cannot contain whitespace" }
             require(!fileExtension.contains('.')) { "fileExtension cannot contain '.'" }
 
-            val whitelistDomains = _whitelistDomains.toImmutableSet()
-            whitelistDomains.forEach { domain -> Logger.checkDomain(domain) }
-            val whitelistTags = _whitelistTags.toImmutableSet()
-            whitelistTags.forEach { tag -> Logger.checkTag(tag) }
+            val whitelistDomain = _whitelistDomain.toImmutableSet()
+            whitelistDomain.forEach { domain -> Logger.checkDomain(domain) }
+            val whitelistTag = _whitelistTag.toImmutableSet()
+            whitelistTag.forEach { tag -> Logger.checkTag(tag) }
 
             val directory = logDirectory.toFile().canonicalFile2()
 
@@ -357,7 +315,7 @@ public class FileLog: Log {
             // in it, then it cannot be used in the Log.uid.
             val files0Hash = run {
                 // Will produce a 12 byte digest which comes out to 24 characters when base16 encoded
-                val blake2s = BLAKE2s(96)
+                val blake2s = BLAKE2s(bitStrength = Byte.SIZE_BITS * 12)
                 val digest = blake2s.digest(files.elementAt(0).path.decodeToByteArray(UTF8))
                 blake2s.update(digest)
                 blake2s.digestInto(digest, destOffset = 0)
@@ -373,8 +331,9 @@ public class FileLog: Log {
                 files0Hash = files0Hash,
                 fileMode = _fileMode.build(),
                 maxLogSize = _maxLogSize.coerceAtLeast(MIN_MAX_LOG_SIZE),
-                whitelistDomains = whitelistDomains,
-                whitelistTags = whitelistTags,
+                whitelistDomain = whitelistDomain,
+                whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
+                whitelistTag = whitelistTag,
             )
         }
 
@@ -403,7 +362,7 @@ public class FileLog: Log {
     private val directoryMode: String
     private val fileMode: String
 
-    private val LOG: Logger by lazy { Logger.of(tag = uid.substringAfter(UID_PREFIX), DOMAIN) }
+    private val LOG: Logger by lazy { Logger.of(tag = uid.substringAfter(UID_PREFIX, ""), DOMAIN) }
 
     private constructor(
         min: Level,
@@ -414,8 +373,9 @@ public class FileLog: Log {
         files0Hash: String,
         fileMode: String,
         maxLogSize: Long,
-        whitelistDomains: Set<String>,
-        whitelistTags: Set<String>,
+        whitelistDomain: Set<String>,
+        whitelistDomainNull: Boolean,
+        whitelistTag: Set<String>,
     ): super(uid = "${UID_PREFIX}FileLog-$files0Hash", min = min, max = max) {
         this.directory = directory
         this.files = files
@@ -425,8 +385,9 @@ public class FileLog: Log {
         this.directoryMode = directoryMode
         this.fileMode = fileMode
         this.maxLogSize = maxLogSize
-        this.whitelistDomains = whitelistDomains
-        this.whitelistTags = whitelistTags
+        this.whitelistDomain = whitelistDomain
+        this.whitelistDomainNull = whitelistDomainNull
+        this.whitelistTag = whitelistTag
     }
 
     override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
@@ -437,12 +398,16 @@ public class FileLog: Log {
     override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
         // Do not log to self, only to other Logs (if installed)
         if (domain == LOG.domain && tag == LOG.tag) return false
-        if (whitelistDomains.isNotEmpty()) {
-            if (domain == null) return false
-            if (!whitelistDomains.contains(domain)) return false
+
+        if (whitelistDomain.isNotEmpty()) {
+            if (domain == null) {
+                if (!whitelistDomainNull) return false
+            } else {
+                if (!whitelistDomain.contains(domain)) return false
+            }
         }
-        if (whitelistTags.isNotEmpty()) {
-            if (!whitelistTags.contains(tag)) return false
+        if (whitelistTag.isNotEmpty()) {
+            if (!whitelistTag.contains(tag)) return false
         }
         return true
     }
