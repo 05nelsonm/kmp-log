@@ -13,60 +13,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-package io.matthewnelson.kmp.log.compat.slf4j
+package io.matthewnelson.kmp.log.compat.ktor
 
 import io.matthewnelson.kmp.log.Log
-import io.matthewnelson.kmp.log.compat.slf4j.KmpLogSLF4JLogger.Compat.asSLF4JLogger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 
-class KmpLogSLF4JLoggerUnitTest {
-
-    @Test
-    fun givenLogger_whenEquals_thenIsAsExpected() {
-        val logger = Log.Logger.of(domain = "compat-slf4j", tag = "Equals").asSLF4JLogger()
-        val d: Any = logger.delegate
-        val l: Any = logger
-        assertNotEquals(d, l)
-    }
-
-    @Test
-    fun givenLogger_whenHashCode_thenIsAsExpected() {
-        val logger = Log.Logger.of(domain = "compat-slf4j", tag = "HashCode").asSLF4JLogger()
-        assertNotEquals(logger.hashCode(), logger.delegate.hashCode())
-    }
-
-    @Test
-    fun givenLogger_whenToString_thenIsAsExpected() {
-        val logger = Log.Logger.of(domain = "compat-slf4j", tag = "ToString").asSLF4JLogger()
-        assertNotEquals(logger.delegate.toString(), logger.toString())
-        assertTrue(logger.toString().startsWith("KmpLogSLF4JLogger["))
-        assertFalse(logger.toString().endsWith(logger.delegate.hashCode().toString()))
-        assertTrue(logger.toString().endsWith(logger.hashCode().toString()))
-    }
+class KmpLogKtorLoggerNativeUnitTest {
 
     @Test
     fun givenLogger_whenOfIsCalledFromMultipleThreads_thenCachedLoggersAreProtectedByLock() = runTest(timeout = 3.minutes) {
-        val before = KmpLogSLF4JLogger.size()
+        val before = KmpLogKtorLogger.size()
 
         val limit = 1_000
         val loggers = Array(200 * limit) {
             val i = Random.nextInt(from = 0, until = limit)
             async(Dispatchers.IO) {
-                Log.Logger.of("slf4j_$i").asSLF4JLogger()
+                Log.Logger.of("ktor_native_$i").asKtorLogger()
             }
         }.toList().awaitAll().toSet()
 
-        assertEquals(KmpLogSLF4JLogger.size() - before, loggers.size)
+        assertEquals(KmpLogKtorLogger.size() - before, loggers.size)
         assertTrue(loggers.size <= limit, "size[${loggers.size}] > $limit")
     }
 }

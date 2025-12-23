@@ -36,6 +36,11 @@ kmpConfiguration {
                     api(libs.ktor.utils)
                 }
             }
+            sourceSetTest {
+                dependencies {
+                    implementation(libs.kotlinx.coroutines.test)
+                }
+            }
         }
 
         configureKotlinVersion(KotlinVersion.KOTLIN_2_0)

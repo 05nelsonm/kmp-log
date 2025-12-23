@@ -28,6 +28,9 @@ import io.matthewnelson.kmp.log.compat.ktor.internal.nonJvmInfo
 import io.matthewnelson.kmp.log.compat.ktor.internal.nonJvmToString
 import io.matthewnelson.kmp.log.compat.ktor.internal.nonJvmTrace
 import io.matthewnelson.kmp.log.compat.ktor.internal.nonJvmWarn
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
+import kotlin.concurrent.Volatile
 
 // native
 public actual abstract class KmpLogKtorLogger private constructor(
@@ -39,29 +42,65 @@ public actual abstract class KmpLogKtorLogger private constructor(
         public actual fun of(
             logger: Log.Logger,
         ): KmpLogKtorLogger {
-            // TODO: Cache instances?
-            return object : KmpLogKtorLogger(logger) {
-                override val level: LogLevel get() = when (nonJvmFindMinLevelOrNull()) {
-                    null -> LogLevel.ERROR
-                    Log.Level.Verbose -> LogLevel.TRACE
-                    Log.Level.Debug -> LogLevel.DEBUG
-                    Log.Level.Info -> LogLevel.INFO
-                    Log.Level.Warn -> LogLevel.WARN
-                    Log.Level.Error -> LogLevel.ERROR
-                    Log.Level.Fatal -> LogLevel.ERROR
+            var iNext = 0
+            run {
+                val loggers = _LOGGERS
+                while (iNext < loggers.size) {
+                    val ktor = loggers[iNext] ?: break
+                    if (ktor.delegate == logger) return ktor
+                    iNext++
                 }
-                override fun trace(message: String) { nonJvmTrace(message, t = null) }
-                override fun trace(message: String, cause: Throwable) { nonJvmTrace(message, cause) }
-                override fun debug(message: String) { nonJvmDebug(message, t = null) }
-                override fun debug(message: String, cause: Throwable) { nonJvmDebug(message, cause) }
-                override fun info(message: String) { nonJvmInfo(message, t = null) }
-                override fun info(message: String, cause: Throwable) { nonJvmInfo(message, cause) }
-                override fun warn(message: String) { nonJvmWarn(message, t = null) }
-                override fun warn(message: String, cause: Throwable) { nonJvmWarn(message, cause) }
-                override fun error(message: String) { nonJvmError(message, t = null) }
-                override fun error(message: String, cause: Throwable) { nonJvmError(message, cause) }
+            }
+
+            synchronized(LOCK_LOGGERS) {
+                // _LOGGERS only ever grows, so just need to check for
+                // any that may have been added while waiting on the lock.
+                val loggers = _LOGGERS
+                while (iNext < loggers.size) {
+                    val ktor = loggers[iNext] ?: break
+                    if (ktor.delegate == logger) return ktor
+                    iNext++
+                }
+                val ktor = factory(logger)
+                if (iNext == loggers.size) {
+                    val grow = loggers.copyOf(loggers.size + (loggers.size / 2))
+                    grow[iNext] = ktor
+                    _LOGGERS = grow
+                } else {
+                    loggers[iNext] = ktor
+                }
+                return ktor
             }
         }
+
+        private fun factory(logger: Log.Logger) = object : KmpLogKtorLogger(delegate = logger) {
+            override val level: LogLevel get() = when (nonJvmFindMinLevelOrNull()) {
+                null -> LogLevel.ERROR
+                Log.Level.Verbose -> LogLevel.TRACE
+                Log.Level.Debug -> LogLevel.DEBUG
+                Log.Level.Info -> LogLevel.INFO
+                Log.Level.Warn -> LogLevel.WARN
+                Log.Level.Error -> LogLevel.ERROR
+                Log.Level.Fatal -> LogLevel.ERROR
+            }
+            override fun trace(message: String) { nonJvmTrace(message, t = null) }
+            override fun trace(message: String, cause: Throwable) { nonJvmTrace(message, cause) }
+            override fun debug(message: String) { nonJvmDebug(message, t = null) }
+            override fun debug(message: String, cause: Throwable) { nonJvmDebug(message, cause) }
+            override fun info(message: String) { nonJvmInfo(message, t = null) }
+            override fun info(message: String, cause: Throwable) { nonJvmInfo(message, cause) }
+            override fun warn(message: String) { nonJvmWarn(message, t = null) }
+            override fun warn(message: String, cause: Throwable) { nonJvmWarn(message, cause) }
+            override fun error(message: String) { nonJvmError(message, t = null) }
+            override fun error(message: String, cause: Throwable) { nonJvmError(message, cause) }
+        }
+
+        // Exposed for testing
+        internal fun size(): Int = _LOGGERS.count { it != null }
+
+        private val LOCK_LOGGERS = SynchronizedObject()
+        @Volatile
+        private var _LOGGERS: Array<KmpLogKtorLogger?> = arrayOfNulls(10)
     }
 
     /** @suppress */

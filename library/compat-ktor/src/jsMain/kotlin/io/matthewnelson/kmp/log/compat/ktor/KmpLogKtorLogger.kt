@@ -41,7 +41,7 @@ public actual abstract class KmpLogKtorLogger private constructor(
             logger: Log.Logger,
         ): KmpLogKtorLogger = ::factory.jsWasmJsOf(logger)
 
-        private fun factory(delegate: Log.Logger): KmpLogKtorLogger = object : KmpLogKtorLogger(delegate) {
+        private fun factory(logger: Log.Logger): KmpLogKtorLogger = object : KmpLogKtorLogger(delegate = logger) {
             override val level: LogLevel get() = when (nonJvmFindMinLevelOrNull()) {
                 null -> LogLevel.NONE
                 Log.Level.Verbose -> LogLevel.TRACE
