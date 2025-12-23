@@ -154,7 +154,7 @@ class FileLogBuilderUnitTest {
 
     @Test
     fun givenWhitelistDomains_whenCastAsMutable_thenThrowsClassCastException() {
-        val domains = newBuilder().whitelistDomain("kmp.log").build().whitelistDomains
+        val domains = newBuilder().whitelistDomain("kmp.log").build().whitelistDomain
         assertEquals(1, domains.size)
         assertFailsWith<ClassCastException> { domains as MutableSet<String> }
     }
@@ -171,7 +171,7 @@ class FileLogBuilderUnitTest {
 
     @Test
     fun givenWhitelistTags_whenCastAsMutable_thenThrowsClassCastException() {
-        val tags = newBuilder().whitelistTag("Tag").build().whitelistTags
+        val tags = newBuilder().whitelistTag("Tag").build().whitelistTag
         assertEquals(1, tags.size)
         assertFailsWith<ClassCastException> { tags as MutableSet<String> }
     }

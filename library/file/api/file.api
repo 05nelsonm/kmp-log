@@ -3,9 +3,10 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 	public final field logFiles Ljava/util/Set;
 	public final field logFiles0Hash Ljava/lang/String;
 	public final field maxLogSize J
-	public final field whitelistDomains Ljava/util/Set;
-	public final field whitelistTags Ljava/util/Set;
-	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/lang/String;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;JLjava/util/Set;Ljava/util/Set;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final field whitelistDomain Ljava/util/Set;
+	public final field whitelistDomainNull Z
+	public final field whitelistTag Ljava/util/Set;
+	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/lang/String;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;JLjava/util/Set;ZLjava/util/Set;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 }
 
 public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
@@ -32,6 +33,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 	public final fun whitelistDomain (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomain (Ljava/util/Collection;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomain ([Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
+	public final fun whitelistDomainNull (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistTag (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistTag (Ljava/util/Collection;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistTag ([Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;

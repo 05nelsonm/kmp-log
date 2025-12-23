@@ -29,11 +29,28 @@ class FileLogUnitTest {
     fun givenWhitelistDomains_whenIsLoggable_thenReturnsExpected() {
         val log = FileLog.Builder(SysTempDir.path)
             .whitelistDomain("kmp.log")
+            .whitelistDomainNull(allow = false)
             .build()
 
         try {
             Log.install(log)
             assertFalse(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
+            assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
+        } finally {
+            Log.uninstall(log)
+        }
+    }
+
+    @Test
+    fun givenWhitelistDomainNull_whenIsLoggable_thenReturnsExpected() {
+        val log = FileLog.Builder(SysTempDir.path)
+            .whitelistDomain("kmp.log")
+            .whitelistDomainNull(allow = true)
+            .build()
+
+        try {
+            Log.install(log)
+            assertTrue(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
             assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
         } finally {
             Log.uninstall(log)
@@ -60,6 +77,7 @@ class FileLogUnitTest {
     fun givenWhitelistDomainsAndTags_whenIsLoggable_thenReturnsExpected() {
         val log = FileLog.Builder(SysTempDir.path)
             .whitelistDomain("kmp.log")
+            .whitelistDomainNull(allow = false)
             .whitelistTag("Tag")
             .build()
 
