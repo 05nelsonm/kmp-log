@@ -12,9 +12,6 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 }
 
 public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
-	public static final field Companion Lio/matthewnelson/kmp/log/file/FileLog$Builder$Companion;
-	public static final field MIN_MAX_LOGS B
-	public static final field MIN_MAX_LOG_SIZE J
 	public final field logDirectory Ljava/lang/String;
 	public fun <init> (Ljava/lang/String;)V
 	public final fun build ()Lio/matthewnelson/kmp/log/file/FileLog;
@@ -39,8 +36,5 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 	public final fun whitelistTag (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistTag (Ljava/util/Collection;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistTag ([Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
-}
-
-public final class io/matthewnelson/kmp/log/file/FileLog$Builder$Companion {
 }
 

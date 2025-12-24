@@ -24,7 +24,6 @@ import io.matthewnelson.encoding.utf8.UTF8
 import io.matthewnelson.immutable.collections.toImmutableSet
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.IOException
-import io.matthewnelson.kmp.file.SysFsInfo
 import io.matthewnelson.kmp.file.canonicalFile2
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.file.resolve
@@ -98,19 +97,25 @@ public class FileLog: Log {
 
     /**
      * TODO
+     *
+     * @throws [IllegalArgumentException] When:
+     *  - [logDirectory] is empty
+     *  - [logDirectory] contains null character `\u0000`
      * */
     public class Builder(
 
         /**
-         * The directory where log files are to be kept. A valid [logDirectory] must **NOT**:
-         *  - be empty
-         *  - contain null character `\u0000`
-         *
-         * **NOTE:** [logDirectory] validity is checked when [build] is called.
+         * The directory where log files are to be kept.
          * */
         @JvmField
         public val logDirectory: String,
     ) {
+
+        init {
+            require(logDirectory.isNotEmpty()) { "logDirectory cannot be empty" }
+            require(!logDirectory.contains('\u0000')) { "logDirectory cannot contain null character '\\u0000'" }
+        }
+
         private var _min = Level.Info
         private var _max = Level.Fatal
         private var _modeDirectory = ModeBuilder.of(isDirectory = true)
@@ -200,41 +205,64 @@ public class FileLog: Log {
         /**
          * DEFAULT: `log`
          *
-         * The log file name. A valid [name] must **NOT**:
-         *  - be empty
-         *  - be greater than `64` characters in length
-         *  - end with `.`
-         *  - contain whitespace
-         *  - contain character `\`
-         *  - contain character `/`
-         *  - contain null character `\u0000`
-         *
-         * **NOTE:** [name] validity is checked when [build] is called.
+         * Configure the log file name.
          *
          * @param [name] The name to use for the log file.
          *
          * @return The [Builder]
+         *
+         * @throws [IllegalArgumentException] When:
+         *  - [name] is empty
+         *  - [name] is greater than `64` characters in length
+         *  - [name] ends with character `.`
+         *  - [name] contains whitespace
+         *  - [name] contains character `/`
+         *  - [name] contains character `\`
+         *  - [name] contains null character `\u0000`
          * */
-        public fun fileName(name: String): Builder = apply { _fileName = name }
+        public fun fileName(name: String): Builder {
+            require(name.isNotEmpty()) { "fileName cannot be empty" }
+            require(name.length <= 64) { "fileName cannot exceed 64 characters" }
+            require(!name.endsWith('.')) { "fileName cannot end with '.'" }
+            name.forEach { c ->
+                require(!c.isWhitespace()) { "fileName cannot contain whitespace" }
+                require(c != '/') { "fileName cannot contain '/'" }
+                require(c != '\\') { "fileName cannot contain '\\'" }
+                require(c != '\u0000') { "fileName cannot contain null character '\\u0000'" }
+            }
+            _fileName = name
+            return this
+        }
 
         /**
          * DEFAULT: empty (i.e. no extension)
          *
-         * The log file extension name. A valid [name] must **NOT**:
-         *  - be greater than `8` characters in length
-         *  - contain character `.`
-         *  - contain whitespace
-         *  - contain character `\`
-         *  - contain character `/`
-         *  - contain null character `\u0000`
-         *
-         * **NOTE:** [name] validity is checked when [build] is called.
+         * Configure the log file extension name.
          *
          * @param [name] The name to use for the log file extension, or empty for no extension.
          *
          * @return The [Builder]
+         *
+         * @throws [IllegalArgumentException] When:
+         *  - [name] is greater than `8` characters in length
+         *  - [name] contains whitespace
+         *  - [name] contains character `.`
+         *  - [name] contains character `/`
+         *  - [name] contains character `\`
+         *  - [name] contains null character `\u0000`
          * */
-        public fun fileExtension(name: String): Builder = apply { _fileExtension = name }
+        public fun fileExtension(name: String): Builder {
+            require(name.length <= 8) { "fileExtension cannot exceed 8 characters" }
+            name.forEach { c ->
+                require(!c.isWhitespace()) { "fileExtension cannot contain whitespace" }
+                require(c != '.') { "fileExtension cannot contain '.'" }
+                require(c != '/') { "fileExtension cannot contain '/'" }
+                require(c != '\\') { "fileExtension cannot contain '\\'" }
+                require(c != '\u0000') { "fileExtension cannot contain null character '\\u0000'" }
+            }
+            _fileExtension = name
+            return this
+        }
 
         /**
          * DEFAULT:
@@ -258,30 +286,52 @@ public class FileLog: Log {
          * DEFAULT: empty (i.e. Allow all [Logger.domain])
          *
          * TODO
+         *
          * @see [whitelistDomainNull]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun whitelistDomain(domain: String): Builder = apply { _whitelistDomain.add(domain) }
+        public fun whitelistDomain(domain: String): Builder {
+            Logger.checkDomain(domain)
+            _whitelistDomain.add(domain)
+            return this
+        }
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.domain])
          *
          * TODO
+         *
          * @see [whitelistDomainNull]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun whitelistDomain(vararg domains: String): Builder = apply { _whitelistDomain.addAll(domains) }
+        public fun whitelistDomain(vararg domains: String): Builder {
+            domains.forEach { domain -> Logger.checkDomain(domain) }
+            _whitelistDomain.addAll(domains)
+            return this
+        }
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.domain])
          *
          * TODO
+         *
          * @see [whitelistDomainNull]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun whitelistDomain(domains: Collection<String>): Builder = apply { _whitelistDomain.addAll(domains) }
+        public fun whitelistDomain(domains: Collection<String>): Builder {
+            domains.forEach { domain -> Logger.checkDomain(domain) }
+            _whitelistDomain.addAll(domains)
+            return this
+        }
 
         /**
          * DEFAULT: `true`
          *
          * TODO
+         *
          * @see [whitelistDomain]
          * */
         public fun whitelistDomainNull(allow: Boolean): Builder = apply { _whitelistDomainNull = allow }
@@ -290,80 +340,56 @@ public class FileLog: Log {
          * DEFAULT: empty (i.e. Allow all [Logger.tag])
          *
          * TODO
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun whitelistTag(tag: String): Builder = apply { _whitelistTag.add(tag) }
+        public fun whitelistTag(tag: String): Builder {
+            Logger.checkTag(tag)
+            _whitelistTag.add(tag)
+            return this
+        }
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.tag])
          *
          * TODO
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun whitelistTag(vararg tags: String): Builder = apply { _whitelistTag.addAll(tags) }
+        public fun whitelistTag(vararg tags: String): Builder {
+            tags.forEach { tag -> Logger.checkTag(tag) }
+            _whitelistTag.addAll(tags)
+            return this
+        }
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.tag])
          *
          * TODO
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun whitelistTag(tags: Collection<String>): Builder = apply { _whitelistTag.addAll(tags) }
+        public fun whitelistTag(tags: Collection<String>): Builder {
+            tags.forEach { tag -> Logger.checkTag(tag) }
+            _whitelistTag.addAll(tags)
+            return this
+        }
 
         /**
          * TODO
          *
-         * @throws [IllegalArgumentException] If:
-         *   - [fileName] is an empty string.
-         *   - [fileName] is greater than `64` characters.
-         *   - [fileName] ends with `.`.
-         *   - [fileExtension] is greater than `8` characters.
-         *   - [fileExtension] contains `.`.
-         *   - [logDirectory] is an empty string.
-         *   - [fileName] or [fileExtension] contains whitespace.
-         *   - [fileName] or [fileExtension] contains character `\`.
-         *   - [fileName] or [fileExtension] contains character `/`.
-         *   - [fileName], [fileExtension], or [logDirectory] contains null character `\u0000`.
          * @throws [IOException] If [File.canonicalFile2] fails.
          * @throws [UnsupportedOperationException] If Js/WasmJs Browser.
          * */
         public fun build(): FileLog {
-            if (SysFsInfo.name == "FsJsBrowser") {
-                throw UnsupportedOperationException("Logging to files is not supported on Js/WasmJs Browser.")
-            }
-
-            require(logDirectory.isNotEmpty()) { "logDirectory cannot be empty" }
-            require(!logDirectory.contains('\u0000')) { "logDirectory cannot contain null character '\\u0000'" }
-
             val fileName = _fileName
-            // sanity checks
-            require(fileName.isNotEmpty()) { "fileName cannot be empty" }
-            require(fileName.length <= 64) { "fileName cannot exceed 64 characters" }
-            require(!fileName.endsWith('.')) { "fileName cannot end with '.'" }
-            fileName.forEach { c ->
-                require(!c.isWhitespace()) { "fileName cannot contain whitespace" }
-                require(c != '/') { "fileName cannot contain '/'" }
-                require(c != '\\') { "fileName cannot contain '\\'" }
-                require(c != '\u0000') { "fileName cannot contain null character '\\u0000'" }
-            }
-
             val fileExtension = _fileExtension
-            // sanity checks
-            require(fileExtension.length <= 8) { "fileExtension cannot exceed 8 characters" }
-            fileExtension.forEach { c ->
-                require(!c.isWhitespace()) { "fileExtension cannot contain whitespace" }
-                require(c != '.') { "fileExtension cannot contain '.'" }
-                require(c != '/') { "fileExtension cannot contain '/'" }
-                require(c != '\\') { "fileExtension cannot contain '\\'" }
-                require(c != '\u0000') { "fileExtension cannot contain null character '\\u0000'" }
-            }
-
             val whitelistDomain = _whitelistDomain.toImmutableSet()
-            whitelistDomain.forEach { domain -> Logger.checkDomain(domain) }
             val whitelistTag = _whitelistTag.toImmutableSet()
-            whitelistTag.forEach { tag -> Logger.checkTag(tag) }
-
             val directory = logDirectory.toFile().canonicalFile2()
 
             // Current and 1 previous.
-            val maxLogs = _maxLogs.coerceAtLeast(MIN_MAX_LOGS)
+            val maxLogs = _maxLogs.coerceAtLeast(2)
             val files = LinkedHashSet<File>(maxLogs.toInt())
             for (i in 0 until maxLogs) {
                 var name = fileName
@@ -399,25 +425,12 @@ public class FileLog: Log {
                 files0Hash = files0Hash,
                 modeDirectory = _modeDirectory.build(),
                 modeFile = _modeFile.build(),
-                maxLogSize = _maxLogSize.coerceAtLeast(MIN_MAX_LOG_SIZE),
+                maxLogSize = _maxLogSize.coerceAtLeast(50L * 1024L), // 50kb
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
                 whitelistTag = whitelistTag,
                 uidSuffix = "FileLog-$files0Hash",
             )
-        }
-
-        public companion object {
-
-            /**
-             * TODO
-             * */
-            public const val MIN_MAX_LOGS: Byte = 2
-
-            /**
-             * TODO
-             * */
-            public const val MIN_MAX_LOG_SIZE: Long = 50L * 1024L // 50 Kb
         }
     }
 
