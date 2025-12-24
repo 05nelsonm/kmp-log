@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
+@file:Suppress("PrivatePropertyName")
+
 package io.matthewnelson.kmp.log.file
 
 import io.matthewnelson.encoding.base16.Base16
@@ -100,7 +102,11 @@ public class FileLog: Log {
     public class Builder(
 
         /**
-         * TODO
+         * The directory where log files are to be kept. A valid [logDirectory] must **NOT**:
+         *  - be empty
+         *  - contain null character `\u0000`
+         *
+         * **NOTE:** [logDirectory] validity is checked when [build] is called.
          * */
         @JvmField
         public val logDirectory: String,
@@ -112,7 +118,7 @@ public class FileLog: Log {
         private var _fileName = "log"
         private var _fileExtension = ""
         private var _maxLogSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
-        private var _maxLogs: Byte = if (isDesktop())  5  else 3
+        private var _maxLogs: Byte = if (isDesktop()) 5 else 3
         private val _whitelistDomain = mutableSetOf<String>()
         private var _whitelistDomainNull = true
         private val _whitelistTag = mutableSetOf<String>()
@@ -120,14 +126,18 @@ public class FileLog: Log {
         /**
          * DEFAULT: [Level.Info]
          *
-         * TODO
+         * @param [level] The minimum [Log.Level] to allow.
+         *
+         * @return The [Builder]
          * */
         public fun min(level: Level): Builder = apply { _min = level }
 
         /**
          * DEFAULT: [Level.Fatal]
          *
-         * TODO
+         * @param [level] The maximum [Log.Level] to allow.
+         *
+         * @return The [Builder]
          * */
         public fun max(level: Level): Builder = apply { _max = level }
 
@@ -136,68 +146,93 @@ public class FileLog: Log {
          *
          * TODO
          * */
-        public fun directoryGroupReadable(enable: Boolean): Builder = apply { _modeDirectory.groupRead = enable }
+        public fun directoryGroupReadable(allow: Boolean): Builder = apply { _modeDirectory.groupRead = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryGroupWritable(enable: Boolean): Builder = apply { _modeDirectory.groupWrite = enable }
+        public fun directoryGroupWritable(allow: Boolean): Builder = apply { _modeDirectory.groupWrite = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryOtherReadable(enable: Boolean): Builder = apply { _modeDirectory.otherRead = enable }
+        public fun directoryOtherReadable(allow: Boolean): Builder = apply { _modeDirectory.otherRead = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryOtherWritable(enable: Boolean): Builder = apply { _modeDirectory.otherWrite = enable }
+        public fun directoryOtherWritable(allow: Boolean): Builder = apply { _modeDirectory.otherWrite = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileGroupReadable(enable: Boolean): Builder = apply { _modeFile.groupRead = enable }
+        public fun fileGroupReadable(allow: Boolean): Builder = apply { _modeFile.groupRead = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileGroupWritable(enable: Boolean): Builder = apply { _modeFile.groupWrite = enable }
+        public fun fileGroupWritable(allow: Boolean): Builder = apply { _modeFile.groupWrite = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileOtherReadable(enable: Boolean): Builder = apply { _modeFile.otherRead = enable }
+        public fun fileOtherReadable(allow: Boolean): Builder = apply { _modeFile.otherRead = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileOtherWritable(enable: Boolean): Builder = apply { _modeFile.otherWrite = enable }
+        public fun fileOtherWritable(allow: Boolean): Builder = apply { _modeFile.otherWrite = allow }
 
         /**
          * DEFAULT: `log`
          *
-         * TODO
+         * The log file name. A valid [name] must **NOT**:
+         *  - be empty
+         *  - be greater than `64` characters in length
+         *  - end with `.`
+         *  - contain whitespace
+         *  - contain character `\`
+         *  - contain character `/`
+         *  - contain null character `\u0000`
+         *
+         * **NOTE:** [name] validity is checked when [build] is called.
+         *
+         * @param [name] The name to use for the log file.
+         *
+         * @return The [Builder]
          * */
         public fun fileName(name: String): Builder = apply { _fileName = name }
 
         /**
-         * DEFAULT: none
+         * DEFAULT: empty (i.e. no extension)
          *
-         * TODO
+         * The log file extension name. A valid [name] must **NOT**:
+         *  - be greater than `8` characters in length
+         *  - contain character `.`
+         *  - contain whitespace
+         *  - contain character `\`
+         *  - contain character `/`
+         *  - contain null character `\u0000`
+         *
+         * **NOTE:** [name] validity is checked when [build] is called.
+         *
+         * @param [name] The name to use for the log file extension, or empty for no extension.
+         *
+         * @return The [Builder]
          * */
         public fun fileExtension(name: String): Builder = apply { _fileExtension = name }
 
@@ -289,7 +324,6 @@ public class FileLog: Log {
          * @throws [IOException] If [File.canonicalFile2] fails.
          * @throws [UnsupportedOperationException] If Js/WasmJs Browser.
          * */
-        @Throws(Exception::class)
         public fun build(): FileLog {
             if (SysFsInfo.name == "FsJsBrowser") {
                 throw UnsupportedOperationException("Logging to files is not supported on Js/WasmJs Browser.")
@@ -369,6 +403,7 @@ public class FileLog: Log {
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
                 whitelistTag = whitelistTag,
+                uidSuffix = "FileLog-$files0Hash",
             )
         }
 
@@ -387,14 +422,13 @@ public class FileLog: Log {
     }
 
     private companion object {
-        private const val UID_PREFIX = "io.matthewnelson.kmp.log.file."
         private const val DOMAIN = "kmp-log:file"
     }
 
     private val directory: File
     private val files: Set<File>
 
-    private val LOG: Logger by lazy { Logger.of(tag = uid.substringAfter(UID_PREFIX, ""), DOMAIN) }
+    private val LOG: Logger
 
     private constructor(
         min: Level,
@@ -408,9 +442,12 @@ public class FileLog: Log {
         whitelistDomain: Set<String>,
         whitelistDomainNull: Boolean,
         whitelistTag: Set<String>,
-    ): super(uid = "${UID_PREFIX}FileLog-$files0Hash", min = min, max = max) {
+        uidSuffix: String,
+    ): super(uid = "io.matthewnelson.kmp.log.file.$uidSuffix", min = min, max = max) {
         this.directory = directory
         this.files = files
+        this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
+
         this.logDirectory = directory.path
         this.logFiles = files.mapTo(LinkedHashSet(files.size)) { it.path }.toImmutableSet()
         this.logFiles0Hash = files0Hash
