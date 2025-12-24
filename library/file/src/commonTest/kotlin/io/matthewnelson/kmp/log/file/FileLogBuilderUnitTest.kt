@@ -22,6 +22,7 @@ import io.matthewnelson.kmp.log.Log
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -281,6 +282,32 @@ class FileLogBuilderUnitTest {
                 assertEquals("tag cannot be empty", e.message)
             }
         }
+    }
+
+    @Test
+    fun givenBuilder_whenWhitelistDomainReset_thenResetsConfigured() {
+        val b = newBuilder().whitelistDomain("kmp.log")
+        assertEquals(1, b.build().whitelistDomain.size)
+
+        b.whitelistDomainReset()
+        assertEquals(0, b.build().whitelistDomain.size)
+
+        // Ensure current setting is false
+        b.whitelistDomain("kmp.log").whitelistDomainNull(false)
+        assertFalse(b.build().whitelistDomainNull)
+
+        // Ensure reset also resets whitelistDomainNull to true
+        b.whitelistDomainReset().whitelistDomain("kmp.log")
+        assertTrue(b.build().whitelistDomainNull)
+    }
+
+    @Test
+    fun givenBuilder_whenWhitelistTagReset_thenResetsConfigured() {
+        val b = newBuilder().whitelistTag("something")
+        assertEquals(1, b.build().whitelistTag.size)
+
+        b.whitelistTagReset()
+        assertEquals(0, b.build().whitelistTag.size)
     }
 
     @Test
