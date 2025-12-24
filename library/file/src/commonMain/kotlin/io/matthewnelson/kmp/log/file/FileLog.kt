@@ -62,6 +62,18 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
+    public val modeDirectory: String
+
+    /**
+     * TODO
+     * */
+    @JvmField
+    public val modeFile: String
+
+    /**
+     * TODO
+     * */
+    @JvmField
     public val maxLogSize: Long
 
     /**
@@ -95,8 +107,8 @@ public class FileLog: Log {
     ) {
         private var _min = Level.Info
         private var _max = Level.Fatal
-        private var _directoryMode = ModeBuilder.of(isDirectory = true)
-        private var _fileMode = ModeBuilder.of(isDirectory = false)
+        private var _modeDirectory = ModeBuilder.of(isDirectory = true)
+        private var _modeFile = ModeBuilder.of(isDirectory = false)
         private var _fileName = "log"
         private var _fileExtension = ""
         private var _maxLogSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
@@ -124,56 +136,56 @@ public class FileLog: Log {
          *
          * TODO
          * */
-        public fun directoryGroupReadable(enable: Boolean): Builder = apply { _directoryMode.groupRead = enable }
+        public fun directoryGroupReadable(enable: Boolean): Builder = apply { _modeDirectory.groupRead = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryGroupWritable(enable: Boolean): Builder = apply { _directoryMode.groupWrite = enable }
+        public fun directoryGroupWritable(enable: Boolean): Builder = apply { _modeDirectory.groupWrite = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryOtherReadable(enable: Boolean): Builder = apply { _directoryMode.otherRead = enable }
+        public fun directoryOtherReadable(enable: Boolean): Builder = apply { _modeDirectory.otherRead = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryOtherWritable(enable: Boolean): Builder = apply { _directoryMode.otherWrite = enable }
+        public fun directoryOtherWritable(enable: Boolean): Builder = apply { _modeDirectory.otherWrite = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileGroupReadable(enable: Boolean): Builder = apply { _fileMode.groupRead = enable }
+        public fun fileGroupReadable(enable: Boolean): Builder = apply { _modeFile.groupRead = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileGroupWritable(enable: Boolean): Builder = apply { _fileMode.groupWrite = enable }
+        public fun fileGroupWritable(enable: Boolean): Builder = apply { _modeFile.groupWrite = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileOtherReadable(enable: Boolean): Builder = apply { _fileMode.otherRead = enable }
+        public fun fileOtherReadable(enable: Boolean): Builder = apply { _modeFile.otherRead = enable }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileOtherWritable(enable: Boolean): Builder = apply { _fileMode.otherWrite = enable }
+        public fun fileOtherWritable(enable: Boolean): Builder = apply { _modeFile.otherWrite = enable }
 
         /**
          * DEFAULT: `log`
@@ -326,10 +338,10 @@ public class FileLog: Log {
                 min = _min,
                 max = _max,
                 directory = directory,
-                directoryMode = _directoryMode.build(),
                 files = files.toImmutableSet(),
                 files0Hash = files0Hash,
-                fileMode = _fileMode.build(),
+                modeDirectory = _modeDirectory.build(),
+                modeFile = _modeFile.build(),
                 maxLogSize = _maxLogSize.coerceAtLeast(MIN_MAX_LOG_SIZE),
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
@@ -359,19 +371,16 @@ public class FileLog: Log {
     private val directory: File
     private val files: Set<File>
 
-    private val directoryMode: String
-    private val fileMode: String
-
     private val LOG: Logger by lazy { Logger.of(tag = uid.substringAfter(UID_PREFIX, ""), DOMAIN) }
 
     private constructor(
         min: Level,
         max: Level,
         directory: File,
-        directoryMode: String,
         files: Set<File>,
         files0Hash: String,
-        fileMode: String,
+        modeDirectory: String,
+        modeFile: String,
         maxLogSize: Long,
         whitelistDomain: Set<String>,
         whitelistDomainNull: Boolean,
@@ -382,8 +391,8 @@ public class FileLog: Log {
         this.logDirectory = directory.path
         this.logFiles = files.mapTo(LinkedHashSet(files.size)) { it.path }.toImmutableSet()
         this.logFiles0Hash = files0Hash
-        this.directoryMode = directoryMode
-        this.fileMode = fileMode
+        this.modeDirectory = modeDirectory
+        this.modeFile = modeFile
         this.maxLogSize = maxLogSize
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull

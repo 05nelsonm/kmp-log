@@ -3,10 +3,12 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 	public final field logFiles Ljava/util/Set;
 	public final field logFiles0Hash Ljava/lang/String;
 	public final field maxLogSize J
+	public final field modeDirectory Ljava/lang/String;
+	public final field modeFile Ljava/lang/String;
 	public final field whitelistDomain Ljava/util/Set;
 	public final field whitelistDomainNull Z
 	public final field whitelistTag Ljava/util/Set;
-	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/lang/String;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;JLjava/util/Set;ZLjava/util/Set;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/util/Set;ZLjava/util/Set;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 }
 
 public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
