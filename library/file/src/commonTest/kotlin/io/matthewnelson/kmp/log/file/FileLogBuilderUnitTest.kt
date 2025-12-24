@@ -67,11 +67,34 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
+    fun givenFileName_whenContainsSlash_thenBuildThrowsIllegalArgumentException() {
+        try {
+            newBuilder().fileName("some/thing").build()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileName cannot contain '/'", e.message)
+        }
+        try {
+            newBuilder().fileName("some\\thing").build()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileName cannot contain '\\'", e.message)
+        }
+    }
+
+    @Test
     fun givenFileName_whenContainsWhitespace_thenBuildThrowsIllegalArgumentException() {
         try {
             newBuilder().fileName("something ").build()
         } catch (e: IllegalArgumentException) {
             assertEquals("fileName cannot contain whitespace", e.message)
+        }
+    }
+
+    @Test
+    fun givenFileName_whenContainsNullCharacter_thenBuildThrowsIllegalArgumentException() {
+        try {
+            newBuilder().fileName("something" + '\u0000').build()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileName cannot contain null character '\\u0000'", e.message)
         }
     }
 
@@ -97,11 +120,34 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
+    fun givenFileExtension_whenContainsSlash_thenBuildThrowsIllegalArgumentException() {
+        try {
+            newBuilder().fileExtension("abc/def").build()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileExtension cannot contain '/'", e.message)
+        }
+        try {
+            newBuilder().fileExtension("abc\\def").build()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileExtension cannot contain '\\'", e.message)
+        }
+    }
+
+    @Test
     fun givenFileExtension_whenContainsWhitespace_thenBuildThrowsIllegalArgumentException() {
         try {
             newBuilder().fileExtension("abc def").build()
         } catch (e: IllegalArgumentException) {
             assertEquals("fileExtension cannot contain whitespace", e.message)
+        }
+    }
+
+    @Test
+    fun givenFileExtension_whenContainsNullCharacter_thenBuildThrowsIllegalArgumentException() {
+        try {
+            newBuilder().fileExtension("abcdef" + '\u0000').build()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileExtension cannot contain null character '\\u0000'", e.message)
         }
     }
 

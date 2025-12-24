@@ -290,13 +290,23 @@ public class FileLog: Log {
             require(fileName.isNotEmpty()) { "fileName cannot be empty" }
             require(fileName.length <= 64) { "fileName cannot exceed 64 characters" }
             require(!fileName.endsWith('.')) { "fileName cannot end with '.'" }
-            require(fileName.indexOfFirst { it.isWhitespace() } == -1) { "fileName cannot contain whitespace" }
+            fileName.forEach { c ->
+                require(!c.isWhitespace()) { "fileName cannot contain whitespace" }
+                require(c != '/') { "fileName cannot contain '/'" }
+                require(c != '\\') { "fileName cannot contain '\\'" }
+                require(c != '\u0000') { "fileName cannot contain null character '\\u0000'" }
+            }
 
             val fileExtension = _fileExtension
             // sanity checks
             require(fileExtension.length <= 8) { "fileExtension cannot exceed 8 characters" }
-            require(fileExtension.indexOfFirst { it.isWhitespace() } == -1) { "fileExtension cannot contain whitespace" }
-            require(!fileExtension.contains('.')) { "fileExtension cannot contain '.'" }
+            fileExtension.forEach { c ->
+                require(!c.isWhitespace()) { "fileExtension cannot contain whitespace" }
+                require(c != '.') { "fileExtension cannot contain '.'" }
+                require(c != '/') { "fileExtension cannot contain '/'" }
+                require(c != '\\') { "fileExtension cannot contain '\\'" }
+                require(c != '\u0000') { "fileExtension cannot contain null character '\\u0000'" }
+            }
 
             val whitelistDomain = _whitelistDomain.toImmutableSet()
             whitelistDomain.forEach { domain -> Logger.checkDomain(domain) }
