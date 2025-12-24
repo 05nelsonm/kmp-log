@@ -37,6 +37,16 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
+    fun givenBuild_whenFileLogUid_thenIsAsExpected() {
+        val fileLog = newBuilder().build()
+        val prefix = "io.matthewnelson.kmp.log.file.FileLog-"
+        assertTrue(fileLog.uid.startsWith(prefix))
+        assertEquals(prefix.length + 24, fileLog.uid.length)
+        assertEquals(24, fileLog.logFiles0Hash.length)
+        assertTrue(fileLog.uid.endsWith(fileLog.logFiles0Hash))
+    }
+
+    @Test
     fun givenLogDirectory_whenEmpty_thenBuildThrowsIllegalArgumentException() {
         try {
             newBuilder("").build()
