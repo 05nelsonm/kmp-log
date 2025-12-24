@@ -275,7 +275,17 @@ public class FileLog: Log {
         /**
          * TODO
          *
-         * @throws [IllegalArgumentException] TODO: fileName/fileExtension & domains/tags
+         * @throws [IllegalArgumentException] If:
+         *   - [fileName] is an empty string.
+         *   - [fileName] is greater than `64` characters.
+         *   - [fileName] ends with `.`.
+         *   - [fileExtension] is greater than `8` characters.
+         *   - [fileExtension] contains `.`.
+         *   - [logDirectory] is an empty string.
+         *   - [fileName] or [fileExtension] contains whitespace.
+         *   - [fileName] or [fileExtension] contains character `\`.
+         *   - [fileName] or [fileExtension] contains character `/`.
+         *   - [fileName], [fileExtension], or [logDirectory] contains null character `\u0000`.
          * @throws [IOException] If [File.canonicalFile2] fails.
          * @throws [UnsupportedOperationException] If Js/WasmJs Browser.
          * */
@@ -284,6 +294,9 @@ public class FileLog: Log {
             if (SysFsInfo.name == "FsJsBrowser") {
                 throw UnsupportedOperationException("Logging to files is not supported on Js/WasmJs Browser.")
             }
+
+            require(logDirectory.isNotEmpty()) { "logDirectory cannot be empty" }
+            require(!logDirectory.contains('\u0000')) { "logDirectory cannot contain null character '\\u0000'" }
 
             val fileName = _fileName
             // sanity checks

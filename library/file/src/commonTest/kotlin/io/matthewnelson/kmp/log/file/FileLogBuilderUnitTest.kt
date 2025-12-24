@@ -15,7 +15,7 @@
  **/
 package io.matthewnelson.kmp.log.file
 
-import io.matthewnelson.kmp.file.File
+import io.matthewnelson.kmp.file.SysDirSep
 import io.matthewnelson.kmp.file.SysTempDir
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.log.Log
@@ -34,6 +34,24 @@ class FileLogBuilderUnitTest {
     @Test
     fun givenMax_whenBuild_thenDefaultIsLevelFatal() {
         assertEquals(Log.Level.Fatal, newBuilder().build().max)
+    }
+
+    @Test
+    fun givenLogDirectory_whenEmpty_thenBuildThrowsIllegalArgumentException() {
+        try {
+            newBuilder("").build()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("logDirectory cannot be empty", e.message)
+        }
+    }
+
+    @Test
+    fun givenLogDirectory_whenContainsNullCharacter_thenBuildThrowsIllegalArgumentException() {
+        try {
+            newBuilder(SysTempDir.path + SysDirSep + '\u0000').build()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("logDirectory cannot contain null character '\\u0000'", e.message)
+        }
     }
 
     @Test
@@ -232,5 +250,5 @@ class FileLogBuilderUnitTest {
         }
     }
 
-    private fun newBuilder(dir: File = SysTempDir) = FileLog.Builder(dir.path)
+    private fun newBuilder(dir: String = SysTempDir.path) = FileLog.Builder(dir)
 }
