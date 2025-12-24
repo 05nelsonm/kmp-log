@@ -33,8 +33,10 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 	public final fun whitelistDomain (Ljava/util/Collection;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomain ([Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomainNull (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
+	public final fun whitelistDomainReset ()Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistTag (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistTag (Ljava/util/Collection;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistTag ([Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
+	public final fun whitelistTagReset ()Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 }
 

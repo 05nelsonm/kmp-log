@@ -150,6 +150,8 @@ public class FileLog: Log {
          * DEFAULT: `false`
          *
          * TODO
+         *
+         * @return The [Builder]
          * */
         public fun directoryGroupReadable(allow: Boolean): Builder = apply { _modeDirectory.groupRead = allow }
 
@@ -157,6 +159,8 @@ public class FileLog: Log {
          * DEFAULT: `false`
          *
          * TODO
+         *
+         * @return The [Builder]
          * */
         public fun directoryGroupWritable(allow: Boolean): Builder = apply { _modeDirectory.groupWrite = allow }
 
@@ -164,6 +168,8 @@ public class FileLog: Log {
          * DEFAULT: `false`
          *
          * TODO
+         *
+         * @return The [Builder]
          * */
         public fun directoryOtherReadable(allow: Boolean): Builder = apply { _modeDirectory.otherRead = allow }
 
@@ -171,6 +177,8 @@ public class FileLog: Log {
          * DEFAULT: `false`
          *
          * TODO
+         *
+         * @return The [Builder]
          * */
         public fun directoryOtherWritable(allow: Boolean): Builder = apply { _modeDirectory.otherWrite = allow }
 
@@ -178,6 +186,8 @@ public class FileLog: Log {
          * DEFAULT: `false`
          *
          * TODO
+         *
+         * @return The [Builder]
          * */
         public fun fileGroupReadable(allow: Boolean): Builder = apply { _modeFile.groupRead = allow }
 
@@ -185,6 +195,8 @@ public class FileLog: Log {
          * DEFAULT: `false`
          *
          * TODO
+         *
+         * @return The [Builder]
          * */
         public fun fileGroupWritable(allow: Boolean): Builder = apply { _modeFile.groupWrite = allow }
 
@@ -192,6 +204,8 @@ public class FileLog: Log {
          * DEFAULT: `false`
          *
          * TODO
+         *
+         * @return The [Builder]
          * */
         public fun fileOtherReadable(allow: Boolean): Builder = apply { _modeFile.otherRead = allow }
 
@@ -199,6 +213,8 @@ public class FileLog: Log {
          * DEFAULT: `false`
          *
          * TODO
+         *
+         * @return The [Builder]
          * */
         public fun fileOtherWritable(allow: Boolean): Builder = apply { _modeFile.otherWrite = allow }
 
@@ -270,6 +286,8 @@ public class FileLog: Log {
          *  - `10 Mb` otherwise
          *
          * TODO
+         *
+         * @return The [Builder]
          * */
         public fun maxLogSize(bytes: Long): Builder = apply { _maxLogSize = bytes }
 
@@ -279,6 +297,8 @@ public class FileLog: Log {
          *  - `5` otherwise
          *
          * TODO
+         *
+         * @return The [Builder]
          * */
         public fun maxLogs(max: Byte): Builder = apply { _maxLogs = max }
 
@@ -287,7 +307,10 @@ public class FileLog: Log {
          *
          * TODO
          *
+         * @return The [Builder]
+         *
          * @see [whitelistDomainNull]
+         * @see [whitelistDomainReset]
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
@@ -302,7 +325,10 @@ public class FileLog: Log {
          *
          * TODO
          *
+         * @return The [Builder]
+         *
          * @see [whitelistDomainNull]
+         * @see [whitelistDomainReset]
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
@@ -317,7 +343,10 @@ public class FileLog: Log {
          *
          * TODO
          *
+         * @return The [Builder]
+         *
          * @see [whitelistDomainNull]
+         * @see [whitelistDomainReset]
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
@@ -332,14 +361,31 @@ public class FileLog: Log {
          *
          * TODO
          *
+         * @return The [Builder]
+         *
          * @see [whitelistDomain]
+         * @see [whitelistDomainReset]
          * */
         public fun whitelistDomainNull(allow: Boolean): Builder = apply { _whitelistDomainNull = allow }
+
+        /**
+         * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [whitelistDomain]
+         * @see [whitelistDomainNull]
+         * */
+        public fun whitelistDomainReset(): Builder = apply { _whitelistDomain.clear() }.whitelistDomainNull(true)
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.tag])
          *
          * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [whitelistTagReset]
          *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
@@ -354,6 +400,10 @@ public class FileLog: Log {
          *
          * TODO
          *
+         * @return The [Builder]
+         *
+         * @see [whitelistTagReset]
+         *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
         public fun whitelistTag(vararg tags: String): Builder {
@@ -367,6 +417,10 @@ public class FileLog: Log {
          *
          * TODO
          *
+         * @return The [Builder]
+         *
+         * @see [whitelistTagReset]
+         *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
         public fun whitelistTag(tags: Collection<String>): Builder {
@@ -377,6 +431,17 @@ public class FileLog: Log {
 
         /**
          * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [whitelistTag]
+         * */
+        public fun whitelistTagReset(): Builder = apply { _whitelistTag.clear() }
+
+        /**
+         * TODO
+         *
+         * @return The [FileLog] to [Log.Root.install]
          *
          * @throws [IOException] If [File.canonicalFile2] fails.
          * @throws [UnsupportedOperationException] If Js/WasmJs Browser.
