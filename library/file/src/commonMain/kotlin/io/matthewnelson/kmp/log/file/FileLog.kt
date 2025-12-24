@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
+@file:Suppress("PrivatePropertyName")
+
 package io.matthewnelson.kmp.log.file
 
 import io.matthewnelson.encoding.base16.Base16
@@ -22,7 +24,6 @@ import io.matthewnelson.encoding.utf8.UTF8
 import io.matthewnelson.immutable.collections.toImmutableSet
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.IOException
-import io.matthewnelson.kmp.file.SysFsInfo
 import io.matthewnelson.kmp.file.canonicalFile2
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.file.resolve
@@ -62,6 +63,18 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
+    public val modeDirectory: String
+
+    /**
+     * TODO
+     * */
+    @JvmField
+    public val modeFile: String
+
+    /**
+     * TODO
+     * */
+    @JvmField
     public val maxLogSize: Long
 
     /**
@@ -84,23 +97,33 @@ public class FileLog: Log {
 
     /**
      * TODO
+     *
+     * @throws [IllegalArgumentException] When:
+     *  - [logDirectory] is empty
+     *  - [logDirectory] contains null character `\u0000`
      * */
     public class Builder(
 
         /**
-         * TODO
+         * The directory where log files are to be kept.
          * */
         @JvmField
         public val logDirectory: String,
     ) {
+
+        init {
+            require(logDirectory.isNotEmpty()) { "logDirectory cannot be empty" }
+            require(!logDirectory.contains('\u0000')) { "logDirectory cannot contain null character '\\u0000'" }
+        }
+
         private var _min = Level.Info
         private var _max = Level.Fatal
-        private var _directoryMode = ModeBuilder.of(isDirectory = true)
-        private var _fileMode = ModeBuilder.of(isDirectory = false)
+        private var _modeDirectory = ModeBuilder.of(isDirectory = true)
+        private var _modeFile = ModeBuilder.of(isDirectory = false)
         private var _fileName = "log"
         private var _fileExtension = ""
         private var _maxLogSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
-        private var _maxLogs: Byte = if (isDesktop())  5  else 3
+        private var _maxLogs: Byte = if (isDesktop()) 5 else 3
         private val _whitelistDomain = mutableSetOf<String>()
         private var _whitelistDomainNull = true
         private val _whitelistTag = mutableSetOf<String>()
@@ -108,14 +131,18 @@ public class FileLog: Log {
         /**
          * DEFAULT: [Level.Info]
          *
-         * TODO
+         * @param [level] The minimum [Log.Level] to allow.
+         *
+         * @return The [Builder]
          * */
         public fun min(level: Level): Builder = apply { _min = level }
 
         /**
          * DEFAULT: [Level.Fatal]
          *
-         * TODO
+         * @param [level] The maximum [Log.Level] to allow.
+         *
+         * @return The [Builder]
          * */
         public fun max(level: Level): Builder = apply { _max = level }
 
@@ -124,70 +151,118 @@ public class FileLog: Log {
          *
          * TODO
          * */
-        public fun directoryGroupReadable(enable: Boolean): Builder = apply { _directoryMode.groupRead = enable }
+        public fun directoryGroupReadable(allow: Boolean): Builder = apply { _modeDirectory.groupRead = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryGroupWritable(enable: Boolean): Builder = apply { _directoryMode.groupWrite = enable }
+        public fun directoryGroupWritable(allow: Boolean): Builder = apply { _modeDirectory.groupWrite = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryOtherReadable(enable: Boolean): Builder = apply { _directoryMode.otherRead = enable }
+        public fun directoryOtherReadable(allow: Boolean): Builder = apply { _modeDirectory.otherRead = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun directoryOtherWritable(enable: Boolean): Builder = apply { _directoryMode.otherWrite = enable }
+        public fun directoryOtherWritable(allow: Boolean): Builder = apply { _modeDirectory.otherWrite = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileGroupReadable(enable: Boolean): Builder = apply { _fileMode.groupRead = enable }
+        public fun fileGroupReadable(allow: Boolean): Builder = apply { _modeFile.groupRead = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileGroupWritable(enable: Boolean): Builder = apply { _fileMode.groupWrite = enable }
+        public fun fileGroupWritable(allow: Boolean): Builder = apply { _modeFile.groupWrite = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileOtherReadable(enable: Boolean): Builder = apply { _fileMode.otherRead = enable }
+        public fun fileOtherReadable(allow: Boolean): Builder = apply { _modeFile.otherRead = allow }
 
         /**
          * DEFAULT: `false`
          *
          * TODO
          * */
-        public fun fileOtherWritable(enable: Boolean): Builder = apply { _fileMode.otherWrite = enable }
+        public fun fileOtherWritable(allow: Boolean): Builder = apply { _modeFile.otherWrite = allow }
 
         /**
          * DEFAULT: `log`
          *
-         * TODO
+         * Configure the log file name.
+         *
+         * @param [name] The name to use for the log file.
+         *
+         * @return The [Builder]
+         *
+         * @throws [IllegalArgumentException] When:
+         *  - [name] is empty
+         *  - [name] is greater than `64` characters in length
+         *  - [name] ends with character `.`
+         *  - [name] contains whitespace
+         *  - [name] contains character `/`
+         *  - [name] contains character `\`
+         *  - [name] contains null character `\u0000`
          * */
-        public fun fileName(name: String): Builder = apply { _fileName = name }
+        public fun fileName(name: String): Builder {
+            require(name.isNotEmpty()) { "fileName cannot be empty" }
+            require(name.length <= 64) { "fileName cannot exceed 64 characters" }
+            require(!name.endsWith('.')) { "fileName cannot end with '.'" }
+            name.forEach { c ->
+                require(!c.isWhitespace()) { "fileName cannot contain whitespace" }
+                require(c != '/') { "fileName cannot contain '/'" }
+                require(c != '\\') { "fileName cannot contain '\\'" }
+                require(c != '\u0000') { "fileName cannot contain null character '\\u0000'" }
+            }
+            _fileName = name
+            return this
+        }
 
         /**
-         * DEFAULT: none
+         * DEFAULT: empty (i.e. no extension)
          *
-         * TODO
+         * Configure the log file extension name.
+         *
+         * @param [name] The name to use for the log file extension, or empty for no extension.
+         *
+         * @return The [Builder]
+         *
+         * @throws [IllegalArgumentException] When:
+         *  - [name] is greater than `8` characters in length
+         *  - [name] contains whitespace
+         *  - [name] contains character `.`
+         *  - [name] contains character `/`
+         *  - [name] contains character `\`
+         *  - [name] contains null character `\u0000`
          * */
-        public fun fileExtension(name: String): Builder = apply { _fileExtension = name }
+        public fun fileExtension(name: String): Builder {
+            require(name.length <= 8) { "fileExtension cannot exceed 8 characters" }
+            name.forEach { c ->
+                require(!c.isWhitespace()) { "fileExtension cannot contain whitespace" }
+                require(c != '.') { "fileExtension cannot contain '.'" }
+                require(c != '/') { "fileExtension cannot contain '/'" }
+                require(c != '\\') { "fileExtension cannot contain '\\'" }
+                require(c != '\u0000') { "fileExtension cannot contain null character '\\u0000'" }
+            }
+            _fileExtension = name
+            return this
+        }
 
         /**
          * DEFAULT:
@@ -211,30 +286,52 @@ public class FileLog: Log {
          * DEFAULT: empty (i.e. Allow all [Logger.domain])
          *
          * TODO
+         *
          * @see [whitelistDomainNull]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun whitelistDomain(domain: String): Builder = apply { _whitelistDomain.add(domain) }
+        public fun whitelistDomain(domain: String): Builder {
+            Logger.checkDomain(domain)
+            _whitelistDomain.add(domain)
+            return this
+        }
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.domain])
          *
          * TODO
+         *
          * @see [whitelistDomainNull]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun whitelistDomain(vararg domains: String): Builder = apply { _whitelistDomain.addAll(domains) }
+        public fun whitelistDomain(vararg domains: String): Builder {
+            domains.forEach { domain -> Logger.checkDomain(domain) }
+            _whitelistDomain.addAll(domains)
+            return this
+        }
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.domain])
          *
          * TODO
+         *
          * @see [whitelistDomainNull]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun whitelistDomain(domains: Collection<String>): Builder = apply { _whitelistDomain.addAll(domains) }
+        public fun whitelistDomain(domains: Collection<String>): Builder {
+            domains.forEach { domain -> Logger.checkDomain(domain) }
+            _whitelistDomain.addAll(domains)
+            return this
+        }
 
         /**
          * DEFAULT: `true`
          *
          * TODO
+         *
          * @see [whitelistDomain]
          * */
         public fun whitelistDomainNull(allow: Boolean): Builder = apply { _whitelistDomainNull = allow }
@@ -243,58 +340,56 @@ public class FileLog: Log {
          * DEFAULT: empty (i.e. Allow all [Logger.tag])
          *
          * TODO
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun whitelistTag(tag: String): Builder = apply { _whitelistTag.add(tag) }
+        public fun whitelistTag(tag: String): Builder {
+            Logger.checkTag(tag)
+            _whitelistTag.add(tag)
+            return this
+        }
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.tag])
          *
          * TODO
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun whitelistTag(vararg tags: String): Builder = apply { _whitelistTag.addAll(tags) }
+        public fun whitelistTag(vararg tags: String): Builder {
+            tags.forEach { tag -> Logger.checkTag(tag) }
+            _whitelistTag.addAll(tags)
+            return this
+        }
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.tag])
          *
          * TODO
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun whitelistTag(tags: Collection<String>): Builder = apply { _whitelistTag.addAll(tags) }
+        public fun whitelistTag(tags: Collection<String>): Builder {
+            tags.forEach { tag -> Logger.checkTag(tag) }
+            _whitelistTag.addAll(tags)
+            return this
+        }
 
         /**
          * TODO
          *
-         * @throws [IllegalArgumentException] TODO: fileName/fileExtension & domains/tags
          * @throws [IOException] If [File.canonicalFile2] fails.
          * @throws [UnsupportedOperationException] If Js/WasmJs Browser.
          * */
-        @Throws(Exception::class)
         public fun build(): FileLog {
-            if (SysFsInfo.name == "FsJsBrowser") {
-                throw UnsupportedOperationException("Logging to files is not supported on Js/WasmJs Browser.")
-            }
-
             val fileName = _fileName
-            // sanity checks
-            require(fileName.isNotEmpty()) { "fileName cannot be empty" }
-            require(fileName.length <= 64) { "fileName cannot exceed 64 characters" }
-            require(!fileName.endsWith('.')) { "fileName cannot end with '.'" }
-            require(fileName.indexOfFirst { it.isWhitespace() } == -1) { "fileName cannot contain whitespace" }
-
             val fileExtension = _fileExtension
-            // sanity checks
-            require(fileExtension.length <= 8) { "fileExtension cannot exceed 8 characters" }
-            require(fileExtension.indexOfFirst { it.isWhitespace() } == -1) { "fileExtension cannot contain whitespace" }
-            require(!fileExtension.contains('.')) { "fileExtension cannot contain '.'" }
-
             val whitelistDomain = _whitelistDomain.toImmutableSet()
-            whitelistDomain.forEach { domain -> Logger.checkDomain(domain) }
             val whitelistTag = _whitelistTag.toImmutableSet()
-            whitelistTag.forEach { tag -> Logger.checkTag(tag) }
-
             val directory = logDirectory.toFile().canonicalFile2()
 
             // Current and 1 previous.
-            val maxLogs = _maxLogs.coerceAtLeast(MIN_MAX_LOGS)
+            val maxLogs = _maxLogs.coerceAtLeast(2)
             val files = LinkedHashSet<File>(maxLogs.toInt())
             for (i in 0 until maxLogs) {
                 var name = fileName
@@ -326,64 +421,51 @@ public class FileLog: Log {
                 min = _min,
                 max = _max,
                 directory = directory,
-                directoryMode = _directoryMode.build(),
                 files = files.toImmutableSet(),
                 files0Hash = files0Hash,
-                fileMode = _fileMode.build(),
-                maxLogSize = _maxLogSize.coerceAtLeast(MIN_MAX_LOG_SIZE),
+                modeDirectory = _modeDirectory.build(),
+                modeFile = _modeFile.build(),
+                maxLogSize = _maxLogSize.coerceAtLeast(50L * 1024L), // 50kb
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
                 whitelistTag = whitelistTag,
+                uidSuffix = "FileLog-$files0Hash",
             )
-        }
-
-        public companion object {
-
-            /**
-             * TODO
-             * */
-            public const val MIN_MAX_LOGS: Byte = 2
-
-            /**
-             * TODO
-             * */
-            public const val MIN_MAX_LOG_SIZE: Long = 50L * 1024L // 50 Kb
         }
     }
 
     private companion object {
-        private const val UID_PREFIX = "io.matthewnelson.kmp.log.file."
         private const val DOMAIN = "kmp-log:file"
     }
 
     private val directory: File
     private val files: Set<File>
 
-    private val directoryMode: String
-    private val fileMode: String
-
-    private val LOG: Logger by lazy { Logger.of(tag = uid.substringAfter(UID_PREFIX, ""), DOMAIN) }
+    private val LOG: Logger
 
     private constructor(
         min: Level,
         max: Level,
         directory: File,
-        directoryMode: String,
         files: Set<File>,
         files0Hash: String,
-        fileMode: String,
+        modeDirectory: String,
+        modeFile: String,
         maxLogSize: Long,
         whitelistDomain: Set<String>,
         whitelistDomainNull: Boolean,
         whitelistTag: Set<String>,
-    ): super(uid = "${UID_PREFIX}FileLog-$files0Hash", min = min, max = max) {
+        uidSuffix: String,
+    ): super(uid = "io.matthewnelson.kmp.log.file.$uidSuffix", min = min, max = max) {
         this.directory = directory
         this.files = files
+        this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
+
         this.logDirectory = directory.path
         this.logFiles = files.mapTo(LinkedHashSet(files.size)) { it.path }.toImmutableSet()
         this.logFiles0Hash = files0Hash
-        this.directoryMode = directoryMode
-        this.fileMode = fileMode
+        this.modeDirectory = modeDirectory
+        this.modeFile = modeFile
         this.maxLogSize = maxLogSize
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull

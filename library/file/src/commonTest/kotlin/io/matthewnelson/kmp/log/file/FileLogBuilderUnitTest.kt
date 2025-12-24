@@ -15,7 +15,7 @@
  **/
 package io.matthewnelson.kmp.log.file
 
-import io.matthewnelson.kmp.file.File
+import io.matthewnelson.kmp.file.SysDirSep
 import io.matthewnelson.kmp.file.SysTempDir
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.log.Log
@@ -23,6 +23,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 class FileLogBuilderUnitTest {
 
@@ -37,71 +38,160 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenFileName_whenEmpty_thenBuildThrowsIllegalArgumentException() {
+    fun givenBuild_whenFileLogUid_thenIsAsExpected() {
+        val fileLog = newBuilder().build()
+        val prefix = "io.matthewnelson.kmp.log.file.FileLog-"
+        assertTrue(fileLog.uid.startsWith(prefix))
+        assertEquals(prefix.length + 24, fileLog.uid.length)
+        assertEquals(24, fileLog.logFiles0Hash.length)
+        assertTrue(fileLog.uid.endsWith(fileLog.logFiles0Hash))
+    }
+
+    @Test
+    fun givenLogDirectory_whenEmpty_thenThrowsIllegalArgumentException() {
         try {
-            newBuilder().fileName("").build()
+            newBuilder("")
+            fail()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("logDirectory cannot be empty", e.message)
+        }
+    }
+
+    @Test
+    fun givenLogDirectory_whenContainsNullCharacter_thenThrowsIllegalArgumentException() {
+        try {
+            newBuilder(SysTempDir.path + SysDirSep + '\u0000')
+            fail()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("logDirectory cannot contain null character '\\u0000'", e.message)
+        }
+    }
+
+    @Test
+    fun givenFileName_whenEmpty_thenThrowsIllegalArgumentException() {
+        try {
+            newBuilder().fileName("")
+            fail()
         } catch (e: IllegalArgumentException) {
             assertEquals("fileName cannot be empty", e.message)
         }
     }
 
     @Test
-    fun givenFileName_whenGreaterThan64Characters_thenBuildThrowsIllegalArgumentException() {
+    fun givenFileName_whenGreaterThan64Characters_thenThrowsIllegalArgumentException() {
         try {
             val name = buildString {
                 repeat(65) { append("a") }
             }
-            newBuilder().fileName(name).build()
+            newBuilder().fileName(name)
+            fail()
         } catch (e: IllegalArgumentException) {
             assertEquals("fileName cannot exceed 64 characters", e.message)
         }
     }
 
     @Test
-    fun givenFileName_whenEndsWithDot_thenBuildThrowsIllegalArgumentException() {
+    fun givenFileName_whenEndsWithDot_thenThrowsIllegalArgumentException() {
         try {
-            newBuilder().fileName("something.").build()
+            newBuilder().fileName("something.")
+            fail()
         } catch (e: IllegalArgumentException) {
             assertEquals("fileName cannot end with '.'", e.message)
         }
     }
 
     @Test
-    fun givenFileName_whenContainsWhitespace_thenBuildThrowsIllegalArgumentException() {
+    fun givenFileName_whenContainsSlash_thenThrowsIllegalArgumentException() {
         try {
-            newBuilder().fileName("something ").build()
+            newBuilder().fileName("some/thing")
+            fail()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileName cannot contain '/'", e.message)
+        }
+        try {
+            newBuilder().fileName("some\\thing")
+            fail()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileName cannot contain '\\'", e.message)
+        }
+    }
+
+    @Test
+    fun givenFileName_whenContainsWhitespace_thenThrowsIllegalArgumentException() {
+        try {
+            newBuilder().fileName("something ")
+            fail()
         } catch (e: IllegalArgumentException) {
             assertEquals("fileName cannot contain whitespace", e.message)
         }
     }
 
     @Test
-    fun givenFileExtension_whenGreaterThan8Characters_thenBuildThrowsIllegalArgumentException() {
+    fun givenFileName_whenContainsNullCharacter_thenThrowsIllegalArgumentException() {
+        try {
+            newBuilder().fileName("something" + '\u0000')
+            fail()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileName cannot contain null character '\\u0000'", e.message)
+        }
+    }
+
+    @Test
+    fun givenFileExtension_whenGreaterThan8Characters_thenThrowsIllegalArgumentException() {
         try {
             val name = buildString {
                 repeat(9) { append("a") }
             }
-            newBuilder().fileExtension(name).build()
+            newBuilder().fileExtension(name)
+            fail()
         } catch (e: IllegalArgumentException) {
             assertEquals("fileExtension cannot exceed 8 characters", e.message)
         }
     }
 
     @Test
-    fun givenFileExtension_whenContainsDot_thenBuildThrowsIllegalArgumentException() {
+    fun givenFileExtension_whenContainsDot_thenThrowsIllegalArgumentException() {
         try {
-            newBuilder().fileExtension("abc.def").build()
+            newBuilder().fileExtension("abc.def")
+            fail()
         } catch (e: IllegalArgumentException) {
             assertEquals("fileExtension cannot contain '.'", e.message)
         }
     }
 
     @Test
+    fun givenFileExtension_whenContainsSlash_thenBuildThrowsIllegalArgumentException() {
+        try {
+            newBuilder().fileExtension("abc/def")
+            fail()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileExtension cannot contain '/'", e.message)
+        }
+        try {
+            newBuilder().fileExtension("abc\\def")
+            fail()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileExtension cannot contain '\\'", e.message)
+        }
+    }
+
+    @Test
     fun givenFileExtension_whenContainsWhitespace_thenBuildThrowsIllegalArgumentException() {
         try {
-            newBuilder().fileExtension("abc def").build()
+            newBuilder().fileExtension("abc def")
+            fail()
         } catch (e: IllegalArgumentException) {
             assertEquals("fileExtension cannot contain whitespace", e.message)
+        }
+    }
+
+    @Test
+    fun givenFileExtension_whenContainsNullCharacter_thenBuildThrowsIllegalArgumentException() {
+        try {
+            newBuilder().fileExtension("abcdef" + '\u0000')
+            fail()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileExtension cannot contain null character '\\u0000'", e.message)
         }
     }
 
@@ -160,12 +250,36 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenWhitelistDomains_whenBuild_thenChecksValidity() {
-        val b = newBuilder().whitelistDomain("")
-        try {
-            b.build()
-        } catch (e: IllegalArgumentException) {
-            assertEquals(true, e.message?.startsWith("domain.length[0] < min["))
+    fun givenBuilder_whenWhitelistDomains_thenChecksValidity() {
+        val b = newBuilder()
+        arrayOf<FileLog.Builder.() -> Unit>(
+            { whitelistDomain("") },
+            { whitelistDomain("", "") },
+            { whitelistDomain(listOf("")) },
+        ).forEach { fn ->
+            try {
+                fn(b)
+                fail()
+            } catch (e: IllegalArgumentException) {
+                assertEquals(true, e.message?.startsWith("domain.length[0] < min["))
+            }
+        }
+    }
+
+    @Test
+    fun givenBuilder_whenWhitelistTags_thenChecksValidity() {
+        val b = newBuilder()
+        arrayOf<FileLog.Builder.() -> Unit>(
+            { whitelistTag("") },
+            { whitelistTag("", "") },
+            { whitelistTag(listOf("")) },
+        ).forEach { fn ->
+            try {
+                fn(b)
+                fail()
+            } catch (e: IllegalArgumentException) {
+                assertEquals("tag cannot be empty", e.message)
+            }
         }
     }
 
@@ -176,15 +290,5 @@ class FileLogBuilderUnitTest {
         assertFailsWith<ClassCastException> { tags as MutableSet<String> }
     }
 
-    @Test
-    fun givenWhitelistTags_whenBuild_thenChecksValidity() {
-        val b = newBuilder().whitelistTag("")
-        try {
-            b.build()
-        } catch (e: IllegalArgumentException) {
-            assertEquals("tag cannot be empty", e.message)
-        }
-    }
-
-    private fun newBuilder(dir: File = SysTempDir) = FileLog.Builder(dir.path)
+    private fun newBuilder(dir: String = SysTempDir.path) = FileLog.Builder(dir)
 }

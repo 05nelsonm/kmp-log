@@ -15,6 +15,10 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         final fun <get-logFiles0Hash>(): kotlin/String // io.matthewnelson.kmp.log.file/FileLog.logFiles0Hash.<get-logFiles0Hash>|<get-logFiles0Hash>(){}[0]
     final val maxLogSize // io.matthewnelson.kmp.log.file/FileLog.maxLogSize|{}maxLogSize[0]
         final fun <get-maxLogSize>(): kotlin/Long // io.matthewnelson.kmp.log.file/FileLog.maxLogSize.<get-maxLogSize>|<get-maxLogSize>(){}[0]
+    final val modeDirectory // io.matthewnelson.kmp.log.file/FileLog.modeDirectory|{}modeDirectory[0]
+        final fun <get-modeDirectory>(): kotlin/String // io.matthewnelson.kmp.log.file/FileLog.modeDirectory.<get-modeDirectory>|<get-modeDirectory>(){}[0]
+    final val modeFile // io.matthewnelson.kmp.log.file/FileLog.modeFile|{}modeFile[0]
+        final fun <get-modeFile>(): kotlin/String // io.matthewnelson.kmp.log.file/FileLog.modeFile.<get-modeFile>|<get-modeFile>(){}[0]
     final val whitelistDomain // io.matthewnelson.kmp.log.file/FileLog.whitelistDomain|{}whitelistDomain[0]
         final fun <get-whitelistDomain>(): kotlin.collections/Set<kotlin/String> // io.matthewnelson.kmp.log.file/FileLog.whitelistDomain.<get-whitelistDomain>|<get-whitelistDomain>(){}[0]
     final val whitelistDomainNull // io.matthewnelson.kmp.log.file/FileLog.whitelistDomainNull|{}whitelistDomainNull[0]
@@ -50,12 +54,5 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         final fun whitelistTag(kotlin.collections/Collection<kotlin/String>): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistTag|whitelistTag(kotlin.collections.Collection<kotlin.String>){}[0]
         final fun whitelistTag(kotlin/Array<out kotlin/String>...): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistTag|whitelistTag(kotlin.Array<out|kotlin.String>...){}[0]
         final fun whitelistTag(kotlin/String): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistTag|whitelistTag(kotlin.String){}[0]
-
-        final object Companion { // io.matthewnelson.kmp.log.file/FileLog.Builder.Companion|null[0]
-            final const val MIN_MAX_LOGS // io.matthewnelson.kmp.log.file/FileLog.Builder.Companion.MIN_MAX_LOGS|{}MIN_MAX_LOGS[0]
-                final fun <get-MIN_MAX_LOGS>(): kotlin/Byte // io.matthewnelson.kmp.log.file/FileLog.Builder.Companion.MIN_MAX_LOGS.<get-MIN_MAX_LOGS>|<get-MIN_MAX_LOGS>(){}[0]
-            final const val MIN_MAX_LOG_SIZE // io.matthewnelson.kmp.log.file/FileLog.Builder.Companion.MIN_MAX_LOG_SIZE|{}MIN_MAX_LOG_SIZE[0]
-                final fun <get-MIN_MAX_LOG_SIZE>(): kotlin/Long // io.matthewnelson.kmp.log.file/FileLog.Builder.Companion.MIN_MAX_LOG_SIZE.<get-MIN_MAX_LOG_SIZE>|<get-MIN_MAX_LOG_SIZE>(){}[0]
-        }
     }
 }
