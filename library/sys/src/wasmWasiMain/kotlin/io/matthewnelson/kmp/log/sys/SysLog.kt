@@ -76,6 +76,8 @@ public actual class SysLog private actual constructor(min: Level): Log(SYS_LOG_U
     }
 }
 
+private const val MAX_BUF_SIZE = 1024 * 4
+
 @Suppress("OPT_IN_USAGE")
 @WasmImport("wasi_snapshot_preview1", "fd_write")
 private external fun fdWrite(fd: Int, iovecPtr: Int, iovecSize: Int, resultPtr: Int): Int
@@ -91,17 +93,27 @@ private fun writeLog(formatted: CharSequence, fd: Int) {
         formatted.decodeBuffered(
             decoder = UTF8,
             throwOnOverflow = false,
-            maxBufSize = 1024 * 2,
+            maxBufSize = MAX_BUF_SIZE,
             action = { buf, offset, len ->
                 // Cannot allocate a Pointer for data until we know the actual size
                 // of buf (which will be re-used on every invocation of action).
                 //
-                // decodeBuffered may use a smaller one than what is defined for
-                // maxBufSize if it can one-shot the text to UTF-8 byte transformation.
-                //
                 // Also, it will never be 0 len because commonFormatLogOrNull will
-                // return null instead of an empty StringBuilder, so there is at LEAST 1.
-                if (data == null) data = alloc.allocate(buf.size)
+                // return null instead of an empty StringBuilder, so there is at LEAST
+                // 1 character to UTF-8 encode.
+                if (data == null) {
+                    val size = if (buf.size != MAX_BUF_SIZE) {
+                        // decodeBuffered one-shot the encoding and was able to allocate a
+                        // smaller buffer than what was defined for maxBufSize; action will
+                        // only be invoked once.
+                        //
+                        // Use len instead of buf.size (which could be over-sized by 3x).
+                        len
+                    } else {
+                        buf.size
+                    }
+                    data = alloc.allocate(size)
+                }
 
                 repeat(len) { i -> (data + i).storeByte(buf[offset + i]) }
 
