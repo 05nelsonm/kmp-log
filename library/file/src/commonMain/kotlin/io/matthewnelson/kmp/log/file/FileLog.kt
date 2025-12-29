@@ -276,6 +276,7 @@ public class FileLog: Log {
                 require(c != '\\') { "fileExtension cannot contain '\\'" }
                 require(c != '\u0000') { "fileExtension cannot contain null character '\\u0000'" }
             }
+            // TODO: disallow "del" and "tmp"?
             _fileExtension = name
             return this
         }
@@ -504,6 +505,8 @@ public class FileLog: Log {
 
     private val directory: File
     private val files: Set<File>
+    private val lockFile: File
+    private val rotateFile: File
 
     private val LOG: Logger
 
@@ -523,6 +526,8 @@ public class FileLog: Log {
     ): super(uid = "io.matthewnelson.kmp.log.file.$uidSuffix", min = min, max = max) {
         this.directory = directory
         this.files = files
+        this.lockFile = directory.resolve(".lock-$files0Hash")
+        this.rotateFile = directory.resolve(".rotate-$files0Hash")
         this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
 
         this.logDirectory = directory.path
@@ -545,6 +550,7 @@ public class FileLog: Log {
         // Do not log to self, only to other Logs (if installed)
         if (domain == LOG.domain && tag == LOG.tag) return false
 
+        // TODO: Use an array which is faster than a LinkedHashSet
         if (whitelistDomain.isNotEmpty()) {
             if (domain == null) {
                 if (!whitelistDomainNull) return false
@@ -552,6 +558,7 @@ public class FileLog: Log {
                 if (!whitelistDomain.contains(domain)) return false
             }
         }
+        // TODO: Use an array which is faster than a LinkedHashSet
         if (whitelistTag.isNotEmpty()) {
             if (!whitelistTag.contains(tag)) return false
         }
@@ -560,6 +567,39 @@ public class FileLog: Log {
 
     override fun onInstall() {
         // TODO
+        //  - Create and set CoroutineScope
+        //  - Setup SharedFlow
+        //  - Launch coroutine
+        //      - directory.mkdirs2(modeDirectory)
+        //      - Verify directory.canonicalFile2() == directory
+        //          - FAIL: Disallow symlink hijacking between build() and
+        //            Log.Root.install() which would invalidate FileLog.uid
+        //      - Verify lockFile.canonicalFile2() == lockFile
+        //          - If symlink, delete.
+        //              - Need to think on how to do this atomically in a multi-process
+        //                way. Maybe a delay after before opening a new lock file? Maybe
+        //                rename to "{random}-$file0Hash.del" and then delete it? IDK...
+        //      - Open lockFile
+        //      - Verify files[0].canonicalFile2() == files[0]
+        //          - If symlink, obtain FileLock, re-check then delete.
+        //      - files[0].openReadWrite(excl = OpenExcl.MaybeCreate.of(modeFile))
+        //      - Launch separate coroutine and clean up all "*-file0Hash.del" files
+        //        that may be left over from an interrupted operation.
+        //      - Check rotateFile.exists2(). If present, then either another process
+        //        is logging to the same file and a log rotation is underway, or the
+        //        rotation was interrupted and needs to be finished off.
+        //          - lockFile.tryLock()
+        //          - rotateFile.openReadWrite(excl = OpenExcl.MustExist)
+        //          - If rotateFile.size() != files[0].size(), finish copying data
+        //          - Need to think about how to "pick up" a failed rotation. Iterate
+        //            through logFiles to see what exists and what doesn't? Maybe a
+        //            manifest file of steps to indicate "in process", "complete" etc?
+        //            Maybe after copying everything from files[0] to rotateFile, truncate
+        //            files[0] and drop the lock to allow logging to continue? Would need
+        //            to have 2 distinct byte ranges for lockFile then; 1 range for files[0]
+        //            and 1 range for rotateFile. Then can launch a coroutine to complete
+        //            rotation in and continue with initialization.
+        //      - Start observing SharedFlow
     }
 
     override fun onUninstall() {
