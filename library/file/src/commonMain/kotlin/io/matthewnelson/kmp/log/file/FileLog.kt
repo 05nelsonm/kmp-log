@@ -444,7 +444,6 @@ public class FileLog: Log {
          * @return The [FileLog] to [Log.Root.install]
          *
          * @throws [IOException] If [File.canonicalFile2] fails.
-         * @throws [UnsupportedOperationException] If Js/WasmJs Browser.
          * */
         public fun build(): FileLog {
             val fileName = _fileName

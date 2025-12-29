@@ -21,7 +21,8 @@ kmpConfiguration {
     configureShared(
         java9ModuleName = "io.matthewnelson.kmp.log.compat.slf4j",
         publish = true,
-        jvmOnly = true,
+        enableJs = false,
+        enableNative = false,
     ) {
         jvm {
             sourceSetMain {

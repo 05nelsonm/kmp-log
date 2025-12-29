@@ -13,33 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
-import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
-
 plugins {
     id("configuration")
 }
 
 kmpConfiguration {
-    // TODO: publish = true && :tools:check-publication build.gradle.kts
-    configureShared(java9ModuleName = "io.matthewnelson.kmp.log.file", publish = false) {
-        js {
-            target {
-                browser {
-                    testTask { isEnabled = false }
-                }
-            }
-        }
-
-        @OptIn(ExperimentalWasmDsl::class)
-        wasmJs {
-            target {
-                browser {
-                    testTask { isEnabled = false }
-                }
-            }
-        }
-
+    // TODO:
+    //  - Set publish = true
+    //  - Update module README.md
+    //  - Update project README.
+    //  - Uncomment :tools:check-publication build.gradle.kts
+    configureShared(
+        java9ModuleName = "io.matthewnelson.kmp.log.file",
+        enableJs = false, // Node.js does not support file region locking
+        publish = false,
+    ) {
         common {
             sourceSetMain {
                 dependencies {
@@ -47,7 +35,7 @@ kmpConfiguration {
                     implementation(libs.encoding.base16)
                     implementation(libs.encoding.utf8)
                     implementation(libs.immutable.collections)
-                    implementation(libs.kmp.file.async)
+                    implementation(libs.kmp.file)
                     implementation(libs.kotlinx.coroutines.core)
                     implementation(kotlincrypto.hash.blake2)
                 }
@@ -59,6 +47,6 @@ kmpConfiguration {
             }
         }
 
-        configureKotlinVersion(jsWasmJs = KotlinVersion.KOTLIN_2_0)
+        configureKotlinVersion()
     }
 }
