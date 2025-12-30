@@ -197,6 +197,26 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
+    fun givenFileExtension_whenIsDel_thenBuildThrowsIllegalArgumentException() {
+        try {
+            newBuilder().fileExtension("del")
+            fail()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileExtension cannot be 'del'", e.message)
+        }
+    }
+
+    @Test
+    fun givenFileExtension_whenIsTmp_thenBuildThrowsIllegalArgumentException() {
+        try {
+            newBuilder().fileExtension("tmp")
+            fail()
+        } catch (e: IllegalArgumentException) {
+            assertEquals("fileExtension cannot be 'tmp'", e.message)
+        }
+    }
+
+    @Test
     fun givenMaxLogs_whenLessThan2_thenUses2() {
         assertEquals(2, newBuilder().maxLogs(0).build().logFiles.size)
     }
