@@ -147,14 +147,17 @@ kmpConfiguration {
         kotlin {
             if (!project.plugins.hasPlugin("com.android.base")) return@kotlin
 
-            try {
-                evaluationDependsOn(":library:log")
-            } catch (_: Throwable) {}
+            arrayOf(":library:log", ":library:file").forEach { path ->
+                try {
+                    evaluationDependsOn(path)
+                } catch (_: Throwable) {}
+            }
 
             project.afterEvaluate {
                 val nativeTestBinaryTasks = arrayOf(
                     project to "libTestSys.so",
                     project(":library:log") to "libTestLog.so",
+                    project(":library:file") to "libTestFile.so",
                 ).flatMap { (project, libName) ->
                     val buildDir = project
                         .layout

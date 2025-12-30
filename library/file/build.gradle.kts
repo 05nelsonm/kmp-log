@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
+
 plugins {
     id("configuration")
 }
@@ -25,7 +27,7 @@ kmpConfiguration {
     //  - Uncomment :tools:check-publication build.gradle.kts
     configureShared(
         java9ModuleName = "io.matthewnelson.kmp.log.file",
-        enableJs = false, // Node.js does not support file region locking
+        enableJs = false, // Node.js does not support file locks
         publish = false,
     ) {
         common {
@@ -43,6 +45,19 @@ kmpConfiguration {
             sourceSetTest {
                 dependencies {
                     implementation(libs.kotlinx.coroutines.test)
+                }
+            }
+        }
+
+        kotlin {
+            val cinteropDir = project.projectDir
+                .resolve("src")
+                .resolve("nativeInterop")
+                .resolve("cinterop")
+
+            targets.filterIsInstance<KotlinNativeTarget>().forEach { target ->
+                target.compilations["main"].cinterops.create("lock_file") {
+                    definitionFile.set(cinteropDir.resolve("$name.def"))
                 }
             }
         }
