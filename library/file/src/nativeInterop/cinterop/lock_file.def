@@ -1,0 +1,87 @@
+package = io.matthewnelson.kmp.log.file.internal
+---
+#ifdef _WIN32
+#include <fileapi.h>
+
+/**
+ * The size of the array required by kmp_log_file_unique_id
+ **/
+#define KMP_LOG_FILE_UNIQUE_ID_SIZE 3
+#else
+#include <stdint.h>
+#include <errno.h>
+#include <sys/stat.h>
+
+/**
+ * The size of the array required by kmp_log_file_unique_id
+ **/
+#define KMP_LOG_FILE_UNIQUE_ID_SIZE 2
+#endif // _WIN32
+
+/**
+ * UNIX:
+ *   Retrieves st_ino and st_dev of the open file descriptor, populating
+ *   the provided unique_id uint64_t array in the following manner.
+ *
+ *   Indices:
+ *    - 0: st_ino
+ *    - 1: st_dev
+ *
+ * Windows:
+ *   Retrieves dwVolumeSerialNumber, nFileIndexHigh and nFileIndexLow of the open
+ *   file HANDLE, populating the provided unique_id DWORD64 array in the following manner.
+ *
+ *   Indices:
+ *    - 0: dwVolumeSerialNumber
+ *    - 1: nFileIndexHigh
+ *    - 2: nFileIndexLow
+ *
+ * Returns 0 on success, -1 otherwise.
+ * */
+int
+#ifdef _WIN32
+kmp_log_file_unique_id(HANDLE h, DWORD64 unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
+#else
+kmp_log_file_unique_id(int fd, uint64_t unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
+#endif // _WIN32
+{
+  if (!unique_id) {
+    return -1;
+  }
+#ifdef _WIN32
+
+  struct _BY_HANDLE_FILE_INFORMATION info = {0};
+
+  if (GetFileInformationByHandle(h, &info) == 0) {
+    return -1;
+  }
+
+  unique_id[0] = info.dwVolumeSerialNumber;
+  unique_id[1] = info.nFileIndexHigh;
+  unique_id[2] = info.nFileIndexLow;
+#else
+
+  int ret;
+#ifdef __ANDROID__
+  struct stat64 buf;
+#else
+  struct stat   buf;
+#endif // __ANDROID__
+
+  do {
+#ifdef __ANDROID__
+    ret = fstat64(fd, &buf);
+#else
+    ret = fstat(fd, &buf);
+#endif // __ANDROID__
+  } while (ret == -1 && errno == EINTR);
+
+  if (ret == -1) {
+    return -1;
+  }
+
+  unique_id[0] = buf.st_ino;
+  unique_id[1] = buf.st_dev;
+#endif // _WIN32
+  return 0;
+}
