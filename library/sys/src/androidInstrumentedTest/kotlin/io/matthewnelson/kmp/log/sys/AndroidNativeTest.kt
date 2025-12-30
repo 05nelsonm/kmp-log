@@ -40,6 +40,11 @@ class AndroidNativeTest {
         run("libTestLog.so", 3.minutes)
     }
 
+    @Test
+    fun givenAndroidNative_whenTestFileBinary_thenIsSuccessful() {
+        run("libTestFile.so", 5.minutes)
+    }
+
     private fun run(libName: String, timeout: Duration) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
             println("Skipping...")
