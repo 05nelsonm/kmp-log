@@ -84,10 +84,18 @@ kmpConfiguration {
                     "native",
                 ).forEach { name ->
                     findByName(name + "Main")?.dependencies {
-//                        implementation("$group:file:$version")
                         implementation("$group:compat-ktor:$version")
                     }
                 }
+//                // Non-Js
+//                arrayOf(
+//                    "jvmAndroid",
+//                    "native",
+//                ).forEach { name ->
+//                    findByName(name + "Main")?.dependencies {
+//                        implementation("$group:file:$version")
+//                    }
+//                }
             }
         }
     }

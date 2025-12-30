@@ -24,7 +24,8 @@ import org.jetbrains.kotlin.konan.target.HostManager
 fun KmpConfigurationExtension.configureShared(
     java9ModuleName: String? = null,
     publish: Boolean = false,
-    jvmOnly: Boolean = false,
+    enableJs: Boolean = true,
+    enableNative: Boolean = true,
     action: Action<KmpConfigurationContainerDsl>,
 ) {
     if (publish) {
@@ -44,7 +45,7 @@ fun KmpConfigurationExtension.configureShared(
             }
         }
 
-        if (!jvmOnly) {
+        if (enableJs) {
             js {
                 target {
                     browser()
@@ -62,7 +63,9 @@ fun KmpConfigurationExtension.configureShared(
                     nodejs()
                 }
             }
+        }
 
+        if (enableNative) {
             androidNativeAll()
 
             iosAll()
