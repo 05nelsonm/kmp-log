@@ -510,6 +510,9 @@ public class FileLog: Log {
     private val lockFile: File
     private val rotateFile: File
 
+    private val _whitelistDomain: Array<String>
+    private val _whitelistTag: Array<String>
+
     private val LOG: Logger
 
     private constructor(
@@ -530,6 +533,8 @@ public class FileLog: Log {
         this.files = files
         this.lockFile = directory.resolve(".lock-$files0Hash")
         this.rotateFile = directory.resolve(".rotate-$files0Hash")
+        this._whitelistDomain = whitelistDomain.toTypedArray()
+        this._whitelistTag = whitelistTag.toTypedArray()
         this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
 
         this.logDirectory = directory.path
@@ -552,17 +557,15 @@ public class FileLog: Log {
         // Do not log to self, only to other Logs (if installed)
         if (domain == LOG.domain && tag == LOG.tag) return false
 
-        // TODO: Use an array which is faster than a LinkedHashSet
-        if (whitelistDomain.isNotEmpty()) {
+        if (_whitelistDomain.isNotEmpty()) {
             if (domain == null) {
                 if (!whitelistDomainNull) return false
             } else {
-                if (!whitelistDomain.contains(domain)) return false
+                if (!_whitelistDomain.contains(domain)) return false
             }
         }
-        // TODO: Use an array which is faster than a LinkedHashSet
-        if (whitelistTag.isNotEmpty()) {
-            if (!whitelistTag.contains(tag)) return false
+        if (_whitelistTag.isNotEmpty()) {
+            if (!_whitelistTag.contains(tag)) return false
         }
         return true
     }
