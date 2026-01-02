@@ -17,23 +17,12 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.lastErrorToIOException
-import io.matthewnelson.kmp.file.path
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ULongVar
-import kotlinx.cinterop.convert
 import platform.windows.CloseHandle
-import platform.windows.CreateFileA
 import platform.windows.FALSE
-import platform.windows.FILE_ATTRIBUTE_NORMAL
-import platform.windows.FILE_SHARE_DELETE
-import platform.windows.FILE_SHARE_READ
-import platform.windows.FILE_SHARE_WRITE
-import platform.windows.GENERIC_READ
-import platform.windows.GENERIC_WRITE
 import platform.windows.HANDLE
-import platform.windows.INVALID_HANDLE_VALUE
-import platform.windows.OPEN_ALWAYS
 import kotlin.test.Test
 
 @Suppress("UNUSED")
@@ -41,17 +30,7 @@ import kotlin.test.Test
 class LockFileUniqueIdMingwUnitTest: LockFileUniqueIdNativeBaseTest<HANDLE>() {
 
     override fun File.open(): HANDLE {
-        val handle = CreateFileA(
-            lpFileName = path,
-            dwDesiredAccess = (GENERIC_READ.toInt() or GENERIC_WRITE).convert(),
-            dwShareMode = (FILE_SHARE_DELETE or FILE_SHARE_READ or FILE_SHARE_WRITE).convert(),
-            lpSecurityAttributes = null,
-            dwCreationDisposition = OPEN_ALWAYS.convert(),
-            dwFlagsAndAttributes = FILE_ATTRIBUTE_NORMAL.convert(),
-            hTemplateFile = null,
-        )
-        if (handle == null || handle == INVALID_HANDLE_VALUE) throw lastErrorToIOException(this)
-        return handle
+        return LockFile.openHandle(this)
     }
 
     override fun HANDLE.close() {
