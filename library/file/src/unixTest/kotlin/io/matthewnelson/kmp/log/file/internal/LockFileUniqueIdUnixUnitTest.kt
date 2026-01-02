@@ -17,11 +17,13 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.errnoToIOException
-import kotlinx.cinterop.CPointer
+import io.matthewnelson.kmp.log.file.withTmpFile
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.ULongVar
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import platform.posix.errno
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
 @OptIn(ExperimentalForeignApi::class)
 class LockFileUniqueIdUnixUnitTest: LockFileUniqueIdNativeBaseTest<Int>() {
@@ -34,10 +36,19 @@ class LockFileUniqueIdUnixUnitTest: LockFileUniqueIdNativeBaseTest<Int>() {
         if (platform.posix.close(this) != 0) throw errnoToIOException(errno)
     }
 
-    override fun kmpLogFileUniqueId(fd: Int, uniqueId: CPointer<ULongVar>?): Int {
-        return kmp_log_file_unique_id(fd, uniqueId)
+    override fun kmpLogFileUniqueId(fd: Int, uniqueId: LongArray): Int {
+        return uniqueId.usePinned { pinned ->
+            kmp_log_file_unique_id(fd, pinned.addressOf(0))
+        }
     }
 
     @Test
-    fun stub() {}
+    fun givenKmpLogFileUniqueId_whenUniqueIdParameterNull_thenReturnsNeg1() = withTmpFile { tmp ->
+        val fd = tmp.open()
+        try {
+            assertEquals(-1, kmp_log_file_unique_id(fd, null))
+        } finally {
+            fd.close()
+        }
+    }
 }

@@ -4,7 +4,7 @@ package = io.matthewnelson.kmp.log.file.internal
 #include <fileapi.h>
 
 /**
- * The size of the array required by kmp_log_file_unique_id
+ * The size of the DWORD array required by kmp_log_file_unique_id
  **/
 #define KMP_LOG_FILE_UNIQUE_ID_SIZE 3
 #else
@@ -14,7 +14,7 @@ package = io.matthewnelson.kmp.log.file.internal
 #include <sys/stat.h>
 
 /**
- * The size of the array required by kmp_log_file_unique_id
+ * The size of the int64_t array required by kmp_log_file_unique_id
  **/
 #define KMP_LOG_FILE_UNIQUE_ID_SIZE 2
 #endif // _WIN32
@@ -22,7 +22,7 @@ package = io.matthewnelson.kmp.log.file.internal
 /**
  * UNIX:
  *   Retrieves st_ino and st_dev of the open file descriptor, populating
- *   the provided unique_id uint64_t array in the following manner.
+ *   the provided unique_id array in the following manner.
  *
  *   Indices:
  *    - 0: st_ino
@@ -30,7 +30,7 @@ package = io.matthewnelson.kmp.log.file.internal
  *
  * Windows:
  *   Retrieves dwVolumeSerialNumber, nFileIndexHigh and nFileIndexLow of the open
- *   file HANDLE, populating the provided unique_id DWORD64 array in the following manner.
+ *   file HANDLE, populating the provided unique_id array in the following manner.
  *
  *   Indices:
  *    - 0: dwVolumeSerialNumber
@@ -41,9 +41,9 @@ package = io.matthewnelson.kmp.log.file.internal
  * */
 int
 #ifdef _WIN32
-kmp_log_file_unique_id(HANDLE h, DWORD64 unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
+kmp_log_file_unique_id(HANDLE h, DWORD unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
 #else
-kmp_log_file_unique_id(int fd, uint64_t unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
+kmp_log_file_unique_id(int fd, int64_t unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
 #endif // _WIN32
 {
   if (!unique_id) {

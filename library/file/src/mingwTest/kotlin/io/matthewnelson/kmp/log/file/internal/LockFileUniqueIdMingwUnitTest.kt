@@ -17,15 +17,16 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.lastErrorToIOException
-import kotlinx.cinterop.CPointer
+import io.matthewnelson.kmp.log.file.withTmpFile
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.ULongVar
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import platform.windows.CloseHandle
 import platform.windows.FALSE
 import platform.windows.HANDLE
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
-@Suppress("UNUSED")
 @OptIn(ExperimentalForeignApi::class)
 class LockFileUniqueIdMingwUnitTest: LockFileUniqueIdNativeBaseTest<HANDLE>() {
 
@@ -37,10 +38,24 @@ class LockFileUniqueIdMingwUnitTest: LockFileUniqueIdNativeBaseTest<HANDLE>() {
         if (CloseHandle(this) == FALSE) throw lastErrorToIOException()
     }
 
-    override fun kmpLogFileUniqueId(fd: HANDLE, uniqueId: CPointer<ULongVar>?): Int {
-        return kmp_log_file_unique_id(fd, uniqueId)
+    override fun kmpLogFileUniqueId(fd: HANDLE, uniqueId: LongArray): Int {
+        val a = UIntArray(uniqueId.size) { i -> uniqueId[i].toUInt() }
+        val ret = a.usePinned { pinned ->
+            kmp_log_file_unique_id(fd, pinned.addressOf(0))
+        }
+        for (i in a.indices) {
+            uniqueId[i] = a[i].toLong()
+        }
+        return ret
     }
 
     @Test
-    fun stub() {}
+    fun givenKmpLogFileUniqueId_whenUniqueIdParameterNull_thenReturnsNeg1() = withTmpFile { tmp ->
+        val fd = tmp.open()
+        try {
+            assertEquals(-1, kmp_log_file_unique_id(fd, null))
+        } finally {
+            fd.close()
+        }
+    }
 }
