@@ -8,6 +8,7 @@ package = io.matthewnelson.kmp.log.file.internal
  **/
 #define KMP_LOG_FILE_UNIQUE_ID_SIZE 3
 #else
+#include <fcntl.h>
 #include <stdint.h>
 #include <errno.h>
 #include <sys/stat.h>
@@ -85,3 +86,44 @@ kmp_log_file_unique_id(int fd, uint64_t unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
 #endif // _WIN32
   return 0;
 }
+
+#ifdef _WIN32
+// TODO
+#else
+
+/**
+ * Helper which calls fcntl with provided arguments for advisory record locking.
+ *
+ * [fd] The file descriptor of the open file.
+ * [type] F_RDLCK, F_WRLCK, F_UNLCK
+ * [blocking] If true, F_SETLKW, otherwise F_SETLK
+ * [position] The start of the byte-range to lock.
+ * [size] The number of bytes from [position] to lock.
+ *
+ * See: https://man7.org/linux/man-pages/man2/F_SETLK.2const.html
+ *
+ * Returns 0 on success, -1 otherwise.
+ * */
+int
+kmp_log_file_setlk(int fd, int type, int blocking, int64_t position, int64_t size)
+{
+  int ret;
+#ifdef __ANDROID__
+  struct flock64 lock;
+#else
+  struct flock   lock;
+#endif // __ANDROID__
+
+  lock.l_type = type;
+  lock.l_whence = SEEK_SET;
+  lock.l_start = position;
+  lock.l_len = size;
+
+  do {
+    ret = fcntl(fd, blocking ? F_SETLKW : F_SETLK, &lock);
+  } while (ret == -1 && errno == EINTR);
+
+  return ret;
+}
+
+#endif // _WIN32
