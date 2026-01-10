@@ -117,13 +117,14 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
 
                 p.stdoutFeed { line ->
                     when {
-                        line == null -> {}
+                        line == null -> return@stdoutFeed
                         line.startsWith("ACQUIRED") -> acquired = true
                         line.startsWith("RELEASING") -> releasing = true
                         line.startsWith("RELEASED") -> released = true
                         line.startsWith("FAILURE") -> acquired = false
-                        else -> println(line)
+                        else -> {}
                     }
+                    println(line)
                 }.stderrFeed { line ->
                     println(line ?: return@stderrFeed)
                 }
@@ -146,6 +147,8 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
 
                 // Should now block until test-file-lock.jar times out and the process stops.
                 assertEquals(0, kmp_log_file_setlk(fd, position = 0L, length = 1L, locking = 1, blocking = 1, exclusive = 1))
+
+                p.waitFor(1.milliseconds)
 
                 assertTrue(releasing, "test-file-lock.jar did not dispatch RELEASING as expected..")
                 assertFalse(released, "released")

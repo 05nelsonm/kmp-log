@@ -172,10 +172,18 @@ kmp_log_file_setlk(int fd, int64_t position, int64_t length, int locking, int bl
 #endif // __ANDROID__
 
   if (locking) {
+#ifdef __ANDROID__
+    cmd = blocking ? F_SETLKW64 : F_SETLK64;
+#else
     cmd = blocking ? F_SETLKW : F_SETLK;
+#endif // __ANDROID__
     lock.l_type = exclusive ? F_WRLCK : F_RDLCK;
   } else {
+#ifdef __ANDROID__
+    cmd = F_SETLK64;
+#else
     cmd = F_SETLK;
+#endif // __ANDROID__
     lock.l_type = F_UNLCK;
   }
 
