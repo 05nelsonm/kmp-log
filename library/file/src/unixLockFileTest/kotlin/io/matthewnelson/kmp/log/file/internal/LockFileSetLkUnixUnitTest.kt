@@ -148,7 +148,9 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
                 // Should now block until test-file-lock.jar times out and the process stops.
                 assertEquals(0, kmp_log_file_setlk(fd, position = 0L, length = 1L, locking = 1, blocking = 1, exclusive = 1))
 
-                p.waitFor(1.milliseconds)
+                while (!releasing && p.isAlive) {
+                    p.waitFor(1.milliseconds)
+                }
 
                 assertTrue(releasing, "test-file-lock.jar did not dispatch RELEASING as expected..")
                 assertFalse(released, "released")
