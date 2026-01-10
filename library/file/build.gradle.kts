@@ -62,6 +62,102 @@ kmpConfiguration {
             }
         }
 
+        kotlin {
+            with(sourceSets) {
+                val sets = arrayOf(
+                    "iosX64",
+                    "iosSimulatorArm64",
+                    "linux",
+                    "macos",
+                ).mapNotNull { name -> findByName(name + "Test") }
+                if (sets.isEmpty()) return@kotlin
+                maybeCreate("unixLockFileTest").apply {
+                    dependsOn(getByName("unixTest"))
+                    sets.forEach { t -> t.dependsOn(this) }
+                }
+            }
+        }
+
+        kotlin {
+            with(sourceSets) {
+                val sets = arrayOf(
+                    "jvm" to emptyList(),
+                    "unixLockFile" to listOf(
+                        "iosX64",
+                        "iosSimulatorArm64",
+                        "linuxArm64",
+                        "linuxX64",
+                        "macosArm64",
+                        "macosX64",
+                    ),
+                ).mapNotNull { (name, dependencies) ->
+                    val test = findByName(name + "Test") ?: return@mapNotNull null
+                    val mapped = if (dependencies.isEmpty()) {
+                        listOf(name + "Test")
+                    } else {
+                        dependencies.map { it + "Test" }
+                    }
+                    test to mapped
+                }
+                if (sets.isEmpty()) return@kotlin
+
+                try {
+                    evaluationDependsOn(":test-file-lock")
+                } catch (_: Throwable) {}
+
+                val kotlinSrcDir = layout
+                    .buildDirectory
+                    .get()
+                    .asFile
+                    .resolve("generated")
+                    .resolve("sources")
+                    .resolve("lockFileTest")
+                    .resolve("kotlin")
+
+                val packageName = "io.matthewnelson.kmp.log.file.internal"
+
+                maybeCreate("lockFileTest").apply {
+                    dependsOn(getByName("commonTest"))
+                    sets.forEach { (t, _) -> t.dependsOn(this) }
+                    dependencies {
+                        implementation(libs.kmp.process)
+                    }
+                    kotlin.srcDir(kotlinSrcDir)
+                }
+
+                val configDir = kotlinSrcDir
+                    .resolve(packageName.replace('.', File.separatorChar))
+                configDir.mkdirs()
+
+                project.afterEvaluate {
+                    val jarTask = project(":test-file-lock")
+                        .tasks
+                        .findByName("assembleFatJar")
+
+                    val jarPath = if (jarTask != null) {
+                        sets.forEach { (_, testTasks) ->
+                            testTasks.forEach { testTask ->
+                                tasks
+                                    .findByName(testTask)
+                                    ?.dependsOn(jarTask)
+                            }
+                        }
+
+                        jarTask.outputs.files.first().path.replace("\\", "\\\\")
+                    } else {
+                        ""
+                    }
+
+                    configDir.resolve("-LockFileTestPlatform.kt").writeText("""
+                        package $packageName
+
+                        internal const val TEST_FILE_LOCK_JAR: String = "$jarPath"
+
+                    """.trimIndent())
+                }
+            }
+        }
+
         configureKotlinVersion()
     }
 }

@@ -17,51 +17,45 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.lastErrorToIOException
-import io.matthewnelson.kmp.file.path
-import kotlinx.cinterop.CPointer
+import io.matthewnelson.kmp.log.file.withTmpFile
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.ULongVar
-import kotlinx.cinterop.convert
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import platform.windows.CloseHandle
-import platform.windows.CreateFileA
 import platform.windows.FALSE
-import platform.windows.FILE_ATTRIBUTE_NORMAL
-import platform.windows.FILE_SHARE_DELETE
-import platform.windows.FILE_SHARE_READ
-import platform.windows.FILE_SHARE_WRITE
-import platform.windows.GENERIC_READ
-import platform.windows.GENERIC_WRITE
 import platform.windows.HANDLE
-import platform.windows.INVALID_HANDLE_VALUE
-import platform.windows.OPEN_ALWAYS
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
-@Suppress("UNUSED")
 @OptIn(ExperimentalForeignApi::class)
 class LockFileUniqueIdMingwUnitTest: LockFileUniqueIdNativeBaseTest<HANDLE>() {
 
     override fun File.open(): HANDLE {
-        val handle = CreateFileA(
-            lpFileName = path,
-            dwDesiredAccess = (GENERIC_READ.toInt() or GENERIC_WRITE).convert(),
-            dwShareMode = (FILE_SHARE_DELETE or FILE_SHARE_READ or FILE_SHARE_WRITE).convert(),
-            lpSecurityAttributes = null,
-            dwCreationDisposition = OPEN_ALWAYS.convert(),
-            dwFlagsAndAttributes = FILE_ATTRIBUTE_NORMAL.convert(),
-            hTemplateFile = null,
-        )
-        if (handle == null || handle == INVALID_HANDLE_VALUE) throw lastErrorToIOException(this)
-        return handle
+        return LockFile.openHandle(this)
     }
 
     override fun HANDLE.close() {
         if (CloseHandle(this) == FALSE) throw lastErrorToIOException()
     }
 
-    override fun kmpLogFileUniqueId(fd: HANDLE, uniqueId: CPointer<ULongVar>?): Int {
-        return kmp_log_file_unique_id(fd, uniqueId)
+    override fun kmpLogFileUniqueId(fd: HANDLE, uniqueId: LongArray): Int {
+        val a = UIntArray(uniqueId.size) { i -> uniqueId[i].toUInt() }
+        val ret = a.usePinned { pinned ->
+            kmp_log_file_unique_id(fd, pinned.addressOf(0))
+        }
+        for (i in a.indices) {
+            uniqueId[i] = a[i].toLong()
+        }
+        return ret
     }
 
     @Test
-    fun stub() {}
+    fun givenKmpLogFileUniqueId_whenUniqueIdParameterNull_thenReturnsNeg1() = withTmpFile { tmp ->
+        val fd = tmp.open()
+        try {
+            assertEquals(-1, kmp_log_file_unique_id(fd, null))
+        } finally {
+            fd.close()
+        }
+    }
 }

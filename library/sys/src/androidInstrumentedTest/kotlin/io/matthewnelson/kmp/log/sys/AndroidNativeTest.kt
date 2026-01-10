@@ -18,10 +18,18 @@ package io.matthewnelson.kmp.log.sys
 import android.app.Application
 import android.os.Build
 import androidx.test.core.app.ApplicationProvider
+import io.matthewnelson.encoding.base16.Base16
+import io.matthewnelson.encoding.core.Encoder.Companion.encodeToString
+import io.matthewnelson.kmp.file.SysTempDir
+import io.matthewnelson.kmp.file.delete2
+import io.matthewnelson.kmp.file.resolve
 import io.matthewnelson.kmp.file.toFile
 import io.matthewnelson.kmp.process.Process
 import io.matthewnelson.kmp.process.Stdio
+import java.io.RandomAccessFile
+import kotlin.random.Random
 import kotlin.test.Test
+import kotlin.test.assertNotNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
@@ -32,20 +40,39 @@ class AndroidNativeTest {
 
     @Test
     fun givenAndroidNative_whenTestSysBinary_thenIsSuccessful() {
-        run("libTestSys.so", 2.minutes)
+        run("libTestSys.so", 2.minutes) {}
     }
 
     @Test
     fun givenAndroidNative_whenTestLogBinary_thenIsSuccessful() {
-        run("libTestLog.so", 3.minutes)
+        run("libTestLog.so", 3.minutes) {}
     }
 
     @Test
     fun givenAndroidNative_whenTestFileBinary_thenIsSuccessful() {
-        run("libTestFile.so", 5.minutes)
+        // See :library:file androidNativeTest source set
+        var name = "kmp-log.file.test-"
+        name += Random.nextBytes(12).encodeToString(Base16)
+        val file = SysTempDir.resolve(name)
+
+        try {
+            RandomAccessFile(file, "rw").channel.use { ch ->
+                // Do not block. Should just work.
+                val lock1 = ch.tryLock(0, 1, false)
+                assertNotNull(lock1, "lock1 was null???")
+                val lock2 = ch.tryLock(Long.MAX_VALUE - 1, 0, false)
+                assertNotNull(lock2, "lock2 was null??")
+
+                run("libTestFile.so", 5.minutes) { env ->
+                    env["io_matthewnelson_kmp_log_file_test_setlk_path"] = file.path
+                }
+            }
+        } finally {
+            file.delete2()
+        }
     }
 
-    private fun run(libName: String, timeout: Duration) {
+    private fun run(libName: String, timeout: Duration, env: (MutableMap<String, String>) -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
             println("Skipping...")
             return
@@ -53,6 +80,7 @@ class AndroidNativeTest {
 
         val out = Process.Builder(executable = nativeLibraryDir.resolve(libName))
             .stdin(Stdio.Null)
+            .environment(env)
             .createOutput {
                 maxBuffer = Int.MAX_VALUE / 2
                 timeoutMillis = timeout.inWholeMilliseconds.toInt()

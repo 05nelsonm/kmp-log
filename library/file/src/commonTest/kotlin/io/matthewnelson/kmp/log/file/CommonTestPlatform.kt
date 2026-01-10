@@ -19,6 +19,7 @@ import io.matthewnelson.encoding.base16.Base16
 import io.matthewnelson.encoding.core.Encoder.Companion.encodeToString
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.SysTempDir
+import io.matthewnelson.kmp.file.canonicalFile2
 import io.matthewnelson.kmp.file.delete2
 import io.matthewnelson.kmp.file.resolve
 import kotlin.contracts.ExperimentalContracts
@@ -31,7 +32,17 @@ internal inline fun withTmpFile(block: (tmp: File) -> Unit) {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
     var name = "kmp-log.file.test-"
     name += Random.nextBytes(12).encodeToString(Base16)
-    val file = SysTempDir.resolve(name)
+
+    val file = SysTempDir
+        // Apple targets that utilize symbolic links for their temp
+        // directory must be resolved when attempting to acquire a
+        // lock on a file via fcntl. It must be the real path, otherwise
+        // passing the file path containing a symbolic link segment in as
+        // an argument to another process so IT can test lock acquisition
+        // will result in a false positive.
+        .canonicalFile2()
+        .resolve(name)
+
     try {
         block(file)
     } finally {

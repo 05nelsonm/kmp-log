@@ -17,43 +17,38 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.errnoToIOException
-import io.matthewnelson.kmp.file.path
-import kotlinx.cinterop.CPointer
+import io.matthewnelson.kmp.log.file.withTmpFile
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.ULongVar
-import platform.posix.EINTR
-import platform.posix.O_CLOEXEC
-import platform.posix.O_CREAT
-import platform.posix.O_RDWR
-import platform.posix.S_IRUSR
-import platform.posix.S_IWUSR
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import platform.posix.errno
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
 @OptIn(ExperimentalForeignApi::class)
 class LockFileUniqueIdUnixUnitTest: LockFileUniqueIdNativeBaseTest<Int>() {
 
     override fun File.open(): Int {
-        // No O_TRUNC because if a lock is held by another
-        // process, it could cause problems.
-        val flags = O_RDWR or O_CREAT or O_CLOEXEC
-        val mode = S_IRUSR or S_IWUSR // 600
-        var fd: Int
-        do {
-            fd = platform.posix.open(path, flags, mode)
-        } while (fd == -1 && errno == EINTR)
-        if (fd == -1) throw errnoToIOException(errno, this)
-        return fd
+        return LockFile.openFd(this)
     }
 
     override fun Int.close() {
         if (platform.posix.close(this) != 0) throw errnoToIOException(errno)
     }
 
-    override fun kmpLogFileUniqueId(fd: Int, uniqueId: CPointer<ULongVar>?): Int {
-        return kmp_log_file_unique_id(fd, uniqueId)
+    override fun kmpLogFileUniqueId(fd: Int, uniqueId: LongArray): Int {
+        return uniqueId.usePinned { pinned ->
+            kmp_log_file_unique_id(fd, pinned.addressOf(0))
+        }
     }
 
     @Test
-    fun stub() {}
+    fun givenKmpLogFileUniqueId_whenUniqueIdParameterNull_thenReturnsNeg1() = withTmpFile { tmp ->
+        val fd = tmp.open()
+        try {
+            assertEquals(-1, kmp_log_file_unique_id(fd, null))
+        } finally {
+            fd.close()
+        }
+    }
 }
