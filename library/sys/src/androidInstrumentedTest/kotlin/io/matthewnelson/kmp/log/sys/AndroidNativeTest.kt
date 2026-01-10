@@ -60,7 +60,7 @@ class AndroidNativeTest {
                 // Do not block. Should just work.
                 val lock1 = ch.tryLock(0, 1, false)
                 assertNotNull(lock1, "lock1 was null???")
-                val lock2 = ch.tryLock(Long.MAX_VALUE - 1, 1, false)
+                val lock2 = ch.tryLock(Long.MAX_VALUE - 1, 0, false)
                 assertNotNull(lock2, "lock2 was null??")
 
                 run("libTestFile.so", 5.minutes) { env ->

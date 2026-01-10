@@ -62,28 +62,28 @@ class LockFileSetLkAndroidNativeUnitTest {
             )
             when (errno) {
                 EWOULDBLOCK, EAGAIN -> {} // pass
-                else -> fail("blocking = 0 >> ${errnoToIOException(errno).message}")
+                else -> fail("[0,1] >> ${errnoToIOException(errno).message}")
             }
             assertEquals(
                 -1,
-                kmp_log_file_setlk(fd, position = Long.MAX_VALUE - 1, length = 1, locking = 1, blocking = 0, exclusive = 1),
-                "[(Long.MAX_VALUE - 1),1]",
+                kmp_log_file_setlk(fd, position = Long.MAX_VALUE - 1, length = 0, locking = 1, blocking = 0, exclusive = 1),
+                "[(Long.MAX_VALUE - 1),0]",
             )
             when (errno) {
                 EWOULDBLOCK, EAGAIN -> {} // pass
-                else -> fail("blocking = 0 >> ${errnoToIOException(errno).message}")
+                else -> fail("[(Long.MAX_VALUE - 1),0] >> ${errnoToIOException(errno).message}")
             }
 
             // We can lock & unlock a different range that is available
             assertEquals(
                 0,
                 kmp_log_file_setlk(fd, position = 2, length = 1, locking = 1, blocking = 0, exclusive = 1),
-                "WRLCK[2, 1]",
+                "WRLCK[2,1]",
             )
             assertEquals(
                 0,
-                kmp_log_file_setlk(fd, position = 2, length = 1, locking = 0, blocking = 0, exclusive = 1),
-                "UNLCK[2, 1]",
+                kmp_log_file_setlk(fd, position = 2, length = 1, locking = 0, blocking = -1, exclusive = -1),
+                "UNLCK[2,1]",
             )
         } finally {
             if (close(fd) != 0) errnoToIOException(errno)
