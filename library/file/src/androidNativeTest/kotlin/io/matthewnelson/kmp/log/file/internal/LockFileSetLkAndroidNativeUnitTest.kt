@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
+@file:Suppress("DUPLICATE_LABEL_IN_WHEN")
+
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.errnoToIOException
@@ -22,8 +24,6 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import platform.posix.EAGAIN
 import platform.posix.EWOULDBLOCK
-import platform.posix.F_UNLCK
-import platform.posix.F_WRLCK
 import platform.posix.close
 import platform.posix.errno
 import platform.posix.getenv
@@ -55,20 +55,36 @@ class LockFileSetLkAndroidNativeUnitTest {
 
         val fd = LockFile.openFd(file)
         try {
-            assertEquals(-1, kmp_log_file_setlk(fd, F_WRLCK, blocking = 0, 0, 1), "[0,1]")
+            assertEquals(
+                -1,
+                kmp_log_file_setlk(fd, position = 0, length = 1, locking = 1, blocking = 0, exclusive = 1),
+                "[0,1]",
+            )
             when (errno) {
                 EWOULDBLOCK, EAGAIN -> {} // pass
                 else -> fail("blocking = 0 >> ${errnoToIOException(errno).message}")
             }
-            assertEquals(-1, kmp_log_file_setlk(fd, F_WRLCK, blocking = 0, Long.MAX_VALUE - 1, 1), "[Long.MAX_VALUE,1]")
+            assertEquals(
+                -1,
+                kmp_log_file_setlk(fd, position = Long.MAX_VALUE - 1, length = 1, locking = 1, blocking = 0, exclusive = 1),
+                "[(Long.MAX_VALUE - 1),1]",
+            )
             when (errno) {
                 EWOULDBLOCK, EAGAIN -> {} // pass
                 else -> fail("blocking = 0 >> ${errnoToIOException(errno).message}")
             }
 
             // We can lock & unlock a different range that is available
-            assertEquals(0, kmp_log_file_setlk(fd, F_WRLCK, blocking = 0, 2, 1), "WRLCK[2, 1]")
-            assertEquals(0, kmp_log_file_setlk(fd, F_UNLCK, blocking = 0, 2, 1), "UNLCK[2, 1]")
+            assertEquals(
+                0,
+                kmp_log_file_setlk(fd, position = 2, length = 1, locking = 1, blocking = 0, exclusive = 1),
+                "WRLCK[2, 1]",
+            )
+            assertEquals(
+                0,
+                kmp_log_file_setlk(fd, position = 2, length = 1, locking = 0, blocking = 0, exclusive = 1),
+                "UNLCK[2, 1]",
+            )
         } finally {
             if (close(fd) != 0) errnoToIOException(errno)
         }

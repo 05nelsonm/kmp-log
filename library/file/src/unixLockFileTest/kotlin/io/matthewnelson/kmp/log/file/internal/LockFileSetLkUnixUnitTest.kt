@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
+@file:Suppress("DUPLICATE_LABEL_IN_WHEN")
+
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.File
@@ -28,8 +30,6 @@ import platform.posix.EAGAIN
 import platform.posix.EINVAL
 import platform.posix.EOVERFLOW
 import platform.posix.EWOULDBLOCK
-import platform.posix.F_UNLCK
-import platform.posix.F_WRLCK
 import platform.posix.errno
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -57,11 +57,11 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
     fun givenFileDescriptor_whenInvalidPositionOrSize_thenFailsAsExpected() = withTmpFile { tmp ->
         val fd = tmp.open()
         try {
-            assertEquals(-1, kmp_log_file_setlk(fd, type = F_WRLCK, blocking = 1, position = -1L, size = 1L))
+            assertEquals(-1, kmp_log_file_setlk(fd, position = -1L, length = 1L, locking = 1, blocking = 1, exclusive = 1))
             assertEquals(EINVAL, errno, "position == -1L [EINVAL]")
-            assertEquals(-1, kmp_log_file_setlk(fd, type = F_WRLCK, blocking = 1, position = 0L, size = -1L))
+            assertEquals(-1, kmp_log_file_setlk(fd, position = 0L, length = -1L, locking = 1, blocking = 1, exclusive = 1))
             assertEquals(EINVAL, errno, "size == -1L [EINVAL]")
-            assertEquals(-1, kmp_log_file_setlk(fd, type = F_WRLCK, blocking = 1, position = Long.MAX_VALUE - 5, size = 10L))
+            assertEquals(-1, kmp_log_file_setlk(fd, position = Long.MAX_VALUE - 5, length = 10L, locking = 1, blocking = 1, exclusive = 1))
             assertEquals(EOVERFLOW, errno, "position + size is negative [EOVERFLOW]")
         } finally {
             fd.close()
@@ -78,7 +78,7 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
         val fd = tmp.open()
         try {
             // Acquiring a lock should inhibit other processes from locking it with the range.
-            assertEquals(0, kmp_log_file_setlk(fd, F_WRLCK, blocking = 0, 1L, 0L))
+            assertEquals(0, kmp_log_file_setlk(fd, position = 1L, length = 0L, locking = 1, blocking = 0, exclusive = 1))
 
             var out = runJarOutput(tmp, 150, 1, 3)
             if (!out.stdout.startsWith("FAILURE")) {
@@ -89,7 +89,7 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
             }
 
             // Unlocking it should allow other processes to acquire the lock.
-            assertEquals(0, kmp_log_file_setlk(fd, F_UNLCK, blocking = 0, 1L, 0L))
+            assertEquals(0, kmp_log_file_setlk(fd, position = 1L, length = 0L, locking = 0, blocking = 0, exclusive = 1))
 
             out = runJarOutput(tmp, 150, 1, 3)
             if (!out.stdout.startsWith("ACQUIRED")) {
@@ -124,7 +124,7 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
 
                 assertEquals(true, acquired, "test-file-lock.jar failed to acquire the lock as expected...")
 
-                assertEquals(-1, kmp_log_file_setlk(fd, F_WRLCK, blocking = 0, 0L, 1L))
+                assertEquals(-1, kmp_log_file_setlk(fd, position = 0L, length = 1L, locking = 1, blocking = 0, exclusive = 1))
 
                 when (errno) {
                     EWOULDBLOCK, EAGAIN -> {} // pass
@@ -135,7 +135,7 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
                 assertFalse(releasing, "releasing")
 
                 // Should now block until test-file-lock.jar times out and the process stops.
-                assertEquals(0, kmp_log_file_setlk(fd, F_WRLCK, blocking = 1, 0L, 1L))
+                assertEquals(0, kmp_log_file_setlk(fd, position = 0L, length = 1L, locking = 1, blocking = 1, exclusive = 1))
 
                 assertTrue(releasing, "test-file-lock.jar did not dispatch RELEASING as expected..")
                 assertFalse(released, "released")
