@@ -2,18 +2,22 @@ package = io.matthewnelson.kmp.log.file.internal
 ---
 #ifdef _WIN32
 #include <fileapi.h>
+#include <ioapiset.h>
+#include <errhandlingapi.h>
+#include <winerror.h>
 
 /**
- * The size of the array required by kmp_log_file_unique_id
+ * The size of the DWORD array required by kmp_log_file_unique_id
  **/
 #define KMP_LOG_FILE_UNIQUE_ID_SIZE 3
 #else
+#include <fcntl.h>
 #include <stdint.h>
 #include <errno.h>
 #include <sys/stat.h>
 
 /**
- * The size of the array required by kmp_log_file_unique_id
+ * The size of the int64_t array required by kmp_log_file_unique_id
  **/
 #define KMP_LOG_FILE_UNIQUE_ID_SIZE 2
 #endif // _WIN32
@@ -21,7 +25,7 @@ package = io.matthewnelson.kmp.log.file.internal
 /**
  * UNIX:
  *   Retrieves st_ino and st_dev of the open file descriptor, populating
- *   the provided unique_id uint64_t array in the following manner.
+ *   the provided unique_id array in the following manner.
  *
  *   Indices:
  *    - 0: st_ino
@@ -29,7 +33,7 @@ package = io.matthewnelson.kmp.log.file.internal
  *
  * Windows:
  *   Retrieves dwVolumeSerialNumber, nFileIndexHigh and nFileIndexLow of the open
- *   file HANDLE, populating the provided unique_id DWORD64 array in the following manner.
+ *   file HANDLE, populating the provided unique_id array in the following manner.
  *
  *   Indices:
  *    - 0: dwVolumeSerialNumber
@@ -40,9 +44,9 @@ package = io.matthewnelson.kmp.log.file.internal
  * */
 int
 #ifdef _WIN32
-kmp_log_file_unique_id(HANDLE h, DWORD64 unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
+kmp_log_file_unique_id(HANDLE h, DWORD unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
 #else
-kmp_log_file_unique_id(int fd, uint64_t unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
+kmp_log_file_unique_id(int fd, int64_t unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
 #endif // _WIN32
 {
   if (!unique_id) {
@@ -84,4 +88,113 @@ kmp_log_file_unique_id(int fd, uint64_t unique_id[KMP_LOG_FILE_UNIQUE_ID_SIZE])
   unique_id[1] = buf.st_dev;
 #endif // _WIN32
   return 0;
+}
+
+/**
+ * UNIX:
+ *   Helper which calls fcntl with provided arguments for advisory record locking.
+ *
+ *   [fd] The file descriptor of the open file.
+ *   [position] The start of the byte-range to lock
+ *   [length] The number of bytes from [position] to lock
+ *   [locking] If false F_UNLCK, otherwise defers to [exclusive]
+ *   [blocking] If true F_SETLKW, otherwise F_SETLK (ignored when [locking] is false)
+ *   [exclusive] If true F_WRLCK, otherwise F_RDLCK (ignored when [locking] is false)
+ *
+ *   See: https://man7.org/linux/man-pages/man2/F_SETLK.2const.html
+ *
+ * Windows:
+ *   Helper which calls LockFileEx/UnlockFileEx with provided arguments for advisory
+ *   record locking.
+ *
+ *   [h] The file HANDLE of the open file.
+ *   [position] The start of the byte-range to lock
+ *   [length] The number of bytes from [position] to lock
+ *   [locking] If true, LockFileEx, otherwise UnlockFileEx
+ *   [blocking] If false, LOCKFILE_FAIL_IMMEDIATELY (ignored when [locking] is false)
+ *   [exclusive] If true, LOCKFILE_EXCLUSIVE_LOCK (ignored when [locking] is false)
+ *
+ * Returns 0 on success, -1 otherwise.
+ * */
+int
+#ifdef _WIN32
+kmp_log_file_setlk(HANDLE h, DWORD64 position, DWORD64 length, int locking, int blocking, int exclusive)
+#else
+kmp_log_file_setlk(int fd, int64_t position, int64_t length, int locking, int blocking, int exclusive)
+#endif // _WIN32
+{
+#ifdef _WIN32
+
+  DWORD n_bytes_lo, n_bytes_hi;
+  BOOL ret;
+  struct _OVERLAPPED o = {0};
+
+  n_bytes_lo = (DWORD) length;
+  n_bytes_hi = (DWORD) (length >> 32);
+  o.hEvent = 0;
+  o.Offset = (DWORD) position;
+  o.OffsetHigh = (DWORD) (position >> 32);
+
+  if (locking) {
+    DWORD flags = 0;
+    if (!blocking) {
+      flags |= LOCKFILE_FAIL_IMMEDIATELY;
+    }
+    if (exclusive) {
+      flags |= LOCKFILE_EXCLUSIVE_LOCK;
+    }
+
+    ret = LockFileEx(h, flags, 0, n_bytes_lo, n_bytes_hi, &o);
+  } else {
+    ret = UnlockFileEx(h, 0, n_bytes_lo, n_bytes_hi, &o);
+  }
+
+  if (ret == 0) {
+    DWORD e = GetLastError();
+    if (e == ERROR_IO_PENDING) {
+      DWORD b;
+      ret = GetOverlappedResult(h, &o, &b, TRUE);
+      if (ret != 0) {
+        return 0;
+      }
+    }
+    return -1;
+  }
+
+  return 0;
+#else
+
+  int cmd, ret;
+#ifdef __ANDROID__
+  struct flock64 lock;
+#else
+  struct flock   lock;
+#endif // __ANDROID__
+
+  if (locking) {
+#ifdef __ANDROID__
+    cmd = blocking ? F_SETLKW64 : F_SETLK64;
+#else
+    cmd = blocking ? F_SETLKW : F_SETLK;
+#endif // __ANDROID__
+    lock.l_type = exclusive ? F_WRLCK : F_RDLCK;
+  } else {
+#ifdef __ANDROID__
+    cmd = F_SETLK64;
+#else
+    cmd = F_SETLK;
+#endif // __ANDROID__
+    lock.l_type = F_UNLCK;
+  }
+
+  lock.l_whence = SEEK_SET;
+  lock.l_start = position;
+  lock.l_len = length;
+
+  do {
+    ret = fcntl(fd, cmd, &lock);
+  } while (ret == -1 && errno == EINTR);
+
+  return ret;
+#endif // _WIN32
 }
