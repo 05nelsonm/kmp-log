@@ -13,26 +13,66 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("PrivatePropertyName")
+@file:Suppress("LocalVariableName", "NOTHING_TO_INLINE", "PrivatePropertyName")
 
 package io.matthewnelson.kmp.log.file
 
 import io.matthewnelson.encoding.base16.Base16
+import io.matthewnelson.encoding.core.Decoder.Companion.decodeBuffered
 import io.matthewnelson.encoding.core.Decoder.Companion.decodeToByteArray
 import io.matthewnelson.encoding.core.Encoder.Companion.encodeToString
 import io.matthewnelson.encoding.utf8.UTF8
+import io.matthewnelson.immutable.collections.toImmutableList
 import io.matthewnelson.immutable.collections.toImmutableSet
+import io.matthewnelson.kmp.file.Closeable
+import io.matthewnelson.kmp.file.ClosedException
 import io.matthewnelson.kmp.file.File
+import io.matthewnelson.kmp.file.FileStream
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.canonicalFile2
+import io.matthewnelson.kmp.file.delete2
+import io.matthewnelson.kmp.file.exists2
+import io.matthewnelson.kmp.file.mkdirs2
+import io.matthewnelson.kmp.file.name
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.file.resolve
 import io.matthewnelson.kmp.file.toFile
 import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.file.internal.CurrentThread
+import io.matthewnelson.kmp.log.file.internal.LockFile
+import io.matthewnelson.kmp.log.file.internal.LogBuffer
+import io.matthewnelson.kmp.log.file.internal.LogWriteAction
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
 import io.matthewnelson.kmp.log.file.internal.isDesktop
+import io.matthewnelson.kmp.log.file.internal.lockLog
+import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
+import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
+import io.matthewnelson.kmp.log.file.internal.uninterrupted
+import io.matthewnelson.kmp.log.file.internal.use
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.kotlincrypto.hash.blake2.BLAKE2s
+import kotlin.concurrent.Volatile
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.jvm.JvmField
+import kotlin.jvm.JvmSynthetic
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * TODO
@@ -51,7 +91,7 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
-    public val logFiles: Set<String>
+    public val logFiles: List<String>
 
     /**
      * TODO
@@ -457,7 +497,7 @@ public class FileLog: Log {
 
             // Current and 1 previous.
             val maxLogs = _maxLogs.coerceAtLeast(2)
-            val files = LinkedHashSet<File>(maxLogs.toInt())
+            val files = ArrayList<File>(maxLogs.toInt())
             for (i in 0 until maxLogs) {
                 var name = fileName
                 if (fileExtension.isNotEmpty()) {
@@ -478,7 +518,7 @@ public class FileLog: Log {
             val files0Hash = run {
                 // Will produce a 12 byte digest which comes out to 24 characters when base16 encoded
                 val blake2s = BLAKE2s(bitStrength = Byte.SIZE_BITS * 12)
-                val digest = blake2s.digest(files.elementAt(0).path.decodeToByteArray(UTF8))
+                val digest = blake2s.digest(files[0].path.decodeToByteArray(UTF8))
                 blake2s.update(digest)
                 blake2s.digestInto(digest, destOffset = 0)
                 digest.encodeToString(Base16)
@@ -488,7 +528,7 @@ public class FileLog: Log {
                 min = _min,
                 max = _max,
                 directory = directory,
-                files = files.toImmutableSet(),
+                files = files.toImmutableList(),
                 files0Hash = files0Hash,
                 modeDirectory = _modeDirectory.build(),
                 modeFile = _modeFile.build(),
@@ -506,20 +546,32 @@ public class FileLog: Log {
     }
 
     private val directory: File
-    private val files: Set<File>
-    private val lockFile: File
-    private val rotateFile: File
+
+    // Exposed for testing
+    @get:JvmSynthetic
+    internal val files: List<File>
+    @get:JvmSynthetic
+    internal val dotLockFile: File
+    @get:JvmSynthetic
+    internal val dotRotateFile: File
 
     private val _whitelistDomain: Array<String>
     private val _whitelistTag: Array<String>
 
     private val LOG: Logger
 
+    private val logScope: CoroutineScope
+
+    @Volatile
+    private var _logBuffer: LogBuffer? = null
+    @Volatile
+    private var _logJob: Job? = null
+
     private constructor(
         min: Level,
         max: Level,
         directory: File,
-        files: Set<File>,
+        files: List<File>,
         files0Hash: String,
         modeDirectory: String,
         modeFile: String,
@@ -531,14 +583,38 @@ public class FileLog: Log {
     ): super(uid = "io.matthewnelson.kmp.log.file.$uidSuffix", min = min, max = max) {
         this.directory = directory
         this.files = files
-        this.lockFile = directory.resolve(".lock-$files0Hash")
-        this.rotateFile = directory.resolve(".rotate-$files0Hash")
+
+        run {
+            // If the directory is a NFS mounted drive, then files0Hash may not be the
+            // same on another machine, so cannot use it in the name for these 2 files.
+            // This is because the hash of the fully canonicalized path on this device
+            // which may be different on another machine.
+            var name0 = files[0].name
+            if (!name0.startsWith('.')) name0 = ".$name0"
+            name0
+        }.let { dotName0 ->
+            this.dotLockFile = directory.resolve("$dotName0.lock")
+            this.dotRotateFile = directory.resolve("$dotName0.rotate")
+        }
+
         this._whitelistDomain = whitelistDomain.toTypedArray()
         this._whitelistTag = whitelistTag.toTypedArray()
         this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
+        this.logScope = CoroutineScope(context =
+            CoroutineName(uid)
+            + Dispatchers.IO
+            + SupervisorJob()
+            + CoroutineExceptionHandler { context, t ->
+                if (t is CancellationException) throw t
+                if (LOG.e(t) { context } == 0) {
+                    // No other Log are installed to log the error. Pipe to stderr.
+                    t.printStackTrace()
+                }
+            }
+        )
 
         this.logDirectory = directory.path
-        this.logFiles = files.mapTo(LinkedHashSet(files.size)) { it.path }.toImmutableSet()
+        this.logFiles = files.map { it.path }.toImmutableList()
         this.logFiles0Hash = files0Hash
         this.modeDirectory = modeDirectory
         this.modeFile = modeFile
@@ -546,11 +622,6 @@ public class FileLog: Log {
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull
         this.whitelistTag = whitelistTag
-    }
-
-    override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        // TODO
-        return false
     }
 
     override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
@@ -567,47 +638,312 @@ public class FileLog: Log {
         if (_whitelistTag.isNotEmpty()) {
             if (!_whitelistTag.contains(tag)) return false
         }
-        return true
+        return _logBuffer != null
+    }
+
+    override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
+        val logBuffer = _logBuffer ?: return false
+
+        // TODO: time, thread id
+        val preProcessing: Deferred<CharSequence?> = logScope.async {
+            // TODO: Format
+            if (msg.isNullOrEmpty()) return@async null
+            msg + '\n'
+        }
+
+        val fatalJob = if (level == Level.Fatal) Job() else null
+
+        val result = logBuffer.channel.trySend { stream, buf ->
+            try {
+                // Can be null if there was an error to ensure this write
+                // action still gets consumed and any completion job being
+                // waited on is closed out properly.
+                if (stream == null) {
+                    preProcessing.cancel()
+                    return@trySend 0L
+                }
+
+                val formatted = preProcessing.await()
+                if (formatted.isNullOrEmpty()) return@trySend 0L
+
+                val written = try {
+                    formatted.decodeBuffered(
+                        UTF8,
+                        throwOnOverflow = false,
+                        buf = buf,
+                        action = stream::write,
+                    )
+                } finally {
+                    if (fatalJob != null) {
+                        // fsync no matter what before the process is aborted.
+                        try {
+                            stream.sync(meta = true)
+                        } catch (_: Throwable) {}
+                    }
+                }
+
+                fatalJob?.complete()
+                written
+            } finally {
+                fatalJob?.cancel()
+            }
+        }
+
+        if (result.isFailure) {
+            // Channel is closed for sending
+            fatalJob?.cancel()
+            preProcessing.cancel()
+            return false
+        }
+
+        preProcessing.start()
+        if (fatalJob == null) return true
+
+        // Block until the Level.Fatal log has been committed to disk
+        try {
+            CurrentThread.uninterrupted {
+                runBlocking(Dispatchers.IO) { fatalJob.join() }
+            }
+        } catch (_: Throwable) {}
+
+        return !fatalJob.isCancelled
     }
 
     override fun onInstall() {
-        // TODO
-        //  - Create and set CoroutineScope
-        //  - Setup SharedFlow
-        //  - Launch coroutine
-        //      - directory.mkdirs2(modeDirectory)
-        //      - Verify directory.canonicalFile2() == directory
-        //          - FAIL: Disallow symlink hijacking between build() and
-        //            Log.Root.install() which would invalidate FileLog.uid
-        //      - Verify lockFile.canonicalFile2() == lockFile
-        //          - If symlink, delete.
-        //              - Need to think on how to do this atomically in a multi-process
-        //                way. Maybe a delay after before opening a new lock file? Maybe
-        //                rename to "{random}-$file0Hash.del" and then delete it? IDK...
-        //      - Open lockFile
-        //      - Verify files[0].canonicalFile2() == files[0]
-        //          - If symlink, obtain FileLock, re-check then delete.
-        //      - files[0].openReadWrite(excl = OpenExcl.MaybeCreate.of(modeFile))
-        //      - Launch separate coroutine and clean up all "*-file0Hash.del" files
-        //        that may be left over from an interrupted operation.
-        //      - Check rotateFile.exists2(). If present, then either another process
-        //        is logging to the same file and a log rotation is underway, or the
-        //        rotation was interrupted and needs to be finished off.
-        //          - lockFile.tryLock()
-        //          - rotateFile.openReadWrite(excl = OpenExcl.MustExist)
-        //          - If rotateFile.size() != files[0].size(), finish copying data
-        //          - Need to think about how to "pick up" a failed rotation. Iterate
-        //            through logFiles to see what exists and what doesn't? Maybe a
-        //            manifest file of steps to indicate "in process", "complete" etc?
-        //            Maybe after copying everything from files[0] to rotateFile, truncate
-        //            files[0] and drop the lock to allow logging to continue? Would need
-        //            to have 2 distinct byte ranges for lockFile then; 1 range for files[0]
-        //            and 1 range for rotateFile. Then can launch a coroutine to complete
-        //            rotation in and continue with initialization.
-        //      - Start observing SharedFlow
+        val logBuffer = LogBuffer()
+        val logJob = _logJob
+        logScope.launch {
+            logBuffer.use(LOG) { buf ->
+                val thisJob = currentCoroutineContext().job
+
+                LOG.v { "LogJob Started >> $thisJob" }
+
+                if (logJob != null) {
+                    LOG.v {
+                        if (!logJob.isActive) null
+                        else "Waiting for previous LogJob to complete >> $logJob"
+                    }
+                    logJob.join()
+                }
+
+                directory.mkdirs2(mode = modeDirectory, mustCreate = false)
+
+                run {
+                    val canonical = directory.canonicalFile2()
+                    if (canonical != directory) {
+                        // FAIL:
+                        //   Between time of Builder.build() and Log.Root.install(), the specified
+                        //   directory was modified to contain symbolic links such that the current
+                        //   one points to a different location. This would invalidate the Log.uid,
+                        //   allowing multiple FileLog instances to be installed simultaneously for
+                        //   the same log file leading to data corruption.
+                        throw IOException("Symbolic link hijacking detected >> [$canonical] != [$directory]")
+                    }
+                }
+
+                try {
+                    // Some systems, such as macOS, have highly unreliable fcntl byte-range file lock
+                    // behavior when the target is a symbolic link. We want no part in that and require
+                    // the lock file to be a regular file.
+                    val canonical = dotLockFile.canonicalFile2()
+                    if (canonical != dotLockFile) {
+                        LOG.w { "Symbolic link detected >> [$dotLockFile] != [$canonical]" }
+                        canonical.delete2(ignoreReadOnly = true)
+                        delay(10.milliseconds)
+                    }
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    // ignore
+                }
+
+                thisJob.ensureActive()
+                val lockFile = dotLockFile.openLockFileRobustly()
+                val lockFileCompletion = thisJob.closeOnCompletion(lockFile)
+
+                try {
+                    val canonical = files[0].canonicalFile2()
+                    if (canonical != files[0]) {
+                        LOG.w { "Symbolic link detected >> [${files[0]}] != [$canonical]" }
+                        canonical.delete2(ignoreReadOnly = true)
+                        delay(10.milliseconds)
+                    }
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    // ignore
+                }
+
+                thisJob.ensureActive()
+                val logStream = files[0].openLogFileRobustly(modeFile)
+                val logStreamCompletion = thisJob.closeOnCompletion(logStream)
+
+                // TODO: deferred log statement (log opened)
+
+                if (dotRotateFile.exists2()) {
+                    // TODO: Complete potentially interrupted log rotation
+                }
+
+                // TODO: write deferred logs to the log file.
+
+                loop(
+                    buf,
+                    lockFile,
+                    lockFileCompletion,
+                    logStream,
+                    logStreamCompletion,
+                )
+            }
+        }.let { job ->
+            job.invokeOnCompletion { LOG.v { "LogJob Stopped >> $job" } }
+            _logJob = job
+        }
+        _logBuffer = logBuffer
     }
 
     override fun onUninstall() {
-        // TODO
+        val logBuffer = _logBuffer
+        _logBuffer = null
+        logBuffer?.channel?.close(cause = null)
+    }
+
+    // Exposed for testing
+    @JvmSynthetic
+    internal suspend fun cancelAndJoinLogJob() { _logJob?.cancelAndJoin() }
+
+    private suspend fun LogBuffer.loop(
+        buf: ByteArray,
+        lockFile: LockFile,
+        lockFileCompletion: DisposableHandle,
+        logStream: FileStream.ReadWrite,
+        logStreamCompletion: DisposableHandle,
+    ) {
+        var _lockFile = lockFile
+        var _lockFileCompletion = lockFileCompletion
+        var _logStream = logStream
+        var _logStreamCompletion = logStreamCompletion
+        val thisJob = currentCoroutineContext().job
+
+        while (true) {
+            var writeAction: LogWriteAction? = try {
+                channel.receive()
+            } catch (_: ClosedReceiveChannelException) {
+                // FileLog was uninstalled and there
+                // are no more actions buffered.
+                break
+            }
+
+            CurrentThread.uninterrupted {
+
+                val logLock = try {
+                    _lockFile.lockLog()
+                } catch (t: Throwable) {
+                    try {
+                        _lockFile.close()
+                    } catch (tt: Throwable) {
+                        t.addSuppressed(tt)
+                    } finally {
+                        _lockFileCompletion.dispose()
+                    }
+
+                    try {
+                        thisJob.ensureActive()
+                        _lockFile = dotLockFile.openLockFileRobustly()
+                        _lockFileCompletion = thisJob.closeOnCompletion(_lockFile)
+                        _lockFile.lockLog()
+                    } catch (tt: Throwable) {
+                        t.addSuppressed(tt)
+                        // Total failure
+                        writeAction?.invoke(null, buf)
+                        throw t
+                    }
+                }
+
+                var size: Long
+
+                try {
+                    size = _logStream.size()
+                    _logStream.position(size)
+                } catch (e: IOException) {
+                    try {
+                        _logStream.close()
+                    } catch (t: Throwable) {
+                        e.addSuppressed(t)
+                    } finally {
+                        _logStreamCompletion.dispose()
+                    }
+                    try {
+                        thisJob.ensureActive()
+                        _logStream = files[0].openLogFileRobustly(modeFile)
+                        _logStreamCompletion = thisJob.closeOnCompletion(_logStream)
+                        size = _logStream.size()
+                        _logStream.position(size)
+                    } catch (t: Throwable) {
+                        e.addSuppressed(t)
+                        // Total failure
+                        writeAction?.invoke(null, buf)
+                        throw e
+                    }
+                }
+
+                var processed = 0
+                while (true) {
+                    val action = writeAction ?: break
+
+                    size += try {
+                        action(_logStream, buf)
+                    } catch (t: Throwable) {
+                        if (LOG.e(t) { "Failed to write log entry to File[${files[0]}]" } == 0) {
+                            // No other Log are installed to log the error. Pipe to stderr.
+                            t.printStackTrace()
+                        }
+                        0L
+                    } finally {
+                        processed++
+                    }
+
+                    thisJob.ensureActive()
+
+                    if (!_logStream.isOpen()) {
+                        // TODO: re-open logStream
+                    }
+
+                    // Rip through some more buffered actions while we hold a lock (if possible).
+                    writeAction = when {
+                        // Log rotation is needed
+                        size >= maxLogSize -> null
+                        // Yield to another process (potentially)
+                        processed >= 10 -> null
+                        else -> channel.tryReceive().getOrNull()
+                    }
+                }
+
+                if (size >= maxLogSize) {
+                    // TODO: do rotation
+                }
+
+                try {
+                    logLock.release()
+                } catch (e: IOException) {
+                    if (e !is ClosedException) {
+                        LOG.e(e) { "FileLock.release() failed" }
+                        // TODO: close and re-open lock file.
+                        //  Need to be careful here though b/c
+                        //  if a log rotation is underway we want
+                        //  to wait for that to complete before
+                        //  closing the lock file which would invalidate
+                        //  the rotate log lock.
+                    }
+                }
+            }
+        }
+    }
+}
+
+private inline fun Job.closeOnCompletion(closeable: Closeable): DisposableHandle {
+    return invokeOnCompletion { t ->
+        try {
+            closeable.close()
+        } catch (tt: Throwable) {
+            t?.addSuppressed(tt)
+        }
     }
 }

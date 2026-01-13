@@ -19,6 +19,7 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.Closeable
+import io.matthewnelson.kmp.file.ClosedException
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.errnoToIOException
@@ -26,7 +27,12 @@ import io.matthewnelson.kmp.file.path
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.cinterop.ExperimentalForeignApi
+import platform.posix.EACCES
+import platform.posix.EAGAIN
 import platform.posix.EINTR
+import platform.posix.EINVAL
+import platform.posix.EOVERFLOW
+import platform.posix.EWOULDBLOCK
 import platform.posix.O_CLOEXEC
 import platform.posix.O_CREAT
 import platform.posix.O_RDWR
@@ -40,12 +46,12 @@ internal actual inline fun File.openLockFile(): LockFile = LockFile.open(this)
 
 @Throws(IllegalArgumentException::class, IllegalStateException::class, IOException::class)
 internal actual inline fun LockFile.lock(position: Long, size: Long): FileLock {
-    TODO("")
+    return lock(position, size, blocking = true)!!
 }
 
 @Throws(IllegalArgumentException::class, IllegalStateException::class, IOException::class)
 internal actual inline fun LockFile.tryLock(position: Long, size: Long): FileLock? {
-    TODO("")
+    return lock(position, size, blocking = false)
 }
 
 internal actual abstract class LockFile private constructor(fd: Int): Closeable {
@@ -53,6 +59,37 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
     @Volatile
     private var _fd: Int = fd
     private val closeLock = SynchronizedObject()
+
+    @Throws(IllegalArgumentException::class, IOException::class)
+    internal fun lock(position: Long, size: Long, blocking: Boolean): FileLock? {
+        val fd = _fd
+        if (fd == -1) throw ClosedException()
+        val ret = kmp_log_file_setlk(
+            fd = fd,
+            position = position,
+            length = size,
+            locking = 1,
+            blocking = if (blocking) 1 else 0,
+            exclusive = 1,
+        )
+        if (ret == 0) return fileLock(_position = position, _size = size)
+
+        val error = errno
+
+        @Suppress("DUPLICATE_LABEL_IN_WHEN")
+        if (!blocking) when (error) {
+            // EACCES is synonymous to EAGAIN here for what the operation
+            // is. It's possible on some systems when the file being locked
+            // is on an NFS mounted drive.
+            EACCES, EAGAIN, EWOULDBLOCK -> return null
+        }
+
+        val ioException = errnoToIOException(error)
+        throw when (error) {
+            EINVAL, EOVERFLOW -> IllegalArgumentException(ioException.message)
+            else -> ioException
+        }
+    }
 
     actual final override fun close() {
         val fd = synchronized(closeLock) {
@@ -85,6 +122,35 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
             } while (fd == -1 && errno == EINTR)
             if (fd == -1) throw errnoToIOException(errno, file)
             return fd
+        }
+    }
+
+    @Suppress("LocalVariableName")
+    private fun fileLock(_position: Long, _size: Long) = object : FileLock(_position, _size) {
+
+        @Volatile
+        private var isReleased = false
+
+        override fun isValid(): Boolean = _fd != -1 && !isReleased
+
+        override fun release() {
+            if (isReleased) return
+
+            val ret = synchronized(closeLock) {
+                if (isReleased) return
+                isReleased = true
+                val fd = _fd
+                if (fd == -1) throw ClosedException()
+                kmp_log_file_setlk(
+                    fd = fd,
+                    position = position(),
+                    length = size(),
+                    locking = 0,
+                    blocking = -1, // ignored
+                    exclusive = -1, // ignored
+                )
+            }
+            if (ret != 0) throw errnoToIOException(errno)
         }
     }
 }

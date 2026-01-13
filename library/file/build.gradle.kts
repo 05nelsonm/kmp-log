@@ -65,8 +65,6 @@ kmpConfiguration {
         kotlin {
             with(sourceSets) {
                 val sets = arrayOf(
-                    "iosX64",
-                    "iosSimulatorArm64",
                     "linux",
                     "macos",
                 ).mapNotNull { name -> findByName(name + "Test") }
@@ -82,9 +80,12 @@ kmpConfiguration {
             with(sourceSets) {
                 val sets = arrayOf(
                     "jvm" to emptyList(),
-                    "unixLockFile" to listOf(
-                        "iosX64",
+                    "ios" to listOf(
+                        "iosArm64",
                         "iosSimulatorArm64",
+                        "iosX64",
+                    ),
+                    "unixLockFile" to listOf(
                         "linuxArm64",
                         "linuxX64",
                         "macosArm64",

@@ -31,7 +31,6 @@ import platform.posix.EINVAL
 import platform.posix.EOVERFLOW
 import platform.posix.EWOULDBLOCK
 import platform.posix.errno
-import kotlin.experimental.ExperimentalNativeApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -45,15 +44,6 @@ import kotlin.time.Duration.Companion.milliseconds
  * */
 @OptIn(ExperimentalForeignApi::class)
 class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
-
-    private companion object {
-        @OptIn(ExperimentalNativeApi::class)
-        private val COMMAND_JAVA = when (Platform.osFamily) {
-            // Simulators running on macOS.
-            OsFamily.IOS, OsFamily.TVOS, OsFamily.WATCHOS -> "/usr/bin/java"
-            else -> "java"
-        }
-    }
 
     override fun File.open(): Int {
         return LockFile.openFd(this)
@@ -166,7 +156,7 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
         timeoutMs: Long,
         position: Long,
         size: Long,
-    ): Process.Builder = Process.Builder(command = COMMAND_JAVA)
+    ): Process.Builder = Process.Builder(command = "java")
         .args("-jar")
         .args(TEST_FILE_LOCK_JAR)
         .args(tmp.path)

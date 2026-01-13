@@ -22,6 +22,7 @@ import io.matthewnelson.kmp.file.SysTempDir
 import io.matthewnelson.kmp.file.canonicalFile2
 import io.matthewnelson.kmp.file.delete2
 import io.matthewnelson.kmp.file.resolve
+import io.matthewnelson.kmp.log.Log
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
@@ -47,5 +48,21 @@ internal inline fun withTmpFile(block: (tmp: File) -> Unit) {
         block(file)
     } finally {
         file.delete2()
+    }
+}
+
+@OptIn(ExperimentalContracts::class)
+internal suspend inline fun FileLog.installAndTest(testBody: () -> Unit) {
+    contract { callsInPlace(testBody, InvocationKind.AT_MOST_ONCE) }
+
+    try {
+        Log.installOrThrow(this)
+        testBody()
+    } finally {
+        Log.uninstall(this)
+        cancelAndJoinLogJob()
+        files.forEach { it.delete2() }
+        dotLockFile.delete2()
+        dotRotateFile.delete2()
     }
 }

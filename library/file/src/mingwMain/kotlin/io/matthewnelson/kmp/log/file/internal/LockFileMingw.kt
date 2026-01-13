@@ -19,6 +19,7 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.Closeable
+import io.matthewnelson.kmp.file.ClosedException
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.lastErrorToIOException
@@ -29,6 +30,9 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.convert
 import platform.windows.CloseHandle
 import platform.windows.CreateFileA
+import platform.windows.ERROR_INVALID_PARAMETER
+import platform.windows.ERROR_LOCK_VIOLATION
+import platform.windows.ERROR_NOT_LOCKED
 import platform.windows.FALSE
 import platform.windows.FILE_ATTRIBUTE_NORMAL
 import platform.windows.FILE_SHARE_DELETE
@@ -36,6 +40,7 @@ import platform.windows.FILE_SHARE_READ
 import platform.windows.FILE_SHARE_WRITE
 import platform.windows.GENERIC_READ
 import platform.windows.GENERIC_WRITE
+import platform.windows.GetLastError
 import platform.windows.HANDLE
 import platform.windows.INVALID_HANDLE_VALUE
 import platform.windows.OPEN_ALWAYS
@@ -46,12 +51,12 @@ internal actual inline fun File.openLockFile(): LockFile = LockFile.open(this)
 
 @Throws(IllegalArgumentException::class, IllegalStateException::class, IOException::class)
 internal actual inline fun LockFile.lock(position: Long, size: Long): FileLock {
-    TODO("")
+    return lock(position, size, blocking = true)!!
 }
 
 @Throws(IllegalArgumentException::class, IllegalStateException::class, IOException::class)
 internal actual inline fun LockFile.tryLock(position: Long, size: Long): FileLock? {
-    TODO("")
+    return lock(position, size, blocking = false)
 }
 
 internal actual abstract class LockFile private constructor(h: HANDLE): Closeable {
@@ -59,6 +64,31 @@ internal actual abstract class LockFile private constructor(h: HANDLE): Closeabl
     @Volatile
     private var _h: HANDLE? = h
     private val closeLock = SynchronizedObject()
+
+    @Throws(IllegalArgumentException::class, IOException::class)
+    internal fun lock(position: Long, size: Long, blocking: Boolean): FileLock? {
+        val h = _h ?: throw ClosedException()
+        val ret = kmp_log_file_setlk(
+            h = h,
+            position = position.toULong(),
+            length = size.toULong(),
+            locking = 1,
+            blocking = if (blocking) 1 else 0,
+            exclusive = 1,
+        )
+        if (ret == 0) return fileLock(_position = position, _size = size)
+
+        val error = GetLastError().toInt()
+
+        if (!blocking && error == ERROR_LOCK_VIOLATION) return null
+
+        val ioException = lastErrorToIOException(error.toUInt())
+        throw if (error == ERROR_INVALID_PARAMETER) {
+            IllegalArgumentException(ioException.message)
+        } else {
+            ioException
+        }
+    }
 
     actual final override fun close() {
         val h = synchronized(closeLock) {
@@ -91,6 +121,38 @@ internal actual abstract class LockFile private constructor(h: HANDLE): Closeabl
             )
             if (handle == null || handle == INVALID_HANDLE_VALUE) throw lastErrorToIOException(file)
             return handle
+        }
+    }
+
+    @Suppress("LocalVariableName")
+    private fun fileLock(_position: Long, _size: Long) = object : FileLock(_position, _size) {
+
+        @Volatile
+        private var isReleased = false
+
+        override fun isValid(): Boolean = _h != null && !isReleased
+
+        override fun release() {
+            if (isReleased) return
+
+            val ret = synchronized(closeLock) {
+                if (isReleased) return
+                isReleased = true
+                val h = _h ?: throw ClosedException()
+                kmp_log_file_setlk(
+                    h = h,
+                    position = position().toULong(),
+                    length = size().toULong(),
+                    locking = 0,
+                    blocking = -1, // ignored
+                    exclusive = -1, // ignored
+                )
+            }
+            if (ret == 0) return
+
+            val error = GetLastError()
+            if (error.toInt() == ERROR_NOT_LOCKED) return
+            throw lastErrorToIOException(error)
         }
     }
 }
