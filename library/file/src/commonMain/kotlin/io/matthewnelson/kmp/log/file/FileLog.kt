@@ -21,18 +21,28 @@ import io.matthewnelson.encoding.base16.Base16
 import io.matthewnelson.encoding.core.Decoder.Companion.decodeToByteArray
 import io.matthewnelson.encoding.core.Encoder.Companion.encodeToString
 import io.matthewnelson.encoding.utf8.UTF8
+import io.matthewnelson.immutable.collections.toImmutableList
 import io.matthewnelson.immutable.collections.toImmutableSet
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.canonicalFile2
+import io.matthewnelson.kmp.file.name
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.file.resolve
 import io.matthewnelson.kmp.file.toFile
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
 import io.matthewnelson.kmp.log.file.internal.isDesktop
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.SupervisorJob
 import org.kotlincrypto.hash.blake2.BLAKE2s
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.jvm.JvmField
+import kotlin.jvm.JvmSynthetic
 
 /**
  * TODO
@@ -51,7 +61,7 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
-    public val logFiles: Set<String>
+    public val logFiles: List<String>
 
     /**
      * TODO
@@ -457,7 +467,7 @@ public class FileLog: Log {
 
             // Current and 1 previous.
             val maxLogs = _maxLogs.coerceAtLeast(2)
-            val files = LinkedHashSet<File>(maxLogs.toInt())
+            val files = ArrayList<File>(maxLogs.toInt())
             for (i in 0 until maxLogs) {
                 var name = fileName
                 if (fileExtension.isNotEmpty()) {
@@ -478,7 +488,7 @@ public class FileLog: Log {
             val files0Hash = run {
                 // Will produce a 12 byte digest which comes out to 24 characters when base16 encoded
                 val blake2s = BLAKE2s(bitStrength = Byte.SIZE_BITS * 12)
-                val digest = blake2s.digest(files.elementAt(0).path.decodeToByteArray(UTF8))
+                val digest = blake2s.digest(files[0].path.decodeToByteArray(UTF8))
                 blake2s.update(digest)
                 blake2s.digestInto(digest, destOffset = 0)
                 digest.encodeToString(Base16)
@@ -488,7 +498,7 @@ public class FileLog: Log {
                 min = _min,
                 max = _max,
                 directory = directory,
-                files = files.toImmutableSet(),
+                files = files.toImmutableList(),
                 files0Hash = files0Hash,
                 modeDirectory = _modeDirectory.build(),
                 modeFile = _modeFile.build(),
@@ -506,20 +516,22 @@ public class FileLog: Log {
     }
 
     private val directory: File
-    private val files: Set<File>
-    private val lockFile: File
-    private val rotateFile: File
+    private val files: List<File>
+    private val dotLockFile: File
+    private val dotRotateFile: File
 
     private val _whitelistDomain: Array<String>
     private val _whitelistTag: Array<String>
 
     private val LOG: Logger
 
+    private val logScope: CoroutineScope
+
     private constructor(
         min: Level,
         max: Level,
         directory: File,
-        files: Set<File>,
+        files: List<File>,
         files0Hash: String,
         modeDirectory: String,
         modeFile: String,
@@ -531,14 +543,38 @@ public class FileLog: Log {
     ): super(uid = "io.matthewnelson.kmp.log.file.$uidSuffix", min = min, max = max) {
         this.directory = directory
         this.files = files
-        this.lockFile = directory.resolve(".lock-$files0Hash")
-        this.rotateFile = directory.resolve(".rotate-$files0Hash")
+
+        run {
+            // If the directory is a NFS mounted drive, then files0Hash may not be the
+            // same on another machine, so cannot use it in the name for these 2 files.
+            // This is because the hash of the fully canonicalized path on this device
+            // which may be different on another machine.
+            var name0 = files[0].name
+            if (!name0.startsWith('.')) name0 = ".$name0"
+            name0
+        }.let { dotName0 ->
+            this.dotLockFile = directory.resolve("$dotName0.lock")
+            this.dotRotateFile = directory.resolve("$dotName0.rotate")
+        }
+
         this._whitelistDomain = whitelistDomain.toTypedArray()
         this._whitelistTag = whitelistTag.toTypedArray()
         this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
+        this.logScope = CoroutineScope(context =
+            CoroutineName(uid)
+            + Dispatchers.IO
+            + SupervisorJob()
+            + CoroutineExceptionHandler { context, t ->
+                if (t is CancellationException) throw t
+                if (LOG.e(t) { context } == 0) {
+                    // No other Log are installed to log the error. Pipe to stderr.
+                    t.printStackTrace()
+                }
+            }
+        )
 
         this.logDirectory = directory.path
-        this.logFiles = files.mapTo(LinkedHashSet(files.size)) { it.path }.toImmutableSet()
+        this.logFiles = files.map { it.path }.toImmutableList()
         this.logFiles0Hash = files0Hash
         this.modeDirectory = modeDirectory
         this.modeFile = modeFile
@@ -546,11 +582,6 @@ public class FileLog: Log {
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull
         this.whitelistTag = whitelistTag
-    }
-
-    override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        // TODO
-        return false
     }
 
     override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
@@ -568,6 +599,11 @@ public class FileLog: Log {
             if (!_whitelistTag.contains(tag)) return false
         }
         return true
+    }
+
+    override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
+        // TODO
+        return false
     }
 
     override fun onInstall() {

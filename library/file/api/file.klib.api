@@ -10,7 +10,7 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
     final val logDirectory // io.matthewnelson.kmp.log.file/FileLog.logDirectory|{}logDirectory[0]
         final fun <get-logDirectory>(): kotlin/String // io.matthewnelson.kmp.log.file/FileLog.logDirectory.<get-logDirectory>|<get-logDirectory>(){}[0]
     final val logFiles // io.matthewnelson.kmp.log.file/FileLog.logFiles|{}logFiles[0]
-        final fun <get-logFiles>(): kotlin.collections/Set<kotlin/String> // io.matthewnelson.kmp.log.file/FileLog.logFiles.<get-logFiles>|<get-logFiles>(){}[0]
+        final fun <get-logFiles>(): kotlin.collections/List<kotlin/String> // io.matthewnelson.kmp.log.file/FileLog.logFiles.<get-logFiles>|<get-logFiles>(){}[0]
     final val logFiles0Hash // io.matthewnelson.kmp.log.file/FileLog.logFiles0Hash|{}logFiles0Hash[0]
         final fun <get-logFiles0Hash>(): kotlin/String // io.matthewnelson.kmp.log.file/FileLog.logFiles0Hash.<get-logFiles0Hash>|<get-logFiles0Hash>(){}[0]
     final val maxLogSize // io.matthewnelson.kmp.log.file/FileLog.maxLogSize|{}maxLogSize[0]

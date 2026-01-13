@@ -235,7 +235,7 @@ class FileLogBuilderUnitTest {
     @Test
     fun givenLogFiles_whenCastAsMutable_thenThrowsClassCastException() {
         assertFailsWith<ClassCastException> {
-            newBuilder().build().logFiles as MutableSet<String>
+            newBuilder().build().logFiles as MutableList<String>
         }
     }
 
