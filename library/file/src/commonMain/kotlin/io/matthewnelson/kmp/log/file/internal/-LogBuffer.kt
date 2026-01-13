@@ -25,14 +25,19 @@ import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
+import kotlin.jvm.JvmInline
 
 internal typealias LogWriteAction = suspend (stream: FileStream.Write?, buf: ByteArray) -> Long
-internal typealias LogBuffer = Channel<LogWriteAction>
 
-internal inline fun LogBuffer(): LogBuffer = Channel(UNLIMITED)
+@JvmInline
+internal value class LogBuffer private constructor(
+    private val ch: Channel<LogWriteAction>,
+): Channel<LogWriteAction> by ch {
+    internal constructor(): this(Channel(UNLIMITED))
+}
 
 @OptIn(ExperimentalContracts::class)
-internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: (buf: ByteArray) -> Unit) {
+internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: LogBuffer.(buf: ByteArray) -> Unit) {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
 
     val buf = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -55,6 +60,7 @@ internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: (buf: ByteArr
         if (LOG != null && count > 0L) {
             LOG.w { "Skipped $count logs" }
         }
+        buf.fill(0)
     }
 
     threw?.let { throw it }

@@ -15,10 +15,10 @@
  **/
 package io.matthewnelson.kmp.log.file
 
-import io.matthewnelson.kmp.file.SysTempDir
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.Log.Level
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -26,68 +26,64 @@ import kotlin.test.assertTrue
 class FileLogUnitTest {
 
     @Test
-    fun givenWhitelistDomains_whenIsLoggable_thenReturnsExpected() {
-        val log = FileLog.Builder(SysTempDir.path)
-            .whitelistDomain("kmp.log")
-            .whitelistDomainNull(allow = false)
-            .build()
+    fun givenWhitelistDomains_whenIsLoggable_thenReturnsExpected() = runTest {
+        withTmpFile { tmp ->
+            val log = FileLog.Builder(tmp.path)
+                .whitelistDomain("kmp.log")
+                .whitelistDomainNull(allow = false)
+                .build()
 
-        try {
-            Log.install(log)
-            assertFalse(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
-            assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
-        } finally {
-            Log.uninstall(log)
+            log.installAndTest {
+                assertFalse(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
+                assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
+            }
         }
     }
 
     @Test
-    fun givenWhitelistDomainNull_whenIsLoggable_thenReturnsExpected() {
-        val log = FileLog.Builder(SysTempDir.path)
-            .whitelistDomain("kmp.log")
-            .whitelistDomainNull(allow = true)
-            .build()
+    fun givenWhitelistDomainNull_whenIsLoggable_thenReturnsExpected() = runTest {
+        withTmpFile { tmp ->
+            val log = FileLog.Builder(tmp.path)
+                .whitelistDomain("kmp.log")
+                .whitelistDomainNull(allow = true)
+                .build()
 
-        try {
-            Log.install(log)
-            assertTrue(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
-            assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
-        } finally {
-            Log.uninstall(log)
+            log.installAndTest {
+                assertTrue(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
+                assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
+            }
         }
     }
 
     @Test
-    fun givenWhitelistTags_whenIsLoggable_thenReturnsExpected() {
-        val log = FileLog.Builder(SysTempDir.path)
-            .whitelistTag("Tag")
-            .build()
+    fun givenWhitelistTags_whenIsLoggable_thenReturnsExpected() = runTest {
+        withTmpFile { tmp ->
+            val log = FileLog.Builder(tmp.path)
+                .whitelistTag("Tag")
+                .build()
 
-        try {
-            Log.install(log)
-            assertTrue(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
-            assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
-            assertFalse(Log.Logger.of(tag = "NotTag").isLoggable(Level.Error))
-        } finally {
-            Log.uninstall(log)
+            log.installAndTest {
+                assertTrue(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
+                assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
+                assertFalse(Log.Logger.of(tag = "NotTag").isLoggable(Level.Error))
+            }
         }
     }
 
     @Test
-    fun givenWhitelistDomainsAndTags_whenIsLoggable_thenReturnsExpected() {
-        val log = FileLog.Builder(SysTempDir.path)
-            .whitelistDomain("kmp.log")
-            .whitelistDomainNull(allow = false)
-            .whitelistTag("Tag")
-            .build()
+    fun givenWhitelistDomainsAndTags_whenIsLoggable_thenReturnsExpected() = runTest {
+        withTmpFile { tmp ->
+            val log = FileLog.Builder(tmp.path)
+                .whitelistDomain("kmp.log")
+                .whitelistDomainNull(allow = false)
+                .whitelistTag("Tag")
+                .build()
 
-        try {
-            Log.install(log)
-            assertFalse(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
-            assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
-            assertFalse(Log.Logger.of(tag = "NotTag", domain = "kmp.log").isLoggable(Level.Error))
-        } finally {
-            Log.uninstall(log)
+            log.installAndTest {
+                assertFalse(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
+                assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
+                assertFalse(Log.Logger.of(tag = "NotTag", domain = "kmp.log").isLoggable(Level.Error))
+            }
         }
     }
 }
