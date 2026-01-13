@@ -653,7 +653,7 @@ public class FileLog: Log {
 
         val fatalJob = if (level == Level.Fatal) Job() else null
 
-        val result = logBuffer.trySend { stream, buf ->
+        val result = logBuffer.channel.trySend { stream, buf ->
             try {
                 // Can be null if there was an error to ensure this write
                 // action still gets consumed and any completion job being
@@ -802,7 +802,7 @@ public class FileLog: Log {
     override fun onUninstall() {
         val logBuffer = _logBuffer
         _logBuffer = null
-        logBuffer?.close(cause = null)
+        logBuffer?.channel?.close(cause = null)
     }
 
     // Exposed for testing
@@ -824,7 +824,7 @@ public class FileLog: Log {
 
         while (true) {
             var writeAction: LogWriteAction? = try {
-                receive()
+                channel.receive()
             } catch (_: ClosedReceiveChannelException) {
                 // FileLog was uninstalled and there
                 // are no more actions buffered.
@@ -912,7 +912,7 @@ public class FileLog: Log {
                         size >= maxLogSize -> null
                         // Yield to another process (potentially)
                         processed >= 10 -> null
-                        else -> tryReceive().getOrNull()
+                        else -> channel.tryReceive().getOrNull()
                     }
                 }
 

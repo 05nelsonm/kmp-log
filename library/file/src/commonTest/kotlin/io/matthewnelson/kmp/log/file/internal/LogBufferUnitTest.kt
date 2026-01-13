@@ -32,7 +32,7 @@ class LogBufferUnitTest {
 
         var count = 0
         repeat(expected) {
-            logBuffer.trySend { stream, _ ->
+            logBuffer.channel.trySend { stream, _ ->
                 count++
                 assertEquals(null, stream)
                 0L
@@ -45,9 +45,9 @@ class LogBufferUnitTest {
             }
         } catch (_: IllegalStateException) {
             // pass
-            assertTrue(logBuffer.isClosedForSend, "isClosedForSend")
-            assertTrue(logBuffer.isClosedForReceive, "isClosedForReceive")
-            assertEquals(0, logBuffer.toList().size)
+            assertTrue(logBuffer.channel.isClosedForSend, "isClosedForSend")
+            assertTrue(logBuffer.channel.isClosedForReceive, "isClosedForReceive")
+            assertEquals(0, logBuffer.channel.toList().size)
             assertEquals(expected, count)
         }
     }

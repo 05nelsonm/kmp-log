@@ -30,9 +30,7 @@ import kotlin.jvm.JvmInline
 internal typealias LogWriteAction = suspend (stream: FileStream.Write?, buf: ByteArray) -> Long
 
 @JvmInline
-internal value class LogBuffer private constructor(
-    private val ch: Channel<LogWriteAction>,
-): Channel<LogWriteAction> by ch {
+internal value class LogBuffer private constructor(internal val channel: Channel<LogWriteAction>) {
     internal constructor(): this(Channel(UNLIMITED))
 }
 
@@ -48,10 +46,10 @@ internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: LogBuffer.(bu
     } catch (t: Throwable) {
         threw = t
     } finally {
-        close()
+        channel.close()
         var count = 0L
         while (true) {
-            val writeAction = tryReceive().getOrNull() ?: break
+            val writeAction = channel.tryReceive().getOrNull() ?: break
             count++
             try {
                 writeAction.invoke(null, buf)
