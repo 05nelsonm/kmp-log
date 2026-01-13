@@ -20,3 +20,5 @@ import io.matthewnelson.kmp.log.Log
 internal expect inline fun Log.Root.isDesktop(): Boolean
 
 internal expect fun Log.Root.now(): String
+
+internal expect fun Log.Root.pid(): Int

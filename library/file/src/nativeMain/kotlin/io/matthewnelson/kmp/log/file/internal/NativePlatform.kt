@@ -23,6 +23,7 @@ import io.matthewnelson.kmp.log.internal.kmp_log_local_date_time
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
+import platform.posix.getpid
 
 private const val ZERO_TIME = "00-00 00:00:00.000"
 
@@ -64,3 +65,5 @@ internal actual fun Log.Root.now(): String {
         append(millis)
     }.toString()
 }
+
+internal actual fun Log.Root.pid(): Int = getpid()
