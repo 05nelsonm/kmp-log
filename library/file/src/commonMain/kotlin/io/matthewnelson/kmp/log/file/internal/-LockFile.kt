@@ -17,9 +17,45 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
+import io.matthewnelson.kmp.file.AccessDeniedException
 import io.matthewnelson.kmp.file.Closeable
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.IOException
+import io.matthewnelson.kmp.file.chmod2
+
+@Throws(IOException::class)
+internal inline fun File.openLockFileRobustly(): LockFile = try {
+    openLockFile()
+} catch (e: AccessDeniedException) {
+    try {
+        chmod2("600")
+    } catch (ee: IOException) {
+        e.addSuppressed(ee)
+        throw e
+    }
+    try {
+        openLockFile()
+    } catch (ee: IOException) {
+        e.addSuppressed(ee)
+        throw e
+    }
+}
+
+internal const val FILE_LOCK_SIZE = 1L
+// Bytes 0-1 are locked when writing to the log file
+internal const val FILE_LOCK_POS_LOG = 0L
+// Bytes 1-2 are locked when performing a log rotation
+internal const val FILE_LOCK_POS_ROTATE = FILE_LOCK_POS_LOG + FILE_LOCK_SIZE
+
+@Throws(IllegalStateException::class, IOException::class)
+internal inline fun LockFile.lockLog(): FileLock = lock(position = FILE_LOCK_POS_LOG, size = FILE_LOCK_SIZE)
+@Throws(IllegalStateException::class, IOException::class)
+internal inline fun LockFile.tryLockLog(): FileLock? = tryLock(position = FILE_LOCK_POS_LOG, size = FILE_LOCK_SIZE)
+
+@Throws(IllegalStateException::class, IOException::class)
+internal inline fun LockFile.lockRotate(): FileLock = lock(position = FILE_LOCK_POS_ROTATE, size = FILE_LOCK_SIZE)
+@Throws(IllegalStateException::class, IOException::class)
+internal inline fun LockFile.tryLockRotate(): FileLock? = tryLock(position = FILE_LOCK_POS_ROTATE, size = FILE_LOCK_SIZE)
 
 @Throws(IOException::class)
 internal expect inline fun File.openLockFile(): LockFile
