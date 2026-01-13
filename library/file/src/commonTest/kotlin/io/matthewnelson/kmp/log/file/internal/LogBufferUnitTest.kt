@@ -40,7 +40,7 @@ class LogBufferUnitTest {
         }
 
         try {
-            logBuffer.use {
+            logBuffer.use(null) {
                 throw IllegalStateException()
             }
         } catch (_: IllegalStateException) {

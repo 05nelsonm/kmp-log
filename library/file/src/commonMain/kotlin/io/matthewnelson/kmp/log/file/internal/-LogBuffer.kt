@@ -13,12 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("NOTHING_TO_INLINE", "WRONG_INVOCATION_KIND")
+@file:Suppress("NOTHING_TO_INLINE", "WRONG_INVOCATION_KIND", "LocalVariableName")
 
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.encoding.core.EncoderDecoder.Companion.DEFAULT_BUFFER_SIZE
 import io.matthewnelson.kmp.file.FileStream
+import io.matthewnelson.kmp.log.Log
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlin.contracts.ExperimentalContracts
@@ -31,7 +32,7 @@ internal typealias LogBuffer = Channel<LogWriteAction>
 internal inline fun LogBuffer(): LogBuffer = Channel(UNLIMITED)
 
 @OptIn(ExperimentalContracts::class)
-internal suspend inline fun LogBuffer.use(block: (buf: ByteArray) -> Unit) {
+internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: (buf: ByteArray) -> Unit) {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
 
     val buf = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -43,11 +44,16 @@ internal suspend inline fun LogBuffer.use(block: (buf: ByteArray) -> Unit) {
         threw = t
     } finally {
         close()
+        var count = 0L
         while (true) {
             val writeAction = tryReceive().getOrNull() ?: break
+            count++
             try {
                 writeAction.invoke(null, buf)
             } catch (_: Throwable) {}
+        }
+        if (LOG != null && count > 0L) {
+            LOG.w { "Skipped $count logs" }
         }
     }
 
