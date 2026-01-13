@@ -13,11 +13,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
+@file:Suppress("NOTHING_TO_INLINE")
+
 package io.matthewnelson.kmp.log.file.internal
 
+import java.lang.reflect.Method
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
+
+// Java 19+
+private val METHOD_THREAD_ID: Method? by lazy {
+    try {
+        Thread::class.java.getMethod("threadId")
+    } catch (_: Throwable) {
+        null
+    }
+}
+
+internal actual fun CurrentThread.id(): Long {
+    val current = Thread.currentThread()
+    METHOD_THREAD_ID?.let { m ->
+        return m.invoke(current) as Long
+    }
+
+    @Suppress("DEPRECATION")
+    return current.id
+}
 
 @OptIn(ExperimentalContracts::class)
 internal actual inline fun <T> CurrentThread.uninterruptedImpl(block: () -> T): T {
