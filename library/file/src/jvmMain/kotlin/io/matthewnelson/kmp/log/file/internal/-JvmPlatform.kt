@@ -19,5 +19,15 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.ANDROID
 import io.matthewnelson.kmp.log.Log
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 internal actual inline fun Log.Root.isDesktop(): Boolean = ANDROID.SDK_INT == null
+
+private val LOG_TIME_FORMAT = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
+
+internal actual fun Log.Root.now(): String {
+    val now = Date(System.currentTimeMillis())
+    return LOG_TIME_FORMAT.format(now)
+}
