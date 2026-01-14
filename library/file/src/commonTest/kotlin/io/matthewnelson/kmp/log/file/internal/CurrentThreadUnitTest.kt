@@ -22,6 +22,8 @@ class CurrentThreadUnitTest {
 
     @Test
     fun givenCurrentThread_whenId_thenIsGreaterThan0() {
-        assertTrue(CurrentThread.id() > 0L)
+        val id = CurrentThread.id()
+        println("CurrentThread.id[$id]")
+        assertTrue(id > 0L)
     }
 }

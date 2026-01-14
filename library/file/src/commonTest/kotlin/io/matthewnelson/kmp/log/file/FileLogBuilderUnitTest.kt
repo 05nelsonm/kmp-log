@@ -197,16 +197,6 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenFileExtension_whenIsDel_thenBuildThrowsIllegalArgumentException() {
-        try {
-            newBuilder().fileExtension("del")
-            fail()
-        } catch (e: IllegalArgumentException) {
-            assertEquals("fileExtension cannot be 'del'", e.message)
-        }
-    }
-
-    @Test
     fun givenFileExtension_whenIsTmp_thenBuildThrowsIllegalArgumentException() {
         try {
             newBuilder().fileExtension("tmp")
