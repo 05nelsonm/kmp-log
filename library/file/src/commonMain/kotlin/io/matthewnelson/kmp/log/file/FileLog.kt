@@ -31,7 +31,6 @@ import io.matthewnelson.kmp.file.FileStream
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.canonicalFile2
 import io.matthewnelson.kmp.file.delete2
-import io.matthewnelson.kmp.file.exists2
 import io.matthewnelson.kmp.file.mkdirs2
 import io.matthewnelson.kmp.file.name
 import io.matthewnelson.kmp.file.path
@@ -74,6 +73,7 @@ import org.kotlincrypto.hash.blake2.BLAKE2s
 import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.jvm.JvmField
+import kotlin.jvm.JvmName
 import kotlin.jvm.JvmSynthetic
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -137,6 +137,24 @@ public class FileLog: Log {
      * */
     @JvmField
     public val whitelistTag: Set<String>
+
+    /**
+     * TODO
+     * */
+    @get:JvmName("isActive")
+    public val isActive: Boolean get() = _logJob?.isActive ?: false
+
+    /**
+     * TODO
+     *
+     * TODO: See uninstallAndBlock
+     *
+     * @throws [ClassCastException]
+     * */
+    public suspend fun uninstallAndJoin() {
+        val instance = uninstallAndGet(uid) ?: return
+        (instance as FileLog)._logJob?.join()
+    }
 
     /**
      * TODO
@@ -608,6 +626,7 @@ public class FileLog: Log {
             + SupervisorJob()
             + CoroutineExceptionHandler Handler@ { context, t ->
                 if (t is CancellationException) return@Handler // Ignore...
+                // TODO: Set global error variable which can be retrieved externally???
                 if (LOG.e(t) { context } == 0) {
                     // No other Log are installed to log the error. Pipe to stderr.
                     t.printStackTrace()
@@ -627,7 +646,7 @@ public class FileLog: Log {
     }
 
     override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
-        // Do not log to self, only to other Logs (if installed)
+        // Do not log to self, only to other Log instances (if installed).
         if (domain == LOG.domain && tag == LOG.tag) return false
 
         if (_whitelistDomain.isNotEmpty()) {
@@ -656,9 +675,9 @@ public class FileLog: Log {
 
         val result = logBuffer.channel.trySend { stream, buf ->
             try {
-                // Can be null if there was an error to ensure this write
-                // action still gets consumed and any completion job being
-                // waited on is closed out properly.
+                // Can be null if there was an error, ensuring that this
+                // action still gets consumed and any fatalJob that may
+                // be present is properly canceled.
                 if (stream == null) {
                     preProcessing.cancel()
                     return@trySend 0L
@@ -715,6 +734,13 @@ public class FileLog: Log {
     override fun onInstall() {
         val logBuffer = LogBuffer()
         val logJob = _logJob
+
+        // By queueing up an empty action for immediate execution, the loop
+        // will be able to check for an interrupted log rotation. If the
+        // program previously exited in the middle of doing one, that needs
+        // to be finished off firstly.
+        logBuffer.channel.trySend { _, _ -> 0L }
+
         logScope.launch {
             logBuffer.use(LOG) { buf ->
                 val thisJob = currentCoroutineContext().job
@@ -779,10 +805,6 @@ public class FileLog: Log {
                 val logStream = files[0].openLogFileRobustly(modeFile)
                 val logStreamCompletion = thisJob.closeOnCompletion(logStream)
 
-                if (dotRotateFile.exists2()) {
-                    // TODO: Complete potentially interrupted log rotation
-                }
-
                 loop(
                     buf,
                     lockFile,
@@ -822,8 +844,8 @@ public class FileLog: Log {
             var writeAction: LogWriteAction? = try {
                 channel.receive()
             } catch (_: ClosedReceiveChannelException) {
-                // FileLog was uninstalled and there
-                // are no more actions buffered.
+                // FileLog was uninstalled and there are
+                // no remaining actions left to process.
                 break
             }
 
@@ -832,6 +854,12 @@ public class FileLog: Log {
                 val logLock = try {
                     _lockFile.lockLog()
                 } catch (t: Throwable) {
+                    // Could be an Overlapped exception on Jvm/Android, or
+                    // on Native/Windows. Someone within this process may
+                    // be holding a lock on our requested range (maliciously?).
+                    // By closing and re-opening the file, this should invalidate
+                    // all other locks held by this process (which we should be
+                    // the ONLY ones acquiring).
                     val tt: Throwable? = try {
                         _lockFile.close()
                         null
@@ -850,7 +878,7 @@ public class FileLog: Log {
                         _lockFile.lockLog()
                     } catch (ttt: Throwable) {
                         t.addSuppressed(ttt)
-                        // Total failure
+                        // Total failure. Close up shop.
                         writeAction?.invoke(null, buf)
                         throw t
                     }
@@ -881,7 +909,7 @@ public class FileLog: Log {
                         _logStream.position(size)
                     } catch (tt: Throwable) {
                         e.addSuppressed(tt)
-                        // Total failure
+                        // Total failure. Close up shop.
                         writeAction?.invoke(null, buf)
                         throw e
                     }
@@ -891,7 +919,7 @@ public class FileLog: Log {
                 while (true) {
                     val action = writeAction ?: break
 
-                    size += try {
+                    val written = try {
                         action(_logStream, buf)
                     } catch (t: Throwable) {
                         if (t !is CancellationException) {
@@ -899,16 +927,26 @@ public class FileLog: Log {
                                 // No other Log are installed to log the error. Pipe to stderr.
                                 t.printStackTrace()
                             }
+                            // TODO:
+                            //  - Check for InterruptedIOException.bytesTransferred???
+                            //  - Truncate to size to wipe out any partially written logs???
                         }
                         0L
-                    } finally {
-                        processed++
                     }
 
-                    thisJob.ensureActive()
+                    if (written > 0L) {
+                        processed++
+                        size += written
+                    }
 
                     if (!_logStream.isOpen()) {
-                        // TODO: re-open logStream
+                        // This should never hopefully be the case? If we fail here,
+                        // fail hard; no recovery...
+                        _logStreamCompletion.dispose()
+                        _logStream = files[0].openLogFileRobustly(modeFile)
+                        _logStreamCompletion = thisJob.closeOnCompletion(_logStream)
+                        size = _logStream.size()
+                        _logStream.position(size)
                     }
 
                     // Rip through some more buffered actions (if available) while we hold a lock.
@@ -917,11 +955,27 @@ public class FileLog: Log {
                         size >= maxLogSize -> null
                         // Yield to another process (potentially)
                         processed >= 10 -> null
+                        // Job cancellation
+                        !thisJob.isActive -> null
                         else -> channel.tryReceive().getOrNull()
                     }
                 }
 
-                if (size >= maxLogSize) {
+                if (processed > 0) {
+                    LOG.v { "Processed $processed " + if (processed > 1) "logs" else "log" }
+
+                    // Ensure everything is synced to disk before going further,
+                    // either to do a log rotation or release the log lock.
+                    try {
+                        _logStream.sync(meta = true)
+                    } catch (e: IOException) {
+                        if (LOG.e(e) { "sync failure" } == 0) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+
+                if (thisJob.isActive && size >= maxLogSize) {
                     // TODO: do rotation
                 }
 
@@ -954,13 +1008,5 @@ public class FileLog: Log {
             }
             LOG.v(tt) { "Closed >> $closeable" }
         }
-    }
-
-    // Exposed for testing
-    @JvmSynthetic
-    @Throws(IllegalStateException::class)
-    internal suspend fun awaitLogJob() {
-        check(_logBuffer == null) { "$this is still installed..." }
-        _logJob?.join()
     }
 }
