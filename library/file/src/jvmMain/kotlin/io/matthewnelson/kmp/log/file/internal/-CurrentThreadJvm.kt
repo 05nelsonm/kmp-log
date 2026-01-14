@@ -22,7 +22,7 @@ import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
-// Java 19+
+// Java 19+, Android API 36+
 private val METHOD_THREAD_ID: Method? by lazy {
     try {
         Thread::class.java.getMethod("threadId")

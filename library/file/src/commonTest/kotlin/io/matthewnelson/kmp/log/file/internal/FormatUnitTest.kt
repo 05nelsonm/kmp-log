@@ -28,6 +28,16 @@ private const val TEST_TIME = "00-00 00:00:00.000"
 class FormatUnitTest {
 
     @Test
+    fun givenTime_whenNow_thenIsFormattedAsExpected() {
+        val actual = Log.Root.now()
+        assertEquals(TEST_TIME.length, actual.length)
+        assertEquals(1, actual.count { c -> c.isWhitespace() })
+        assertEquals(1, actual.count { c -> c == '-'})
+        assertEquals(2, actual.count { c -> c == ':'})
+        assertEquals(1, actual.count { c -> c == '.'})
+    }
+
+    @Test
     fun givenFormat_whenTrace_thenCalculatedCapacityEqualsResultLength() {
         var invocations = 0
 

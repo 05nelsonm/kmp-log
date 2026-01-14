@@ -27,7 +27,7 @@ import platform.posix.getpid
 
 private const val ZERO_TIME = "00-00 00:00:00.000"
 
-internal actual fun Log.Root.now(): String {
+internal actual fun Log.Root.now(): CharSequence {
     @OptIn(ExperimentalForeignApi::class)
     val dateTime = IntArray(KMP_LOG_LOCAL_DATE_TIME_SIZE)
     @OptIn(ExperimentalForeignApi::class)
@@ -63,7 +63,7 @@ internal actual fun Log.Root.now(): String {
         if (millis <= 99) append('0')
         if (millis <= 9) append('0')
         append(millis)
-    }.toString()
+    }
 }
 
 internal actual fun Log.Root.pid(): Int = getpid()

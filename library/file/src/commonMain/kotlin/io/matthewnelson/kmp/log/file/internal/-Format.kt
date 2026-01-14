@@ -22,7 +22,7 @@ import kotlin.contracts.contract
 
 @OptIn(ExperimentalContracts::class)
 internal inline fun Log.Root.format(
-    time: String,
+    time: CharSequence,
     pid: Int,
     tid: Long,
     level: Log.Level,
@@ -72,7 +72,7 @@ internal inline fun Log.Root.format(
 
 @OptIn(ExperimentalContracts::class)
 internal inline fun Log.Root.formatPrefix(
-    time: String,
+    time: CharSequence,
     pid: Int,
     tid: Long,
     level: Log.Level,

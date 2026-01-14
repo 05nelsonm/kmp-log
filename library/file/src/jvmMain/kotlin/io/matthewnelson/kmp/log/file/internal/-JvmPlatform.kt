@@ -25,7 +25,7 @@ import java.util.Locale
 
 internal actual inline fun Log.Root.isDesktop(): Boolean = ANDROID.SDK_INT == null
 
-internal actual fun Log.Root.now(): String {
+internal actual fun Log.Root.now(): CharSequence {
     val now = Date(System.currentTimeMillis())
     return LOG_TIME_FORMAT.format(now)
 }
