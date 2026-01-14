@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-latest, ubuntu-latest, windows-latest ]
+        os: [ macos-latest, macos-15-intel, ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout Repository
@@ -26,15 +26,21 @@ jobs:
           java-version: 17
 
       - name: Check API Compatibility
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-15-intel'
         run: >
           ./gradlew apiCheck --stacktrace
 
-      - name: Run macOS Tests
+      - name: Run macOS [x86_64] Tests
+        if: matrix.os == 'macos-15-intel'
+        run: >
+          ./gradlew check --stacktrace
+          -PKMP_TARGETS="JVM,JS,IOS_ARM64,IOS_X64,IOS_SIMULATOR_ARM64,TVOS_ARM64,TVOS_X64,TVOS_SIMULATOR_ARM64,WATCHOS_ARM32,WATCHOS_ARM64,WATCHOS_DEVICE_ARM64,WATCHOS_X64,WATCHOS_SIMULATOR_ARM64,WASM_JS,WASM_WASI"
+
+      - name: Run macOS [aarch64] Tests
         if: matrix.os == 'macos-latest'
         run: >
           ./gradlew check --stacktrace
-          -PKMP_TARGETS="JVM,JS,IOS_ARM64,IOS_X64,IOS_SIMULATOR_ARM64,MACOS_ARM64,MACOS_X64,TVOS_ARM64,TVOS_X64,TVOS_SIMULATOR_ARM64,WATCHOS_ARM32,WATCHOS_ARM64,WATCHOS_DEVICE_ARM64,WATCHOS_X64,WATCHOS_SIMULATOR_ARM64,WASM_JS,WASM_WASI"
+          -PKMP_TARGETS="JVM,JS,MACOS_ARM64,MACOS_X64,WASM_JS,WASM_WASI"
 
       - name: Run Linux Tests
         if: matrix.os == 'ubuntu-latest'
