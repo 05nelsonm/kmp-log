@@ -933,6 +933,7 @@ public abstract class Log {
          * @return `true` if a [Log] instance, either the one provided or one containing
          *   the same [Log.uid], was uninstalled. `false` otherwise.
          *
+         * @see [uninstallAndGet]
          * @see [uninstallOrThrow]
          * */
         @JvmStatic
@@ -946,14 +947,29 @@ public abstract class Log {
          * @return `true` if a [Log] instance with a [Log.uid] matching the one
          *   provided was uninstalled. `false` otherwise.
          *
+         * @see [uninstallAndGet]
          * @see [uninstallOrThrow]
          * */
         @JvmStatic
-        public fun uninstall(uid: String): Boolean {
+        public fun uninstall(uid: String): Boolean = uninstallAndGet(uid) != null
+
+        /**
+         * Uninstall a [Log] instance and return it.
+         *
+         * @param [uid] The [Log.uid] of the instance to uninstall.
+         *
+         * @return The [Log] instance with a [Log.uid] matching the one provided,
+         *   or `null` if none were installed.
+         *
+         * @see [uninstall]
+         * @see [uninstallOrThrow]
+         * */
+        @JvmStatic
+        public fun uninstallAndGet(uid: String): Log? {
             LOGS.withLockAndReentryGuard {
                 val logs = array()
                 val index = logs.indexOfFirst { it.uid == uid }
-                if (index == -1) return false
+                if (index == -1) return null
                 if (logs.size == 1) {
                     update(installed = emptyArray())
                 } else {
@@ -965,7 +981,7 @@ public abstract class Log {
                     update(installed = list.toTypedArray())
                 }
                 logs[index].doOnUninstall()
-                return true
+                return logs[index]
             }
         }
 

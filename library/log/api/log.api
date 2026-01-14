@@ -20,6 +20,7 @@ public abstract class io/matthewnelson/kmp/log/Log {
 	public static final fun uninstall (Lio/matthewnelson/kmp/log/Log;)Z
 	public static final fun uninstall (Ljava/lang/String;)Z
 	public static final fun uninstallAll (Z)V
+	public static final fun uninstallAndGet (Ljava/lang/String;)Lio/matthewnelson/kmp/log/Log;
 	public static final fun uninstallOrThrow (Lio/matthewnelson/kmp/log/Log;)V
 	public static final fun uninstallOrThrow (Ljava/lang/String;)V
 }
@@ -109,6 +110,7 @@ public final class io/matthewnelson/kmp/log/Log$Root {
 	public final fun uninstall (Lio/matthewnelson/kmp/log/Log;)Z
 	public final fun uninstall (Ljava/lang/String;)Z
 	public final fun uninstallAll (Z)V
+	public final fun uninstallAndGet (Ljava/lang/String;)Lio/matthewnelson/kmp/log/Log;
 	public final fun uninstallOrThrow (Lio/matthewnelson/kmp/log/Log;)V
 	public final fun uninstallOrThrow (Ljava/lang/String;)V
 }
