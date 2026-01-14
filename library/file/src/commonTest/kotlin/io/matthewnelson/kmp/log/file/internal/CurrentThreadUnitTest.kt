@@ -15,15 +15,25 @@
  **/
 package io.matthewnelson.kmp.log.file.internal
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlin.test.Test
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class CurrentThreadUnitTest {
 
     @Test
-    fun givenCurrentThread_whenId_thenIsGreaterThan0() {
-        val id = CurrentThread.id()
-        println("CurrentThread.id[$id]")
-        assertTrue(id > 0L)
+    fun givenCurrentThread_whenId_thenIsGreaterThan0() = runTest {
+        val tid1 = CurrentThread.id()
+        assertTrue(tid1 > 0L)
+
+        val tid2 = withContext(Dispatchers.IO) { CurrentThread.id() }
+        assertTrue(tid2 > 0L)
+
+        assertNotEquals(tid1, tid2)
+        println("tid1=$tid1, tid2=$tid2")
     }
 }
