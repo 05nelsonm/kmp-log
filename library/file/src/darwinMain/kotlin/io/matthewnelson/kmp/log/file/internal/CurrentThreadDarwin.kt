@@ -15,9 +15,11 @@
  **/
 package io.matthewnelson.kmp.log.file.internal
 
+import kotlinx.cinterop.ExperimentalForeignApi
 import platform.posix.pthread_mach_thread_np
 import platform.posix.pthread_self
 
+@OptIn(ExperimentalForeignApi::class)
 internal actual fun CurrentThread.id(): Long {
     val self = pthread_self()
     return pthread_mach_thread_np(self).toLong()
