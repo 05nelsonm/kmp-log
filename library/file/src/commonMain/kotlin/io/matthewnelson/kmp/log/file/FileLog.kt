@@ -43,10 +43,14 @@ import io.matthewnelson.kmp.log.file.internal.LockFile
 import io.matthewnelson.kmp.log.file.internal.LogBuffer
 import io.matthewnelson.kmp.log.file.internal.LogWriteAction
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
+import io.matthewnelson.kmp.log.file.internal.format
+import io.matthewnelson.kmp.log.file.internal.id
 import io.matthewnelson.kmp.log.file.internal.isDesktop
 import io.matthewnelson.kmp.log.file.internal.lockLog
+import io.matthewnelson.kmp.log.file.internal.now
 import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
 import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
+import io.matthewnelson.kmp.log.file.internal.pid
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
 import io.matthewnelson.kmp.log.file.internal.use
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -604,8 +608,8 @@ public class FileLog: Log {
             CoroutineName(uid)
             + Dispatchers.IO
             + SupervisorJob()
-            + CoroutineExceptionHandler { context, t ->
-                if (t is CancellationException) throw t
+            + CoroutineExceptionHandler Handler@ { context, t ->
+                if (t is CancellationException) return@Handler // Ignore...
                 if (LOG.e(t) { context } == 0) {
                     // No other Log are installed to log the error. Pipe to stderr.
                     t.printStackTrace()
@@ -644,11 +648,10 @@ public class FileLog: Log {
     override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         val logBuffer = _logBuffer ?: return false
 
-        // TODO: time, thread id
-        val preProcessing: Deferred<CharSequence?> = logScope.async {
-            // TODO: Format
-            if (msg.isNullOrEmpty()) return@async null
-            msg + '\n'
+        val preProcessing: Deferred<CharSequence?> = run {
+            val time = now()
+            val tid = CurrentThread.id()
+            logScope.async { format(time, pid(), tid, level, domain, tag, msg, t) }
         }
 
         val fatalJob = if (level == Level.Fatal) Job() else null
@@ -663,10 +666,10 @@ public class FileLog: Log {
                     return@trySend 0L
                 }
 
-                val formatted = preProcessing.await()
-                if (formatted.isNullOrEmpty()) return@trySend 0L
-
                 val written = try {
+                    val formatted = preProcessing.await()
+                    if (formatted.isNullOrEmpty()) return@trySend 0L
+
                     formatted.decodeBuffered(
                         UTF8,
                         throwOnOverflow = false,
@@ -776,13 +779,9 @@ public class FileLog: Log {
                 val logStream = files[0].openLogFileRobustly(modeFile)
                 val logStreamCompletion = thisJob.closeOnCompletion(logStream)
 
-                // TODO: deferred log statement (log opened)
-
                 if (dotRotateFile.exists2()) {
                     // TODO: Complete potentially interrupted log rotation
                 }
-
-                // TODO: write deferred logs to the log file.
 
                 loop(
                     buf,
@@ -797,6 +796,7 @@ public class FileLog: Log {
             _logJob = job
         }
         _logBuffer = logBuffer
+        log(Level.Info, LOG.domain, LOG.tag, "Log file opened.", t = null)
     }
 
     override fun onUninstall() {
