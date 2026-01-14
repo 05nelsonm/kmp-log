@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("LocalVariableName", "NOTHING_TO_INLINE", "PrivatePropertyName")
+@file:Suppress("DuplicatedCode", "LocalVariableName", "PrivatePropertyName")
 
 package io.matthewnelson.kmp.log.file
 
@@ -686,6 +686,8 @@ public class FileLog: Log {
                 }
 
                 fatalJob?.complete()
+                LOG.v { "Wrote $written bytes to log" }
+
                 written
             } finally {
                 fatalJob?.cancel()
@@ -836,21 +838,24 @@ public class FileLog: Log {
                 val logLock = try {
                     _lockFile.lockLog()
                 } catch (t: Throwable) {
-                    try {
+                    val tt: Throwable? = try {
                         _lockFile.close()
+                        null
                     } catch (tt: Throwable) {
                         t.addSuppressed(tt)
+                        tt
                     } finally {
                         _lockFileCompletion.dispose()
                     }
+                    LOG.v(tt) { "Closed >> $_lockFile" }
 
                     try {
                         thisJob.ensureActive()
                         _lockFile = dotLockFile.openLockFileRobustly()
                         _lockFileCompletion = thisJob.closeOnCompletion(_lockFile)
                         _lockFile.lockLog()
-                    } catch (tt: Throwable) {
-                        t.addSuppressed(tt)
+                    } catch (ttt: Throwable) {
+                        t.addSuppressed(ttt)
                         // Total failure
                         writeAction?.invoke(null, buf)
                         throw t
@@ -863,21 +868,25 @@ public class FileLog: Log {
                     size = _logStream.size()
                     _logStream.position(size)
                 } catch (e: IOException) {
-                    try {
+                    val t: Throwable? = try {
                         _logStream.close()
+                        null
                     } catch (t: Throwable) {
                         e.addSuppressed(t)
+                        t
                     } finally {
                         _logStreamCompletion.dispose()
                     }
+                    LOG.v(t) { "Closed >> $_logStream" }
+
                     try {
                         thisJob.ensureActive()
                         _logStream = files[0].openLogFileRobustly(modeFile)
                         _logStreamCompletion = thisJob.closeOnCompletion(_logStream)
                         size = _logStream.size()
                         _logStream.position(size)
-                    } catch (t: Throwable) {
-                        e.addSuppressed(t)
+                    } catch (tt: Throwable) {
+                        e.addSuppressed(tt)
                         // Total failure
                         writeAction?.invoke(null, buf)
                         throw e
@@ -936,14 +945,18 @@ public class FileLog: Log {
             }
         }
     }
-}
 
-private inline fun Job.closeOnCompletion(closeable: Closeable): DisposableHandle {
-    return invokeOnCompletion { t ->
-        try {
-            closeable.close()
-        } catch (tt: Throwable) {
-            t?.addSuppressed(tt)
+    private fun Job.closeOnCompletion(closeable: Closeable): DisposableHandle {
+        LOG.v { "Opened >> $closeable" }
+        return invokeOnCompletion { t ->
+            val tt = try {
+                closeable.close()
+                null
+            } catch (tt: Throwable) {
+                t?.addSuppressed(tt)
+                tt
+            }
+            LOG.v(tt) { "Closed >> $closeable" }
         }
     }
 }

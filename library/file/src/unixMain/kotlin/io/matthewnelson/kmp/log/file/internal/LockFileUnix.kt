@@ -153,4 +153,6 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
             if (ret != 0) throw errnoToIOException(errno)
         }
     }
+
+    override fun toString(): String = "LockFile@" + hashCode()
 }

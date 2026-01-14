@@ -155,4 +155,6 @@ internal actual abstract class LockFile private constructor(h: HANDLE): Closeabl
             throw lastErrorToIOException(error)
         }
     }
+
+    override fun toString(): String = "LockFile@" + hashCode()
 }
