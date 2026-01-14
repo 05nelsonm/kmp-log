@@ -611,7 +611,7 @@ public class FileLog: Log {
                 if (t is CancellationException) return@Handler // Ignore...
                 if (LOG.e(t) { context } == 0) {
                     // No other Log are installed to log the error. Pipe to stderr.
-                    FatalException(context.toString(), t).printStackTrace()
+                    t.printStackTrace()
                 }
             }
         )
@@ -895,9 +895,11 @@ public class FileLog: Log {
                     size += try {
                         action(_logStream, buf)
                     } catch (t: Throwable) {
-                        if (LOG.e(t) { "Failed to write log entry to File[${files[0]}]" } == 0) {
-                            // No other Log are installed to log the error. Pipe to stderr.
-                            t.printStackTrace()
+                        if (t !is CancellationException) {
+                            if (LOG.e(t) { "Failed to write log entry to File[${files[0]}]" } == 0) {
+                                // No other Log are installed to log the error. Pipe to stderr.
+                                t.printStackTrace()
+                            }
                         }
                         0L
                     } finally {
@@ -962,6 +964,4 @@ public class FileLog: Log {
             _logJob?.cancelAndJoin()
         } catch (_: CancellationException) {}
     }
-
-    private class FatalException(message: String, cause: Throwable): Exception(message, cause)
 }
