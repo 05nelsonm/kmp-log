@@ -611,7 +611,7 @@ public class FileLog: Log {
                 if (t is CancellationException) return@Handler // Ignore...
                 if (LOG.e(t) { context } == 0) {
                     // No other Log are installed to log the error. Pipe to stderr.
-                    t.printStackTrace()
+                    FatalException(context.toString(), t).printStackTrace()
                 }
             }
         )
@@ -962,4 +962,6 @@ public class FileLog: Log {
             _logJob?.cancelAndJoin()
         } catch (_: CancellationException) {}
     }
+
+    private class FatalException(message: String, cause: Throwable): Exception(message, cause)
 }
