@@ -604,7 +604,7 @@ public class FileLog: Log {
         this._whitelistTag = whitelistTag.toTypedArray()
         this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
         this.logScope = CoroutineScope(context =
-            CoroutineName(uid)
+            CoroutineName(uidSuffix)
             + Dispatchers.IO
             + SupervisorJob()
             + CoroutineExceptionHandler Handler@ { context, t ->
