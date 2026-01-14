@@ -223,6 +223,11 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
+    fun givenMaxLogYield_whenLessThan1_thenUses1() {
+        assertEquals(1, newBuilder().maxLogYield(0).build().maxLogYield)
+    }
+
+    @Test
     fun givenLogFiles_whenCastAsMutable_thenThrowsClassCastException() {
         assertFailsWith<ClassCastException> {
             newBuilder().build().logFiles as MutableList<String>

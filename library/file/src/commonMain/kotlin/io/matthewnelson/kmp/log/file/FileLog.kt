@@ -124,6 +124,12 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
+    public val maxLogYield: Byte
+
+    /**
+     * TODO
+     * */
+    @JvmField
     public val whitelistDomain: Set<String>
 
     /**
@@ -185,6 +191,7 @@ public class FileLog: Log {
         private var _fileExtension = ""
         private var _maxLogSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
         private var _maxLogs: Byte = if (isDesktop()) 5 else 3
+        private var _maxLogYield: Byte = 10
         private val _whitelistDomain = mutableSetOf<String>()
         private var _whitelistDomainNull = true
         private val _whitelistTag = mutableSetOf<String>()
@@ -364,6 +371,15 @@ public class FileLog: Log {
          * @return The [Builder]
          * */
         public fun maxLogs(max: Byte): Builder = apply { _maxLogs = max }
+
+        /**
+         * DEFAULT: `10`
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun maxLogYield(num: Byte): Builder = apply { _maxLogYield = num }
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.domain])
@@ -553,6 +569,7 @@ public class FileLog: Log {
                 modeDirectory = _modeDirectory.build(),
                 modeFile = _modeFile.build(),
                 maxLogSize = _maxLogSize.coerceAtLeast(50L * 1024L), // 50kb
+                maxLogYield = _maxLogYield.coerceAtLeast(1),
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
                 whitelistTag = whitelistTag,
@@ -596,6 +613,7 @@ public class FileLog: Log {
         modeDirectory: String,
         modeFile: String,
         maxLogSize: Long,
+        maxLogYield: Byte,
         whitelistDomain: Set<String>,
         whitelistDomainNull: Boolean,
         whitelistTag: Set<String>,
@@ -640,6 +658,7 @@ public class FileLog: Log {
         this.modeDirectory = modeDirectory
         this.modeFile = modeFile
         this.maxLogSize = maxLogSize
+        this.maxLogYield = maxLogYield
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull
         this.whitelistTag = whitelistTag
@@ -954,7 +973,7 @@ public class FileLog: Log {
                         // Log rotation is needed
                         size >= maxLogSize -> null
                         // Yield to another process (potentially)
-                        processed >= 10 -> null
+                        processed >= maxLogYield -> null
                         // Job cancellation
                         !thisJob.isActive -> null
                         else -> channel.tryReceive().getOrNull()
