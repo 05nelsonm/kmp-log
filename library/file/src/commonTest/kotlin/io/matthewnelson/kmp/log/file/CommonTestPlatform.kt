@@ -55,14 +55,19 @@ internal inline fun withTmpFile(block: (tmp: File) -> Unit) {
 internal suspend inline fun FileLog.installAndTest(testBody: () -> Unit) {
     contract { callsInPlace(testBody, InvocationKind.AT_MOST_ONCE) }
 
+    var threw: Throwable? = null
+    Log.installOrThrow(this)
     try {
-        Log.installOrThrow(this)
         testBody()
+    } catch (t: Throwable) {
+        threw = t
     } finally {
         Log.uninstall(this)
-        cancelAndJoinLogJob()
+        awaitLogJob()
         files.forEach { it.delete2() }
         dotLockFile.delete2()
         dotRotateFile.delete2()
     }
+    threw?.let { throw it }
+    return
 }

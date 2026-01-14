@@ -63,7 +63,6 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -912,7 +911,7 @@ public class FileLog: Log {
                         // TODO: re-open logStream
                     }
 
-                    // Rip through some more buffered actions while we hold a lock (if possible).
+                    // Rip through some more buffered actions (if available) while we hold a lock.
                     writeAction = when {
                         // Log rotation is needed
                         size >= maxLogSize -> null
@@ -959,9 +958,9 @@ public class FileLog: Log {
 
     // Exposed for testing
     @JvmSynthetic
-    internal suspend fun cancelAndJoinLogJob() {
-        try {
-            _logJob?.cancelAndJoin()
-        } catch (_: CancellationException) {}
+    @Throws(IllegalStateException::class)
+    internal suspend fun awaitLogJob() {
+        check(_logBuffer == null) { "$this is still installed..." }
+        _logJob?.join()
     }
 }
