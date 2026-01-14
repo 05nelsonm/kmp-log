@@ -13,22 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("LEAKED_IN_PLACE_LAMBDA", "NOTHING_TO_INLINE", "WRONG_INVOCATION_KIND")
-
 package io.matthewnelson.kmp.log.file.internal
 
-import kotlin.contracts.ExperimentalContracts
-import kotlin.contracts.InvocationKind
-import kotlin.contracts.contract
+import platform.posix.gettid
 
-internal object CurrentThread
-
-@OptIn(ExperimentalContracts::class)
-internal inline fun <T> CurrentThread.uninterrupted(block: () -> T): T {
-    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
-    return uninterruptedImpl(block)
-}
-
-internal expect fun CurrentThread.id(): Long
-
-internal expect inline fun <T> CurrentThread.uninterruptedImpl(block: () -> T): T
+internal actual fun CurrentThread.id(): Long = gettid().toLong()

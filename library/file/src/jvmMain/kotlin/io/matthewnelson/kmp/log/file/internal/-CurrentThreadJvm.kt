@@ -19,6 +19,25 @@ import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
+// Java 19+, Android API 36+
+private val METHOD_THREAD_ID by lazy {
+    try {
+        Thread::class.java.getMethod("threadId")
+    } catch (_: Throwable) {
+        null
+    }
+}
+
+internal actual fun CurrentThread.id(): Long {
+    val current = Thread.currentThread()
+    METHOD_THREAD_ID?.let { threadId ->
+        return threadId.invoke(current) as Long
+    }
+
+    @Suppress("DEPRECATION")
+    return current.id
+}
+
 @OptIn(ExperimentalContracts::class)
 internal actual inline fun <T> CurrentThread.uninterruptedImpl(block: () -> T): T {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }

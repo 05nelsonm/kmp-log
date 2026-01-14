@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("LocalVariableName", "NOTHING_TO_INLINE", "PrivatePropertyName")
+@file:Suppress("DuplicatedCode", "LocalVariableName", "PrivatePropertyName")
 
 package io.matthewnelson.kmp.log.file
 
@@ -43,10 +43,14 @@ import io.matthewnelson.kmp.log.file.internal.LockFile
 import io.matthewnelson.kmp.log.file.internal.LogBuffer
 import io.matthewnelson.kmp.log.file.internal.LogWriteAction
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
+import io.matthewnelson.kmp.log.file.internal.format
+import io.matthewnelson.kmp.log.file.internal.id
 import io.matthewnelson.kmp.log.file.internal.isDesktop
 import io.matthewnelson.kmp.log.file.internal.lockLog
+import io.matthewnelson.kmp.log.file.internal.now
 import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
 import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
+import io.matthewnelson.kmp.log.file.internal.pid
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
 import io.matthewnelson.kmp.log.file.internal.use
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -604,8 +608,8 @@ public class FileLog: Log {
             CoroutineName(uid)
             + Dispatchers.IO
             + SupervisorJob()
-            + CoroutineExceptionHandler { context, t ->
-                if (t is CancellationException) throw t
+            + CoroutineExceptionHandler Handler@ { context, t ->
+                if (t is CancellationException) return@Handler // Ignore...
                 if (LOG.e(t) { context } == 0) {
                     // No other Log are installed to log the error. Pipe to stderr.
                     t.printStackTrace()
@@ -644,11 +648,10 @@ public class FileLog: Log {
     override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         val logBuffer = _logBuffer ?: return false
 
-        // TODO: time, thread id
-        val preProcessing: Deferred<CharSequence?> = logScope.async {
-            // TODO: Format
-            if (msg.isNullOrEmpty()) return@async null
-            msg + '\n'
+        val preProcessing: Deferred<CharSequence?> = run {
+            val time = now()
+            val tid = CurrentThread.id()
+            logScope.async { format(time, pid(), tid, level, domain, tag, msg, t) }
         }
 
         val fatalJob = if (level == Level.Fatal) Job() else null
@@ -663,10 +666,10 @@ public class FileLog: Log {
                     return@trySend 0L
                 }
 
-                val formatted = preProcessing.await()
-                if (formatted.isNullOrEmpty()) return@trySend 0L
-
                 val written = try {
+                    val formatted = preProcessing.await()
+                    if (formatted.isNullOrEmpty()) return@trySend 0L
+
                     formatted.decodeBuffered(
                         UTF8,
                         throwOnOverflow = false,
@@ -683,6 +686,8 @@ public class FileLog: Log {
                 }
 
                 fatalJob?.complete()
+                LOG.v { "Wrote $written bytes to log" }
+
                 written
             } finally {
                 fatalJob?.cancel()
@@ -776,13 +781,9 @@ public class FileLog: Log {
                 val logStream = files[0].openLogFileRobustly(modeFile)
                 val logStreamCompletion = thisJob.closeOnCompletion(logStream)
 
-                // TODO: deferred log statement (log opened)
-
                 if (dotRotateFile.exists2()) {
                     // TODO: Complete potentially interrupted log rotation
                 }
-
-                // TODO: write deferred logs to the log file.
 
                 loop(
                     buf,
@@ -797,6 +798,7 @@ public class FileLog: Log {
             _logJob = job
         }
         _logBuffer = logBuffer
+        log(Level.Info, LOG.domain, LOG.tag, "Log file opened.", t = null)
     }
 
     override fun onUninstall() {
@@ -836,21 +838,24 @@ public class FileLog: Log {
                 val logLock = try {
                     _lockFile.lockLog()
                 } catch (t: Throwable) {
-                    try {
+                    val tt: Throwable? = try {
                         _lockFile.close()
+                        null
                     } catch (tt: Throwable) {
                         t.addSuppressed(tt)
+                        tt
                     } finally {
                         _lockFileCompletion.dispose()
                     }
+                    LOG.v(tt) { "Closed >> $_lockFile" }
 
                     try {
                         thisJob.ensureActive()
                         _lockFile = dotLockFile.openLockFileRobustly()
                         _lockFileCompletion = thisJob.closeOnCompletion(_lockFile)
                         _lockFile.lockLog()
-                    } catch (tt: Throwable) {
-                        t.addSuppressed(tt)
+                    } catch (ttt: Throwable) {
+                        t.addSuppressed(ttt)
                         // Total failure
                         writeAction?.invoke(null, buf)
                         throw t
@@ -863,21 +868,25 @@ public class FileLog: Log {
                     size = _logStream.size()
                     _logStream.position(size)
                 } catch (e: IOException) {
-                    try {
+                    val t: Throwable? = try {
                         _logStream.close()
+                        null
                     } catch (t: Throwable) {
                         e.addSuppressed(t)
+                        t
                     } finally {
                         _logStreamCompletion.dispose()
                     }
+                    LOG.v(t) { "Closed >> $_logStream" }
+
                     try {
                         thisJob.ensureActive()
                         _logStream = files[0].openLogFileRobustly(modeFile)
                         _logStreamCompletion = thisJob.closeOnCompletion(_logStream)
                         size = _logStream.size()
                         _logStream.position(size)
-                    } catch (t: Throwable) {
-                        e.addSuppressed(t)
+                    } catch (tt: Throwable) {
+                        e.addSuppressed(tt)
                         // Total failure
                         writeAction?.invoke(null, buf)
                         throw e
@@ -936,14 +945,18 @@ public class FileLog: Log {
             }
         }
     }
-}
 
-private inline fun Job.closeOnCompletion(closeable: Closeable): DisposableHandle {
-    return invokeOnCompletion { t ->
-        try {
-            closeable.close()
-        } catch (tt: Throwable) {
-            t?.addSuppressed(tt)
+    private fun Job.closeOnCompletion(closeable: Closeable): DisposableHandle {
+        LOG.v { "Opened >> $closeable" }
+        return invokeOnCompletion { t ->
+            val tt = try {
+                closeable.close()
+                null
+            } catch (tt: Throwable) {
+                t?.addSuppressed(tt)
+                tt
+            }
+            LOG.v(tt) { "Closed >> $closeable" }
         }
     }
 }
