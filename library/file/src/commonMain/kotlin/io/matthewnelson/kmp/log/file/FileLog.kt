@@ -63,7 +63,6 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -310,7 +309,7 @@ public class FileLog: Log {
          *  - [name] contains character `/`
          *  - [name] contains character `\`
          *  - [name] contains null character `\u0000`
-         *  - [name] is `del` or `tmp`
+         *  - [name] is `tmp`
          * */
         public fun fileExtension(name: String): Builder {
             require(name.length <= 8) { "fileExtension cannot exceed 8 characters" }
@@ -321,7 +320,6 @@ public class FileLog: Log {
                 require(c != '\\') { "fileExtension cannot contain '\\'" }
                 require(c != '\u0000') { "fileExtension cannot contain null character '\\u0000'" }
             }
-            require(name != "del") { "fileExtension cannot be 'del'" }
             require(name != "tmp") { "fileExtension cannot be 'tmp'" }
             _fileExtension = name
             return this
@@ -605,7 +603,7 @@ public class FileLog: Log {
         this._whitelistTag = whitelistTag.toTypedArray()
         this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
         this.logScope = CoroutineScope(context =
-            CoroutineName(uid)
+            CoroutineName(uidSuffix)
             + Dispatchers.IO
             + SupervisorJob()
             + CoroutineExceptionHandler Handler@ { context, t ->
@@ -807,10 +805,6 @@ public class FileLog: Log {
         logBuffer?.channel?.close(cause = null)
     }
 
-    // Exposed for testing
-    @JvmSynthetic
-    internal suspend fun cancelAndJoinLogJob() { _logJob?.cancelAndJoin() }
-
     private suspend fun LogBuffer.loop(
         buf: ByteArray,
         lockFile: LockFile,
@@ -900,9 +894,11 @@ public class FileLog: Log {
                     size += try {
                         action(_logStream, buf)
                     } catch (t: Throwable) {
-                        if (LOG.e(t) { "Failed to write log entry to File[${files[0]}]" } == 0) {
-                            // No other Log are installed to log the error. Pipe to stderr.
-                            t.printStackTrace()
+                        if (t !is CancellationException) {
+                            if (LOG.e(t) { "Failed to write log entry to File[${files[0]}]" } == 0) {
+                                // No other Log are installed to log the error. Pipe to stderr.
+                                t.printStackTrace()
+                            }
                         }
                         0L
                     } finally {
@@ -915,7 +911,7 @@ public class FileLog: Log {
                         // TODO: re-open logStream
                     }
 
-                    // Rip through some more buffered actions while we hold a lock (if possible).
+                    // Rip through some more buffered actions (if available) while we hold a lock.
                     writeAction = when {
                         // Log rotation is needed
                         size >= maxLogSize -> null
@@ -958,5 +954,13 @@ public class FileLog: Log {
             }
             LOG.v(tt) { "Closed >> $closeable" }
         }
+    }
+
+    // Exposed for testing
+    @JvmSynthetic
+    @Throws(IllegalStateException::class)
+    internal suspend fun awaitLogJob() {
+        check(_logBuffer == null) { "$this is still installed..." }
+        _logJob?.join()
     }
 }

@@ -18,10 +18,17 @@ package io.matthewnelson.kmp.log.file
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.Log.Level
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 class FileLogUnitTest {
 
@@ -83,6 +90,57 @@ class FileLogUnitTest {
                 assertFalse(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
                 assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
                 assertFalse(Log.Logger.of(tag = "NotTag", domain = "kmp.log").isLoggable(Level.Error))
+            }
+        }
+    }
+
+    @Test
+    fun givenOpenedFiles_whenUninstalled_thenAreAllClosedProperly() = runTest {
+        withTmpFile { tmp ->
+            val log = FileLog.Builder(tmp.path).build()
+            val opened = mutableListOf<String>()
+            val closed = mutableListOf<String>()
+
+            val closeChecker = object : Log(uid = "CloseChecker", min = Level.Verbose) {
+                override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
+                    if (msg == null) return false
+                    if (msg.startsWith("Opened >> ")) {
+                        opened.add(msg.substringAfter("Opened >> "))
+                        return true
+                    }
+                    if (msg.startsWith("Closed >> ")) {
+                        closed.add(msg.substringAfter("Closed >> "))
+                        return true
+                    }
+                    return false
+                }
+                override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
+                    if (domain != "kmp-log:file") return false
+                    return log.uid.endsWith(tag)
+                }
+            }
+
+            Log.installOrThrow(closeChecker)
+            try {
+                log.installAndTest {
+                    val LOG = Log.Logger.of("CloseChecker")
+                    LOG.i("Testing1...")
+                    Log.uninstallOrThrow(log)
+                    Log.installOrThrow(log)
+                    withContext(Dispatchers.IO) { delay(25.milliseconds) }
+                    LOG.w("Testing2...")
+                }
+            } finally {
+                Log.uninstall(closeChecker)
+            }
+
+//            println("OPENED$opened")
+//            println("CLOSED$closed")
+            assertNotEquals(0, opened.size)
+            assertEquals(opened.size, closed.size)
+
+            opened.forEach { closeable ->
+                assertTrue(closed.contains(closeable))
             }
         }
     }
