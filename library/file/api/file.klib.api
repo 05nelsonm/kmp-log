@@ -7,6 +7,8 @@
 
 // Library unique name: <io.matthewnelson.kmp-log:file>
 final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log { // io.matthewnelson.kmp.log.file/FileLog|null[0]
+    final val isActive // io.matthewnelson.kmp.log.file/FileLog.isActive|{}isActive[0]
+        final fun <get-isActive>(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.isActive.<get-isActive>|<get-isActive>(){}[0]
     final val logDirectory // io.matthewnelson.kmp.log.file/FileLog.logDirectory|{}logDirectory[0]
         final fun <get-logDirectory>(): kotlin/String // io.matthewnelson.kmp.log.file/FileLog.logDirectory.<get-logDirectory>|<get-logDirectory>(){}[0]
     final val logFiles // io.matthewnelson.kmp.log.file/FileLog.logFiles|{}logFiles[0]
@@ -25,6 +27,8 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         final fun <get-whitelistDomainNull>(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.whitelistDomainNull.<get-whitelistDomainNull>|<get-whitelistDomainNull>(){}[0]
     final val whitelistTag // io.matthewnelson.kmp.log.file/FileLog.whitelistTag|{}whitelistTag[0]
         final fun <get-whitelistTag>(): kotlin.collections/Set<kotlin/String> // io.matthewnelson.kmp.log.file/FileLog.whitelistTag.<get-whitelistTag>|<get-whitelistTag>(){}[0]
+
+    final suspend fun uninstallAndJoin() // io.matthewnelson.kmp.log.file/FileLog.uninstallAndJoin|uninstallAndJoin(){}[0]
 
     final class Builder { // io.matthewnelson.kmp.log.file/FileLog.Builder|null[0]
         constructor <init>(kotlin/String) // io.matthewnelson.kmp.log.file/FileLog.Builder.<init>|<init>(kotlin.String){}[0]
@@ -58,3 +62,5 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         final fun whitelistTagReset(): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistTagReset|whitelistTagReset(){}[0]
     }
 }
+
+final fun (io.matthewnelson.kmp.log.file/FileLog).io.matthewnelson.kmp.log.file/uninstallAndBlock() // io.matthewnelson.kmp.log.file/uninstallAndBlock|uninstallAndBlock@io.matthewnelson.kmp.log.file.FileLog(){}[0]

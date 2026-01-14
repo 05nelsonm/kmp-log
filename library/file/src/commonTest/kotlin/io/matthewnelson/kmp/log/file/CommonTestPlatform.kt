@@ -62,8 +62,7 @@ internal suspend inline fun FileLog.installAndTest(testBody: () -> Unit) {
     } catch (t: Throwable) {
         threw = t
     } finally {
-        Log.uninstall(this)
-        awaitLogJob()
+        uninstallAndJoin()
         files.forEach { it.delete2() }
         dotLockFile.delete2()
         dotRotateFile.delete2()
