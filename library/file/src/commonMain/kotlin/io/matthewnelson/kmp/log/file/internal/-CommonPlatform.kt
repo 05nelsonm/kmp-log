@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("NOTHING_TO_INLINE")
-
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.log.Log
@@ -24,9 +22,3 @@ internal expect inline fun Log.Root.isDesktop(): Boolean
 internal expect fun Log.Root.now(): CharSequence
 
 internal expect fun Log.Root.pid(): Int
-
-internal inline fun Throwable.isCancellationException(): Boolean {
-    if (this is kotlin.coroutines.cancellation.CancellationException) return true
-    if (this is kotlinx.coroutines.CancellationException) return true
-    return false
-}

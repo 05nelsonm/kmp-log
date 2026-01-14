@@ -45,7 +45,6 @@ import io.matthewnelson.kmp.log.file.internal.LogWriteAction
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
 import io.matthewnelson.kmp.log.file.internal.format
 import io.matthewnelson.kmp.log.file.internal.id
-import io.matthewnelson.kmp.log.file.internal.isCancellationException
 import io.matthewnelson.kmp.log.file.internal.isDesktop
 import io.matthewnelson.kmp.log.file.internal.lockLog
 import io.matthewnelson.kmp.log.file.internal.now
@@ -74,6 +73,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.kotlincrypto.hash.blake2.BLAKE2s
 import kotlin.concurrent.Volatile
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.jvm.JvmField
 import kotlin.jvm.JvmSynthetic
 import kotlin.time.Duration.Companion.milliseconds
@@ -608,7 +608,7 @@ public class FileLog: Log {
             + Dispatchers.IO
             + SupervisorJob()
             + CoroutineExceptionHandler Handler@ { context, t ->
-                if (t.isCancellationException()) return@Handler // Ignore...
+                if (t is CancellationException) return@Handler // Ignore...
                 if (LOG.e(t) { context } == 0) {
                     // No other Log are installed to log the error. Pipe to stderr.
                     t.printStackTrace()
@@ -756,7 +756,7 @@ public class FileLog: Log {
                         delay(10.milliseconds)
                     }
                 } catch (t: Throwable) {
-                    if (t.isCancellationException()) throw t
+                    if (t is CancellationException) throw t
                     // ignore
                 }
 
@@ -772,7 +772,7 @@ public class FileLog: Log {
                         delay(10.milliseconds)
                     }
                 } catch (t: Throwable) {
-                    if (t.isCancellationException()) throw t
+                    if (t is CancellationException) throw t
                     // ignore
                 }
 
@@ -805,10 +805,6 @@ public class FileLog: Log {
         _logBuffer = null
         logBuffer?.channel?.close(cause = null)
     }
-
-    // Exposed for testing
-    @JvmSynthetic
-    internal suspend fun cancelAndJoinLogJob() { _logJob?.cancelAndJoin() }
 
     private suspend fun LogBuffer.loop(
         buf: ByteArray,
@@ -957,5 +953,13 @@ public class FileLog: Log {
             }
             LOG.v(tt) { "Closed >> $closeable" }
         }
+    }
+
+    // Exposed for testing
+    @JvmSynthetic
+    internal suspend fun cancelAndJoinLogJob() {
+        try {
+            _logJob?.cancelAndJoin()
+        } catch (_: CancellationException) {}
     }
 }
