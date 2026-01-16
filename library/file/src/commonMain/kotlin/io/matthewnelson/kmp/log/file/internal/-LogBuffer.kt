@@ -29,6 +29,12 @@ import kotlin.jvm.JvmInline
 
 internal typealias LogWriteAction = suspend (stream: FileStream.Write?, buf: ByteArray) -> Long
 
+internal suspend inline fun LogWriteAction.consumeAndIgnore(buf: ByteArray) {
+    try {
+        invoke(null, buf)
+    } catch (_: Throwable) {}
+}
+
 @JvmInline
 internal value class LogBuffer private constructor(internal val channel: Channel<LogWriteAction>) {
     internal constructor(): this(Channel(UNLIMITED))
@@ -51,9 +57,7 @@ internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: LogBuffer.(bu
         while (true) {
             val writeAction = channel.tryReceive().getOrNull() ?: break
             count++
-            try {
-                writeAction.invoke(null, buf)
-            } catch (_: Throwable) {}
+            writeAction.consumeAndIgnore(buf)
         }
         if (LOG != null && count > 0L) {
             LOG.w { "Skipped $count logs" }

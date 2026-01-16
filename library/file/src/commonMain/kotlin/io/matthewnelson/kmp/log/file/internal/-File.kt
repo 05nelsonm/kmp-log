@@ -23,6 +23,8 @@ import io.matthewnelson.kmp.file.FileStream
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.OpenExcl
 import io.matthewnelson.kmp.file.chmod2
+import io.matthewnelson.kmp.file.exists2
+import io.matthewnelson.kmp.file.openRead
 import io.matthewnelson.kmp.file.openReadWrite
 
 @Throws(IOException::class)
@@ -41,4 +43,24 @@ internal inline fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite
         e.addSuppressed(ee)
         throw e
     }
+}
+
+internal inline fun File.exists2Robustly(): Boolean {
+    try {
+        if (exists2()) return true
+    } catch (_: IOException) {
+        var s: FileStream.Read? = null
+        return try {
+            // Must exist to open O_RDONLY.
+            s = openRead()
+            true
+        } catch (t: Throwable) {
+            t.message?.contains("Is a directory", ignoreCase = true) == true
+        } finally {
+            try {
+                s?.close()
+            } catch (_: Throwable) {}
+        }
+    }
+    return false
 }

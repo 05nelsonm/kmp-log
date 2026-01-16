@@ -57,4 +57,16 @@ class FileLockUnitTest {
             assertEquals(1L, lockRotate.size())
         }
     }
+
+    @Test
+    fun givenLockFile_whenLockRotateLockLog_thenRangesDoNotConflict() = withTmpFile { tmp ->
+        tmp.openLockFile().use { lf ->
+            val lockLog = lf.tryLockLog()
+            val lockRotate = lf.tryLockRotate()
+            assertEquals(true, lockLog?.isValid(), "lockLog")
+            assertEquals(true, lockRotate?.isValid(), "lockRotate")
+            lockLog?.release()
+            assertEquals(true, lockRotate?.isValid(), "lockRotate2")
+        }
+    }
 }
