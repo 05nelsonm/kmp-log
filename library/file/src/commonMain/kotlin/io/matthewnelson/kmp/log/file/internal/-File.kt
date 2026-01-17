@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("NOTHING_TO_INLINE")
-
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.AccessDeniedException
@@ -28,7 +26,7 @@ import io.matthewnelson.kmp.file.openRead
 import io.matthewnelson.kmp.file.openReadWrite
 
 @Throws(IOException::class)
-internal inline fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite = try {
+internal fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite = try {
     openReadWrite(excl = OpenExcl.MaybeCreate.of(mode))
 } catch (e: AccessDeniedException) {
     try {
@@ -45,7 +43,7 @@ internal inline fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite
     }
 }
 
-internal inline fun File.exists2Robustly(): Boolean {
+internal fun File.exists2Robustly(): Boolean {
     try {
         if (exists2()) return true
     } catch (_: IOException) {
@@ -64,3 +62,7 @@ internal inline fun File.exists2Robustly(): Boolean {
     }
     return false
 }
+
+// TODO: Promote to kmp-file >> https://github.com/05nelsonm/kmp-file/issues/209
+@Throws(IOException::class)
+internal expect fun File.moveTo(dest: File)
