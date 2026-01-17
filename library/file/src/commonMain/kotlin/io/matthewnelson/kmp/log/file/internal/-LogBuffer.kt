@@ -27,16 +27,16 @@ import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 import kotlin.jvm.JvmInline
 
-internal typealias LogWriteAction = suspend (stream: FileStream.Write?, buf: ByteArray) -> Long
+internal typealias LogAction = suspend (stream: FileStream.ReadWrite?, buf: ByteArray) -> Long
 
-internal suspend inline fun LogWriteAction.consumeAndIgnore(buf: ByteArray) {
+internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray) {
     try {
         invoke(null, buf)
     } catch (_: Throwable) {}
 }
 
 @JvmInline
-internal value class LogBuffer private constructor(internal val channel: Channel<LogWriteAction>) {
+internal value class LogBuffer private constructor(internal val channel: Channel<LogAction>) {
     internal constructor(): this(Channel(UNLIMITED))
 }
 
@@ -55,9 +55,9 @@ internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: LogBuffer.(bu
         channel.close()
         var count = 0L
         while (true) {
-            val writeAction = channel.tryReceive().getOrNull() ?: break
+            val logAction = channel.tryReceive().getOrNull() ?: break
             count++
-            writeAction.consumeAndIgnore(buf)
+            logAction.consumeAndIgnore(buf)
         }
         if (LOG != null && count > 0L) {
             LOG.w { "Skipped $count logs" }

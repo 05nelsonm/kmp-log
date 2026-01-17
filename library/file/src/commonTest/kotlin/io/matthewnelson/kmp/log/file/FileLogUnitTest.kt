@@ -97,11 +97,14 @@ class FileLogUnitTest {
     @Test
     fun givenOpenedFiles_whenUninstalled_thenAreAllClosedProperly() = runTest {
         withTmpFile { tmp ->
-            val log = FileLog.Builder(tmp.path).build()
+            val log = FileLog.Builder(tmp.path)
+                .debug(enable = true)
+                .build()
+
             val opened = mutableListOf<String>()
             val closed = mutableListOf<String>()
 
-            val closeChecker = object : Log(uid = "CloseChecker", min = Level.Verbose) {
+            val closeChecker = object : Log(uid = "CloseChecker", min = Level.Debug) {
                 override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
                     if (msg == null) return false
                     if (msg.startsWith("Opened >> ")) {

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("DuplicatedCode", "LocalVariableName", "PrivatePropertyName")
+@file:Suppress("DuplicatedCode", "LocalVariableName", "PrivatePropertyName", "NOTHING_TO_INLINE")
 
 package io.matthewnelson.kmp.log.file
 
@@ -44,7 +44,7 @@ import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.file.internal.CurrentThread
 import io.matthewnelson.kmp.log.file.internal.LockFile
 import io.matthewnelson.kmp.log.file.internal.LogBuffer
-import io.matthewnelson.kmp.log.file.internal.LogWriteAction
+import io.matthewnelson.kmp.log.file.internal.LogAction
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
 import io.matthewnelson.kmp.log.file.internal.consumeAndIgnore
 import io.matthewnelson.kmp.log.file.internal.exists2Robustly
@@ -78,8 +78,12 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.kotlincrypto.hash.blake2.BLAKE2s
 import kotlin.concurrent.Volatile
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.jvm.JvmField
 import kotlin.jvm.JvmName
@@ -157,6 +161,12 @@ public class FileLog: Log {
     /**
      * TODO
      * */
+    @JvmField
+    public var debug: Boolean
+
+    /**
+     * TODO
+     * */
     @get:JvmName("isActive")
     public val isActive: Boolean get() = _logJob?.isActive ?: false
 
@@ -171,6 +181,10 @@ public class FileLog: Log {
         val instance = uninstallAndGet(uid) ?: return
         (instance as FileLog)._logJob?.join()
     }
+
+    // TODO:
+    //  @Throws(CancellationException::class, IOException:class)
+    //  public suspend fun enqueueRead(buf: ByteArray, offset: Int, len: Int, position: Long): Int
 
     /**
      * TODO
@@ -205,6 +219,7 @@ public class FileLog: Log {
         private val _whitelistDomain = mutableSetOf<String>()
         private var _whitelistDomainNull = true
         private val _whitelistTag = mutableSetOf<String>()
+        private var _debug = false
 
         /**
          * DEFAULT: [Level.Info]
@@ -528,6 +543,15 @@ public class FileLog: Log {
         public fun whitelistTagReset(): Builder = apply { _whitelistTag.clear() }
 
         /**
+         * DEFAULT: `false`
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun debug(enable: Boolean): Builder = apply { _debug = enable }
+
+        /**
          * TODO
          *
          * @return The [FileLog] to [Log.Root.install]
@@ -583,6 +607,7 @@ public class FileLog: Log {
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
                 whitelistTag = whitelistTag,
+                debug = _debug,
                 uidSuffix = "FileLog-$files0Hash",
             )
         }
@@ -591,7 +616,7 @@ public class FileLog: Log {
     private companion object {
         private const val DOMAIN = "kmp-log:file"
 
-        // Special return value of a LogWriteAction to trigger rotateLogs
+        // Special return value of a LogAction to trigger rotateLogs
         private const val EXECUTE_ROTATE_LOGS = -42L
     }
 
@@ -632,6 +657,7 @@ public class FileLog: Log {
         whitelistDomain: Set<String>,
         whitelistDomainNull: Boolean,
         whitelistTag: Set<String>,
+        debug: Boolean,
         uidSuffix: String,
     ): super(uid = "io.matthewnelson.kmp.log.file.$uidSuffix", min = min, max = max) {
         this.directory = directory
@@ -675,10 +701,7 @@ public class FileLog: Log {
             + CoroutineExceptionHandler Handler@ { context, t ->
                 if (t is CancellationException) return@Handler // Ignore...
                 // TODO: Set global error variable which can be retrieved externally???
-                if (LOG.e(t) { context } == 0) {
-                    // No other Log are installed to log the error. Pipe to stderr.
-                    t.printStackTrace()
-                }
+                logE(t) { context }
             }
         )
 
@@ -692,6 +715,7 @@ public class FileLog: Log {
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull
         this.whitelistTag = whitelistTag
+        this.debug = debug
     }
 
     override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
@@ -786,10 +810,10 @@ public class FileLog: Log {
             logBuffer.use(LOG) { buf ->
                 val thisJob = currentCoroutineContext().job
 
-                LOG.v { "LogJob Started >> $thisJob" }
+                logD { "LogJob Started >> $thisJob" }
 
                 if (logJob != null) {
-                    LOG.v {
+                    logD {
                         if (!logJob.isActive) null
                         else "Waiting for previous LogJob to complete >> $logJob"
                     }
@@ -855,11 +879,11 @@ public class FileLog: Log {
                 )
             }
         }.let { job ->
-            job.invokeOnCompletion { LOG.v { "LogJob Stopped >> $job" } }
+            job.invokeOnCompletion { logD { "LogJob Stopped >> $job" } }
             _logJob = job
         }
         _logBuffer = logBuffer
-        log(Level.Info, LOG.domain, LOG.tag, "Log file opened.", t = null)
+        log(Level.Info, LOG.domain, LOG.tag, "Log file opened at ${files[0].name}", t = null)
     }
 
     override fun onUninstall() {
@@ -884,7 +908,7 @@ public class FileLog: Log {
         var logStreamCompletion = _logStreamCompletion
         val thisJob = currentCoroutineContext().job
 
-        thisJob.invokeOnCompletion { LOG.v { "LogLoop Stopped >> $thisJob" } }
+        thisJob.invokeOnCompletion { logD { "LogLoop Stopped >> $thisJob" } }
 
         // Utilized for log rotation things. These actions contain no actual
         // write functionality, but are to be woven into the loop as a "priority
@@ -905,10 +929,10 @@ public class FileLog: Log {
         logStreamCompletion.dispose()
         logStreamCompletion = thisJob.closeOnCompletion(logStream, logOpen = false)
 
-        LOG.v { "LogLoop Started >> $thisJob" }
+        logD { "LogLoop Started >> $thisJob" }
 
         while (true) {
-            var writeAction: LogWriteAction? = try {
+            var logAction: LogAction? = try {
                 rotateActionQueue.channel.tryReceive().getOrNull() ?: channel.receive()
             } catch (_: ClosedReceiveChannelException) {
                 // FileLog was uninstalled and there are
@@ -935,7 +959,7 @@ public class FileLog: Log {
                             // for it so that we do not invalidate its file lock
                             thisJob.awaitLogRotationChildJob()
                         } catch (t: CancellationException) {
-                            writeAction?.consumeAndIgnore(buf)
+                            logAction?.consumeAndIgnore(buf)
                             throw t
                         }
                     }
@@ -957,20 +981,22 @@ public class FileLog: Log {
                     }
 
                     try {
-                        LOG.v(tt) { "Closed >> $lockFile" }
+                        logD(tt) { "Closed >> $lockFile" }
                         thisJob.ensureActive()
                         lockFile = dotLockFile.openLockFileRobustly()
                         lockFileCompletion = thisJob.closeOnCompletion(lockFile)
                         lockFile.lockLog()
                     } catch (ttt: Throwable) {
                         // Total failure. Close up shop.
-                        writeAction?.consumeAndIgnore(buf)
+                        logAction?.consumeAndIgnore(buf)
                         if (ttt is CancellationException) throw ttt
                         t.addSuppressed(ttt)
                         throw t
                     }
                 }
             }
+
+            logD { "Acquired lock on ${dotLockFile.name} >> $lockLog" }
 
             var size: Long
             CurrentThread.uninterrupted {
@@ -995,7 +1021,7 @@ public class FileLog: Log {
                     }
 
                     try {
-                        LOG.v(t) { "Closed >> $logStream" }
+                        logD(t) { "Closed >> $logStream" }
                         thisJob.ensureActive()
                         logStream = files[0].openLogFileRobustly(modeFile)
                         logStreamCompletion = thisJob.closeOnCompletion(logStream)
@@ -1003,7 +1029,7 @@ public class FileLog: Log {
                         logStream.position(size)
                     } catch (tt: Throwable) {
                         // Total failure. Close up shop.
-                        writeAction?.consumeAndIgnore(buf)
+                        logAction?.consumeAndIgnore(buf)
                         if (tt is CancellationException) throw tt
                         e.addSuppressed(tt)
                         throw e
@@ -1011,18 +1037,17 @@ public class FileLog: Log {
                 }
             }
 
+            logD { "File[${files[0].name}].size[$size]" }
+
             var processed = 0
             CurrentThread.uninterrupted {
-                while (writeAction != null) {
+                while (logAction != null) {
                     val written = try {
                         @Suppress("UNNECESSARY_NOT_NULL_ASSERTION")
-                        writeAction!!.invoke(logStream, buf)
+                        logAction!!.invoke(logStream, buf)
                     } catch (t: Throwable) {
                         if (t !is CancellationException) {
-                            if (LOG.e(t) { "Failed to write log entry to File[${files[0]}]" } == 0) {
-                                // No other Log are installed to log the error. Pipe to stderr.
-                                t.printStackTrace()
-                            }
+                            logE(t) { "Failed to write log entry to ${files[0].name}" }
                             // TODO:
                             //  - Check for InterruptedIOException.bytesTransferred???
                             //  - Truncate to size to wipe out any partially written logs???
@@ -1033,7 +1058,7 @@ public class FileLog: Log {
                     if (written > 0L) {
                         processed++
                         size += written
-                        LOG.v { "Wrote $written bytes to ${files[0].name}" }
+                        logD { "Wrote $written bytes to ${files[0].name}" }
                     } else {
                         if (written == EXECUTE_ROTATE_LOGS) {
                             size = maxLogSize
@@ -1042,7 +1067,7 @@ public class FileLog: Log {
                     }
 
                     // Rip through some more buffered actions (if available) while we hold a lock.
-                    writeAction = when {
+                    logAction = when {
                         // We lost our lock, pop out.
                         !lockLog.isValid() -> null
                         // We lost our logStream, pop out.
@@ -1062,19 +1087,22 @@ public class FileLog: Log {
             if (processed > 0) {
                 // Ensure everything is synced to disk before going further,
                 // either to do a log rotation or release the log lock.
+                logD { "Syncing ${files[0].name}" }
                 try {
                     CurrentThread.uninterrupted {
                         logStream.sync(meta = true)
                     }
-                } catch (_: IOException) {
+                } catch (e: IOException) {
                     // Closing logStream will force it, whereby logStream will
                     // get re-opened on the next logLoop iteration.
                     try {
                         logStream.close()
                     } catch (_: Throwable) {}
+
+                    LOG.w(e) { "Sync failure >> $logStream" }
                 }
 
-                LOG.v { "Processed $processed " + if (processed > 1) "logs" else "log" }
+                logD { "Processed $processed " + if (processed > 1) "logs" else "log" }
             }
 
             if (thisJob.isActive && size >= maxLogSize) {
@@ -1090,10 +1118,10 @@ public class FileLog: Log {
 
             if (lockLog.isValid()) try {
                 lockLog.release()
+                logD { "Released lock on ${dotLockFile.name} >> $lockLog" }
             } catch (e: IOException) {
-                // Non-ClosedException. The only way to recover is
-                // to close and re-open the lock file.
-                LOG.e(e) { "lockLog.release() failure >> $lockLog" }
+                // Non-ClosedException
+                LOG.w(e) { "Lock release failure >> $lockLog" }
 
                 // If a log rotation is currently underway, we must wait
                 // for it so that we do not invalidate its file lock.
@@ -1128,7 +1156,7 @@ public class FileLog: Log {
         // off and resumes log writing where the next writes to
         // logStream are so large that it triggers another rotation
         // before the initial one finishes moving files. In that
-        // event, this will suspend (and in doing so inhibiting further
+        // event, this will suspend (and in doing so inhibit further
         // log writes because we currently hold lockLog).
         currentCoroutineContext().job.awaitLogRotationChildJob()
 
@@ -1183,6 +1211,8 @@ public class FileLog: Log {
             return
         }
 
+        logD { "Acquired lock on ${dotLockFile.name} >> $lockRotate" }
+
         // At most there will be 127 moves to execute (Byte.MAX_VALUE).
         val moves = ArrayDeque<Pair<File, File>>(files.size)
 
@@ -1222,9 +1252,11 @@ public class FileLog: Log {
             if (size < maxLogSize) {
                 if (lockRotate.isValid()) try {
                     lockRotate.release()
+                    logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
                 } catch (e: IOException) {
                     // Non-ClosedException
-                    LOG.e(e) { "lockRotate.release() failure >> $lockRotate" }
+                    LOG.w(e) { "Lock release failure >> $lockRotate" }
+
                     try {
                         // Close the lock file. Next logLoop iteration will fail
                         // to obtain its lock due to a ClosedException and then
@@ -1259,7 +1291,7 @@ public class FileLog: Log {
                 // Move into its final location.
                 dotRotateTmpFile.moveTo(dotRotateFile)
 
-                LOG.v { "Atomically copied ${files[0].name} >> ${dotRotateFile.name}" }
+                logD { "Atomically copied ${files[0].name} >> ${dotRotateFile.name}" }
             } catch (e: IOException) {
                 // Something awful happened. Close up shop and retry.
                 try {
@@ -1270,9 +1302,11 @@ public class FileLog: Log {
 
                 if (lockRotate.isValid()) try {
                     lockRotate.release()
+                    logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
                 } catch (ee: IOException) {
                     // Non-ClosedException
-                    LOG.e(ee) { "lockRotate.release() failure >> $lockRotate" }
+                    LOG.w(ee) { "Lock release failure >> $lockRotate" }
+
                     try {
                         // Close the lock file. Next logLoop iteration will fail
                         // to obtain its lock due to a ClosedException and then
@@ -1281,9 +1315,7 @@ public class FileLog: Log {
                     } catch (_: Throwable) {}
                 }
 
-                if (LOG.e(e) { "Failed to atomically copy ${files[0].name} >> ${dotRotateFile.name}" } == 0) {
-                    e.printStackTrace()
-                }
+                logE(e) { "Failed to atomically copy ${files[0].name} >> ${dotRotateFile.name}" }
 
                 // Immediately retry the log rotation
                 rotateActionQueue.channel.trySend(::checkLogRotation)
@@ -1297,19 +1329,22 @@ public class FileLog: Log {
             try {
                 logStream.size(new = 0L)
 
+                logD { "Syncing ${files[0].name}" }
                 try {
                     logStream.sync(meta = true)
-                } catch (_: IOException) {
+                } catch (e: IOException) {
                     // Truncation succeeded, but our sync did not. Closing
                     // logStream will force it, whereby logStream will get
                     // re-opened on the next logLoop iteration.
                     try {
                         logStream.close()
                     } catch (_: Throwable) {}
+
+                    LOG.w(e) { "Sync failure >> $logStream" }
                 }
 
-                LOG.v { "Truncated ${files[0].name}" }
-            } catch (_: IOException) {
+                logD { "${files[0].name} has been truncated" }
+            } catch (e: IOException) {
                 // Truncation via logStream.size() failed, close and try a different way.
                 try {
                     logStream.close()
@@ -1319,22 +1354,26 @@ public class FileLog: Log {
                 try {
                     // O_TRUNC
                     s = files[0].openWrite(excl = OpenExcl.MustExist)
-                    LOG.v { "Truncated ${files[0].name}" }
-                } catch (_: Throwable) {
-                    // ignore
+                    logD { "${files[0].name} has been truncated" }
+                } catch (t: Throwable) {
+                    e.addSuppressed(t)
                 } finally {
                     try {
                         s?.close()
                     } catch (_: Throwable) {}
                 }
 
-//                if (s == null) {
+                if (s == null) {
+                    logE(e) { "Failed to truncate ${files[0].name}" }
                     // TODO: move and then delete files[0]? Need to see how that
                     //  would work because if another process has it open and
                     //  is logging to it, it wouldn't know that it needs to close
                     //  and re-open its FileStream (unless there is an exists2() check
-                    //  right after obtaining lockLog??? to close its stream)
-//                }
+                    //  right after obtaining lockLog to close its stream???)
+                    //
+                    // TODO: Maybe enqueue a truncation action whereby if the
+                    //  logStream.size() == size we truncate???
+                }
             }
 
             // Checking for existence here is redundant, simply schedule all
@@ -1348,7 +1387,7 @@ public class FileLog: Log {
                 source = dest
             }
         } else {
-            LOG.v { "Interrupted log rotation detected. Finishing it off." }
+            LOG.i { "Interrupted log rotation detected (${dotRotateFile.name} exists). Finishing it off." }
 
             // TODO
             //  - Find hole in log files to pick up where left off in renaming
@@ -1372,26 +1411,28 @@ public class FileLog: Log {
         }
 
         val child = launch(context = CoroutineName("LogRotation-$logFiles0Hash")) {
-            var vIsLoggable = false
-            LOG.v { vIsLoggable = true; "LogRotation Started >> ${currentCoroutineContext().job}" }
+            var isDebug = false
+            logD { isDebug = true; "LogRotation Started >> ${currentCoroutineContext().job}" }
 
 //            val startSize = moves.size
             while (moves.isNotEmpty()) {
                 val (source, dest) = moves.removeFirst()
 
                 try {
+                    yield()
+                } catch (_: Throwable) {}
+
+                try {
                     source.moveTo(dest)
-                    if (vIsLoggable) LOG.v("Moved ${source.name} >> ${dest.name}")
+                    if (isDebug) LOG.d("Moved ${source.name} >> ${dest.name}")
                 } catch (e: IOException) {
                     // Source file did not exist, ignore.
                     if (e is FileNotFoundException) continue
 
-                    if (LOG.e(e) { "Log rotation failure." } == 0) {
-                        e.printStackTrace()
-                    }
+                    logE(e) { "Log rotation failure." }
 
-                    // Trigger an immediate retry the operation. If another process is
-                    // also logging, it may finish off the log rotation for us, so.
+                    // Trigger an immediate retry. If another process is also
+                    // logging, it may finish off the log rotation for us, so.
                     rotateActionQueue.channel.trySend(::checkLogRotation)
                     break
                 }
@@ -1405,9 +1446,10 @@ public class FileLog: Log {
         child.invokeOnCompletion {
             if (lockRotate.isValid()) try {
                 lockRotate.release()
+                logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
             } catch (e: IOException) {
                 // Non-ClosedException
-                LOG.e(e) { "lockRotate.release() failure >> $lockRotate" }
+                LOG.w(e) { "Lock release failure >> $lockRotate" }
 
                 rotateActionQueue.channel.trySend { _, _ ->
                     // No other recovery mechanism but to close the lock file
@@ -1426,17 +1468,17 @@ public class FileLog: Log {
                 }
             }
         }
-        child.invokeOnCompletion { LOG.v { "LogRotation Stopped >> $child" } }
+        child.invokeOnCompletion { logD { "LogRotation Stopped >> $child" } }
     }
 
-    @Suppress("UNUSED")
-    private suspend fun checkLogRotation(stream: FileStream.Write?, buf: ByteArray): Long {
+    @Suppress("UNUSED", "UNUSED_PARAMETER")
+    private suspend fun checkLogRotation(stream: FileStream.ReadWrite?, buf: ByteArray): Long {
         return if (dotRotateFile.exists2Robustly()) EXECUTE_ROTATE_LOGS else 0L
     }
 
     private suspend fun Job.awaitLogRotationChildJob() {
         children.forEach { child ->
-            LOG.v {
+            logD {
                 if (!child.isActive) null
                 else "Waiting for LogRotation to complete >> $child"
             }
@@ -1445,7 +1487,7 @@ public class FileLog: Log {
     }
 
     private fun Job.closeOnCompletion(closeable: Closeable, logOpen: Boolean = true): DisposableHandle {
-        if (logOpen) LOG.v { "Opened >> $closeable" }
+        if (logOpen) logD { "Opened >> $closeable" }
 
         return invokeOnCompletion { t ->
             val tt = try {
@@ -1455,7 +1497,45 @@ public class FileLog: Log {
                 t?.addSuppressed(tt)
                 tt
             }
-            LOG.v(tt) { "Closed >> $closeable" }
+            logD(tt) { "Closed >> $closeable" }
+        }
+    }
+
+//    private inline fun logD(msg: String): Int {
+//        if (!debug) return 0
+//        return LOG.d(msg)
+//    }
+//
+//    private inline fun logD(t: Throwable): Int {
+//        if (!debug) return 0
+//        return LOG.d(t)
+//    }
+//
+//    private inline fun logD(t: Throwable?, msg: String?): Int {
+//        if (!debug) return 0
+//        return LOG.d(t, msg)
+//    }
+
+    @OptIn(ExperimentalContracts::class)
+    private inline fun logD(lazyMsg: () -> Any?): Int {
+        contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
+        return logD(t = null, lazyMsg)
+    }
+
+    @OptIn(ExperimentalContracts::class)
+    private inline fun logD(t: Throwable?, lazyMsg: () -> Any?): Int {
+        contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
+        if (!debug) return 0
+        return LOG.d(t, lazyMsg)
+    }
+
+    @OptIn(ExperimentalContracts::class)
+    private inline fun logE(t: Throwable, lazyMsg: () -> Any?) {
+        contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
+        if (LOG.e(t, lazyMsg) == 0) {
+            // No other Log instances installed, or none
+            // accepted Level.Error for this Log.Logger.
+            t.printStackTrace()
         }
     }
 }
