@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("NOTHING_TO_INLINE")
-
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.AccessDeniedException
@@ -23,10 +21,12 @@ import io.matthewnelson.kmp.file.FileStream
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.OpenExcl
 import io.matthewnelson.kmp.file.chmod2
+import io.matthewnelson.kmp.file.exists2
+import io.matthewnelson.kmp.file.openRead
 import io.matthewnelson.kmp.file.openReadWrite
 
 @Throws(IOException::class)
-internal inline fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite = try {
+internal fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite = try {
     openReadWrite(excl = OpenExcl.MaybeCreate.of(mode))
 } catch (e: AccessDeniedException) {
     try {
@@ -42,3 +42,27 @@ internal inline fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite
         throw e
     }
 }
+
+internal fun File.exists2Robustly(): Boolean {
+    try {
+        if (exists2()) return true
+    } catch (_: IOException) {
+        var s: FileStream.Read? = null
+        return try {
+            // Must exist to open O_RDONLY.
+            s = openRead()
+            true
+        } catch (t: Throwable) {
+            t.message?.contains("Is a directory", ignoreCase = true) == true
+        } finally {
+            try {
+                s?.close()
+            } catch (_: Throwable) {}
+        }
+    }
+    return false
+}
+
+// TODO: Promote to kmp-file >> https://github.com/05nelsonm/kmp-file/issues/209
+@Throws(IOException::class)
+internal expect fun File.moveTo(dest: File)

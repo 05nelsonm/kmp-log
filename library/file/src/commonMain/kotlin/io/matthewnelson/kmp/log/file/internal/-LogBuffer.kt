@@ -27,10 +27,34 @@ import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 import kotlin.jvm.JvmInline
 
-internal typealias LogWriteAction = suspend (stream: FileStream.Write?, buf: ByteArray) -> Long
+/*
+* An action to be enqueued into LogBuffer for processing.
+* */
+internal typealias LogAction = suspend (
+    // The open log. May be null if there was an error and this
+    // action is being dropped (see consumeAndIgnore).
+    stream: FileStream.ReadWrite?,
+
+    // A pre-allocated buffer to use for UTF-8 encoding.
+    buf: ByteArray,
+
+    // The number of LogActions prior to this one which resulted
+    // in data written to the log (i.e. had a return of > 0L).
+    //
+    // LogActions are processed in chunks whereby the log loop
+    // will yield to another process and then continue processing
+    // buffered LogAction, so.
+    processed: Int,
+) -> Long
+
+internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, processed: Int = 0) {
+    try {
+        invoke(null, buf, processed)
+    } catch (_: Throwable) {}
+}
 
 @JvmInline
-internal value class LogBuffer private constructor(internal val channel: Channel<LogWriteAction>) {
+internal value class LogBuffer private constructor(internal val channel: Channel<LogAction>) {
     internal constructor(): this(Channel(UNLIMITED))
 }
 
@@ -49,11 +73,9 @@ internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: LogBuffer.(bu
         channel.close()
         var count = 0L
         while (true) {
-            val writeAction = channel.tryReceive().getOrNull() ?: break
+            val logAction = channel.tryReceive().getOrNull() ?: break
             count++
-            try {
-                writeAction.invoke(null, buf)
-            } catch (_: Throwable) {}
+            logAction.consumeAndIgnore(buf)
         }
         if (LOG != null && count > 0L) {
             LOG.w { "Skipped $count logs" }
