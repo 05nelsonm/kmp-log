@@ -738,6 +738,9 @@ public class FileLog: Log {
     override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         val logBuffer = _logBuffer ?: return false
 
+        // TODO: use sizeUTF8 to pre-calculate size, then if would exceed logMaxSize, return
+        //  special value so the log loop and cache the action to process next and then do
+        //  a log rotation.
         val preProcessing: Deferred<CharSequence?> = run {
             val time = now()
             val tid = CurrentThread.id()
@@ -746,19 +749,21 @@ public class FileLog: Log {
 
         val fatalJob = if (level == Level.Fatal) Job() else null
 
-        val result = logBuffer.channel.trySend { stream, buf ->
-            try {
-                // Can be null if there was an error, ensuring that this
-                // action still gets consumed and any fatalJob that may
-                // be present is properly canceled.
-                if (stream == null) {
-                    preProcessing.cancel()
-                    return@trySend 0L
-                }
+        val result = logBuffer.channel.trySend logAction@ { stream, buf, _ ->
+            // Can be null if there was an error, ensuring that this
+            // action still gets consumed and any fatalJob that may
+            // be present is properly canceled.
+            if (stream == null) {
+                preProcessing.cancel()
+                fatalJob?.cancel()
+                return@logAction 0L
+            }
 
+            try {
+                var threw: Throwable? = null
                 val written = try {
                     val formatted = preProcessing.await()
-                    if (formatted.isNullOrEmpty()) return@trySend 0L
+                    if (formatted.isNullOrEmpty()) return@logAction 0L
 
                     formatted.decodeBuffered(
                         UTF8,
@@ -766,6 +771,9 @@ public class FileLog: Log {
                         buf = buf,
                         action = stream::write,
                     )
+                } catch (t: Throwable) {
+                    threw = t
+                    0L
                 } finally {
                     if (fatalJob != null) {
                         // fsync no matter what before the process is aborted.
@@ -775,6 +783,7 @@ public class FileLog: Log {
                     }
                 }
 
+                threw?.let { throw it }
                 fatalJob?.complete()
                 written
             } finally {
@@ -1044,13 +1053,17 @@ public class FileLog: Log {
                 while (logAction != null) {
                     val written = try {
                         @Suppress("UNNECESSARY_NOT_NULL_ASSERTION")
-                        logAction!!.invoke(logStream, buf)
+                        logAction!!.invoke(logStream, buf, processed)
                     } catch (t: Throwable) {
-                        if (t !is CancellationException) {
+                        if (t is CancellationException) {
+                            // Deferred.await() threw. We're about to die. Nothing
+                            // was written, so no need to do anything here.
+                        } else {
                             logE(t) { "Failed to write log entry to ${files[0].name}" }
                             // TODO:
                             //  - Check for InterruptedIOException.bytesTransferred???
                             //  - Truncate to size to wipe out any partially written logs???
+                            //  - Increment processed???
                         }
                         0L
                     }
@@ -1085,21 +1098,26 @@ public class FileLog: Log {
             }
 
             if (processed > 0) {
-                // Ensure everything is synced to disk before going further,
-                // either to do a log rotation or release the log lock.
-                logD { "Syncing ${files[0].name}" }
-                try {
-                    CurrentThread.uninterrupted {
-                        logStream.sync(meta = true)
-                    }
-                } catch (e: IOException) {
-                    // Closing logStream will force it, whereby logStream will
-                    // get re-opened on the next logLoop iteration.
+                if (logStream.isOpen()) {
+                    // Ensure everything is synced to disk before going further,
+                    // either to do a log rotation or release lockLog for another
+                    // process to pickup.
+                    logD { "Syncing ${files[0].name}" }
                     try {
-                        logStream.close()
-                    } catch (_: Throwable) {}
+                        CurrentThread.uninterrupted {
+                            logStream.sync(meta = true)
+                        }
+                    } catch (e: IOException) {
+                        // Try to force it by closing. logStream will be
+                        // re-opened on the next logLoop iteration.
+                        try {
+                            logStream.close()
+                        } catch (t: Throwable) {
+                            e.addSuppressed(t)
+                        }
 
-                    LOG.w(e) { "Sync failure >> $logStream" }
+                        LOG.w(e) { "Sync failure >> $logStream" }
+                    }
                 }
 
                 logD { "Processed $processed " + if (processed > 1) "logs" else "log" }
@@ -1188,7 +1206,9 @@ public class FileLog: Log {
 
         val lockRotate = try {
             lockFile.lockRotate()
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
+            LOG.w(t) { "Failed to acquire a rotation lock on ${dotLockFile.name}. Retrying log rotation." }
+
             // This can potentially happen if we had to wait on another
             // log rotation to finish up before running this one, and in
             // its completion handle there was a lockRotate.release() failure
@@ -1205,7 +1225,7 @@ public class FileLog: Log {
                 lockFile.close()
             } catch (_: Throwable) {}
 
-            // Trigger an immediate retry without writing any new logs to logStream.
+            // Trigger an immediate retry.
             rotateActionQueue.channel.trySend(::checkLogRotation)
 
             return
@@ -1229,7 +1249,9 @@ public class FileLog: Log {
 
             val size = try {
                 logStream.size()
-            } catch (_: IOException) {
+            } catch (e: IOException) {
+                LOG.w(e) { "Failed to obtain size of ${files[0].name}. Retrying log rotation." }
+
                 // Since we're not picking up an interrupted
                 // rotation, closing the stream on failure
                 // will trigger a re-open on next logLoop iteration
@@ -1275,6 +1297,11 @@ public class FileLog: Log {
                 // Not a show-stopper. Ignore.
             }
 
+            // TODO: move and then delete dotRotateTmpFile. If it exists, we
+            //  should attempt to expunge it from the filesystem entirely so
+            //  there is no question about our atomic copy of the log hitting
+            //  disk.
+
             try {
                 // Shouldn't exist, but just in case using openWrite instead of
                 // openLogFileRobustly() to ensure it gets truncated if it does.
@@ -1286,6 +1313,7 @@ public class FileLog: Log {
                         position += read
                         tmpStream.write(buf, 0, read)
                     }
+                    tmpStream.sync(meta = true)
                 }
 
                 // Move into its final location.
@@ -1300,81 +1328,40 @@ public class FileLog: Log {
                     e.addSuppressed(t)
                 }
 
+                // Delete it before releasing locks (if it exists).
+                try {
+                    dotRotateTmpFile.delete2(ignoreReadOnly = true, mustExist = false)
+                } catch (t: Throwable) {
+                    e.addSuppressed(t)
+                }
+
                 if (lockRotate.isValid()) try {
                     lockRotate.release()
                     logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
                 } catch (ee: IOException) {
                     // Non-ClosedException
                     LOG.w(ee) { "Lock release failure >> $lockRotate" }
+                    e.addSuppressed(ee)
 
                     try {
                         // Close the lock file. Next logLoop iteration will fail
                         // to obtain its lock due to a ClosedException and then
                         // re-open lockFile to retry acquisition.
                         lockFile.close()
-                    } catch (_: Throwable) {}
+                    } catch (t: Throwable) {
+                        e.addSuppressed(t)
+                    }
                 }
 
-                logE(e) { "Failed to atomically copy ${files[0].name} >> ${dotRotateFile.name}" }
+                logE(e) { "Failed to atomically copy ${files[0].name} >> ${dotRotateFile.name}. Retrying log rotation." }
 
-                // Immediately retry the log rotation
+                // Trigger an immediate retry. If another process is also
+                // logging, it may finish off the log rotation for us, so.
                 rotateActionQueue.channel.trySend(::checkLogRotation)
                 return
-            } finally {
-                try {
-                    dotRotateTmpFile.delete2(ignoreReadOnly = true, mustExist = false)
-                } catch (_: IOException) {}
             }
 
-            try {
-                logStream.size(new = 0L)
-
-                logD { "Syncing ${files[0].name}" }
-                try {
-                    logStream.sync(meta = true)
-                } catch (e: IOException) {
-                    // Truncation succeeded, but our sync did not. Closing
-                    // logStream will force it, whereby logStream will get
-                    // re-opened on the next logLoop iteration.
-                    try {
-                        logStream.close()
-                    } catch (_: Throwable) {}
-
-                    LOG.w(e) { "Sync failure >> $logStream" }
-                }
-
-                logD { "${files[0].name} has been truncated" }
-            } catch (e: IOException) {
-                // Truncation via logStream.size() failed, close and try a different way.
-                try {
-                    logStream.close()
-                } catch (_: Throwable) {}
-
-                var s: FileStream.Write? = null
-                try {
-                    // O_TRUNC
-                    s = files[0].openWrite(excl = OpenExcl.MustExist)
-                    logD { "${files[0].name} has been truncated" }
-                } catch (t: Throwable) {
-                    e.addSuppressed(t)
-                } finally {
-                    try {
-                        s?.close()
-                    } catch (_: Throwable) {}
-                }
-
-                if (s == null) {
-                    logE(e) { "Failed to truncate ${files[0].name}" }
-                    // TODO: move and then delete files[0]? Need to see how that
-                    //  would work because if another process has it open and
-                    //  is logging to it, it wouldn't know that it needs to close
-                    //  and re-open its FileStream (unless there is an exists2() check
-                    //  right after obtaining lockLog to close its stream???)
-                    //
-                    // TODO: Maybe enqueue a truncation action whereby if the
-                    //  logStream.size() == size we truncate???
-                }
-            }
+            logStream.truncate0AndSync(file = files[0])
 
             // Checking for existence here is redundant, simply schedule all
             // moves and rip through them while ignoring FileNotFoundException.
@@ -1395,12 +1382,7 @@ public class FileLog: Log {
             //    renaming dotRotateTmpFile to dotRotateFile, BEFORE truncating
             //    the logStream file. Need to verify by checking its size and/or
             //    peeking at both files and comparing.
-            //  - If logStream needs truncation
-            //      - logStream.size(new = 0L)
-            //          - If failure:
-            //              - logStream.close()
-            //                  - Next LogLoop iteration will fail to retrieve size and re-open it.
-            //              - files[0].openWrite(excl = OpenExcl.MaybeCreate.of(modeFile)).close()
+            //  - If logStream needs truncation, truncate0AndSync.
             //  - If there WAS a hole in log files (indicating that logStream
             //    truncation took place), check logStream.size() < maxLogSize
             //    such that, if another rotation is needed we can enqueue
@@ -1410,38 +1392,7 @@ public class FileLog: Log {
             //  - Move log files into final location(s) in separate coroutine
         }
 
-        val child = launch(context = CoroutineName("LogRotation-$logFiles0Hash")) {
-            var isDebug = false
-            logD { isDebug = true; "LogRotation Started >> ${currentCoroutineContext().job}" }
-
-//            val startSize = moves.size
-            while (moves.isNotEmpty()) {
-                val (source, dest) = moves.removeFirst()
-
-                try {
-                    yield()
-                } catch (_: Throwable) {}
-
-                try {
-                    source.moveTo(dest)
-                    if (isDebug) LOG.d("Moved ${source.name} >> ${dest.name}")
-                } catch (e: IOException) {
-                    // Source file did not exist, ignore.
-                    if (e is FileNotFoundException) continue
-
-                    logE(e) { "Log rotation failure." }
-
-                    // Trigger an immediate retry. If another process is also
-                    // logging, it may finish off the log rotation for us, so.
-                    rotateActionQueue.channel.trySend(::checkLogRotation)
-                    break
-                }
-            }
-
-//            if (moves.size != startSize) {
-                // TODO: fsync directory???
-//            }
-        }
+        val child = launchLogRotation(rotateActionQueue, moves)
 
         child.invokeOnCompletion {
             if (lockRotate.isValid()) try {
@@ -1451,28 +1402,146 @@ public class FileLog: Log {
                 // Non-ClosedException
                 LOG.w(e) { "Lock release failure >> $lockRotate" }
 
-                rotateActionQueue.channel.trySend { _, _ ->
-                    // No other recovery mechanism but to close the lock file
-                    // and invalidate all locks currently held, otherwise the
-                    // next log rotation may deadlock when attempting to acquire
-                    // lockRotate.
-                    //
+                // No other recovery mechanism but to close the lock file
+                // and invalidate all locks currently held, otherwise the
+                // next log rotation may deadlock when attempting to acquire
+                // lockRotate.
+                rotateActionQueue.channel.trySend { stream, _, processed ->
                     // This is done lazily here as a priority action in order
                     // to not inadvertently invalidate a lockLog in the midst
                     // of a write action. If the lockFile is already closed for
                     // some other reason, it does nothing.
+
+                    // Ensure any writes are synced to disk before invalidating
+                    // all locks. The inner loop within logLoop may have processed
+                    // some actions before picking this one up. As such, invalidation
+                    // of lockLog means another process will be able to acquire it.
+                    //
+                    // Additionally, if the post inner loop sync hits (processed > 0),
+                    // then it will do so w/o lockLog (we're closing lockFile here). So,
+                    // syncing here will make that essentially a no-op (all data has
+                    // been pushed to disk already because the sync was performed here
+                    // and then the inner loop popped out as a result of losing lockLog).
+                    if (stream != null && processed > 0 && stream.isOpen()) {
+                        logD { "Syncing ${files[0].name}" }
+                        try {
+                            stream.sync(meta = true)
+                        } catch (e: IOException) {
+                            LOG.w(e) { "Sync failure >> $stream" }
+                        }
+                    }
+
                     try {
                         lockFile.close()
                     } catch (_: Throwable) {}
+
                     0L
                 }
             }
         }
+
         child.invokeOnCompletion { logD { "LogRotation Stopped >> $child" } }
     }
 
+    /*
+    * Truncates the stream to 0L and syncs it to disk. Failure results in closure
+    * whereby file is then used to attempt openWrite (O_TRUNC) + sync + close. Failure
+    * beyond that is ignored (currently).
+    * */
+    private fun FileStream.ReadWrite.truncate0AndSync(file: File) {
+        try {
+            size(new = 0L)
+
+            logD { "Syncing ${file.name}" }
+            try {
+                sync(meta = true)
+            } catch (e: IOException) {
+                LOG.w(e) { "Sync failure >> $this" }
+                throw e
+            }
+
+            logD { "${file.name} has been truncated" }
+        } catch (e: IOException) {
+            // Try a different way.
+            try {
+                close()
+            } catch (t: Throwable) {
+                e.addSuppressed(t)
+            }
+            var s: FileStream.Write? = null
+            try {
+                // O_TRUNC
+                s = file.openWrite(excl = OpenExcl.MustExist)
+
+                logD { "Syncing ${file.name}" }
+                try {
+                    sync(meta = true)
+                } catch (ee: IOException) {
+                    // Truncation succeeded, but our sync did not. Just
+                    // go with it at this point and hope for the best...
+                    LOG.w(ee) { "Sync failure >> $s" }
+                }
+
+                logD { "${file.name} has been truncated" }
+            } catch (t: Throwable) {
+                e.addSuppressed(t)
+            } finally {
+                try {
+                    s?.close()
+                } catch (t: Throwable) {
+                    e.addSuppressed(t)
+                }
+            }
+
+            if (s != null) return
+            logE(e) { "Failed to truncate ${file.name}" }
+            // TODO: move and then delete files[0]? Need to see how that
+            //  would work because if another process has it open and
+            //  is logging to it, it wouldn't know that it needs to close
+            //  and re-open its FileStream (unless there is an exists2() check
+            //  right after obtaining lockLog to close its stream???)
+            //
+            // TODO: Maybe enqueue a truncation action whereby if the
+            //  logStream.size() == size we truncate???
+        }
+    }
+
+    private fun CoroutineScope.launchLogRotation(
+        rotateActionQueue: LogBuffer,
+        moves: ArrayDeque<Pair<File, File>>,
+    ): Job = launch(context = CoroutineName("LogRotation-$logFiles0Hash")) {
+        val isDebug = logD { "LogRotation Started >> ${currentCoroutineContext().job}" } > 0
+
+//        val startSize = moves.size
+        while (moves.isNotEmpty()) {
+            val (source, dest) = moves.removeFirst()
+
+            try {
+                source.moveTo(dest)
+                if (isDebug) LOG.d("Moved ${source.name} >> ${dest.name}")
+                yield()
+            } catch (e: IOException) {
+                // Source file did not exist, ignore.
+                if (e is FileNotFoundException) continue
+
+                // TODO: Figure out what happened and attempt to recover.
+
+                logE(e) { "Log rotation failure." }
+
+                // Trigger an immediate retry. If another process is also
+                // logging, it may finish off the log rotation for us, so.
+                rotateActionQueue.channel.trySend(::checkLogRotation)
+                break
+            }
+        }
+
+//        if (moves.size != startSize) {
+//            // TODO: fsync directory???
+//        }
+    }
+
     @Suppress("UNUSED", "UNUSED_PARAMETER")
-    private suspend fun checkLogRotation(stream: FileStream.ReadWrite?, buf: ByteArray): Long {
+    private suspend fun checkLogRotation(stream: FileStream.ReadWrite?, buf: ByteArray, processed: Int): Long {
         return if (dotRotateFile.exists2Robustly()) EXECUTE_ROTATE_LOGS else 0L
     }
 

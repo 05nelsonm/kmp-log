@@ -27,11 +27,29 @@ import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 import kotlin.jvm.JvmInline
 
-internal typealias LogAction = suspend (stream: FileStream.ReadWrite?, buf: ByteArray) -> Long
+/*
+* An action to be enqueued into LogBuffer for processing.
+* */
+internal typealias LogAction = suspend (
+    // The open log. May be null if there was an error and this
+    // action is being dropped (see consumeAndIgnore).
+    stream: FileStream.ReadWrite?,
 
-internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray) {
+    // A pre-allocated buffer to use for UTF-8 encoding.
+    buf: ByteArray,
+
+    // The number of LogActions prior to this one which resulted
+    // in data written to the log (i.e. had a return of > 0L).
+    //
+    // LogActions are processed in chunks whereby the log loop
+    // will yield to another process and then continue processing
+    // buffered LogAction, so.
+    processed: Int,
+) -> Long
+
+internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, processed: Int = 0) {
     try {
-        invoke(null, buf)
+        invoke(null, buf, processed)
     } catch (_: Throwable) {}
 }
 
