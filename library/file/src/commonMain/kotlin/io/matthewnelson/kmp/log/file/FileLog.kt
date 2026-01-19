@@ -131,8 +131,9 @@ public class FileLog: Log {
          *         .fileName("file_log")
          *         .fileExtension("err")
          *         .min(Log.Level.Warn)
-         *         .maxLogSize(0) // Will default to the minimum size
-         *         .maxLogs(0) // Will default to the minimum
+         *         .maxLogBuffered(0) // Will default to the minimum
+         *         .maxLogFileSize(0) // Will default to the minimum
+         *         .maxLogFiles(0) // Will default to the minimum
          *         .build()
          *
          *     val fileLog1 = FileLog.Builder(myLogDirectory)
