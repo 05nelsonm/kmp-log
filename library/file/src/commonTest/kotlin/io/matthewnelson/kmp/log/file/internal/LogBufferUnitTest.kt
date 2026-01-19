@@ -15,6 +15,7 @@
  **/
 package io.matthewnelson.kmp.log.file.internal
 
+import io.matthewnelson.encoding.core.EncoderDecoder.Companion.DEFAULT_BUFFER_SIZE
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.channels.toList
 import kotlinx.coroutines.test.runTest
@@ -32,9 +33,12 @@ class LogBufferUnitTest {
 
         var count = 0
         repeat(expected) {
-            logBuffer.channel.trySend { stream, _, _ ->
+            logBuffer.channel.trySend { stream, buf, sizeLog, processed ->
                 count++
                 assertEquals(null, stream)
+                assertEquals(DEFAULT_BUFFER_SIZE, buf.size)
+                assertEquals(0L, sizeLog)
+                assertEquals(0, processed)
                 0L
             }
         }

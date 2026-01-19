@@ -38,18 +38,34 @@ internal typealias LogAction = suspend (
     // A pre-allocated buffer to use for UTF-8 encoding.
     buf: ByteArray,
 
+    // The current size of the log file being written to. This
+    // is utilized to trigger a log rotation + retry, in the
+    // event that writing a log entry would cause it to exceed
+    // the configured maxLogSize.
+    //
+    // NOTE: This should be reflective of stream.size(), but is
+    // a local value tracked by the log loop and updated with
+    // LogAction return values. This is in order to mitigate
+    // repeated (unnecessary) calls to stream.size().
+    sizeLog: Long,
+
     // The number of LogActions prior to this one which resulted
     // in data written to the log (i.e. had a return of > 0L).
     //
     // LogActions are processed in chunks whereby the log loop
-    // will yield to another process and then continue processing
-    // buffered LogAction, so.
+    // will sync then yield to another process, and then continue
+    // processing more LogAction, so.
     processed: Int,
+
+// Return value is the number of bytes written to the stream, or 0L
+// to indicate no write occurred. There are special negative return
+// values within FileLog that are utilized to trigger log rotations.
+// See FileLog.Companion for those.
 ) -> Long
 
-internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, processed: Int = 0) {
+internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, sizeLog: Long = 0L, processed: Int = 0) {
     try {
-        invoke(null, buf, processed)
+        invoke(null, buf, sizeLog, processed)
     } catch (_: Throwable) {}
 }
 
