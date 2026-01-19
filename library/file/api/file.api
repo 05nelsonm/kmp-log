@@ -7,7 +7,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 	public final field logFiles Ljava/util/List;
 	public final field logFiles0Hash Ljava/lang/String;
 	public final field maxLogBuffered I
-	public final field maxLogSize J
+	public final field maxLogFileSize J
 	public final field maxLogYield B
 	public final field modeDirectory Ljava/lang/String;
 	public final field modeFile Ljava/lang/String;
@@ -40,9 +40,9 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 	public final fun fileOtherWritable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun max (Lio/matthewnelson/kmp/log/Log$Level;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun maxLogBuffered (I)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
-	public final fun maxLogSize (J)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
+	public final fun maxLogFileSize (J)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
+	public final fun maxLogFiles (B)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun maxLogYield (B)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
-	public final fun maxLogs (B)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun min (Lio/matthewnelson/kmp/log/Log$Level;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomain (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomain (Ljava/util/Collection;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
