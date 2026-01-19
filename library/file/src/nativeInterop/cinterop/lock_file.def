@@ -16,11 +16,11 @@ package = io.matthewnelson.kmp.log.file.internal
  *   Helper which calls fcntl with provided arguments for advisory record locking.
  *
  *   [fd] The file descriptor of the open file.
- *   [position] The start of the byte-range to lock
- *   [length] The number of bytes from [position] to lock
- *   [locking] If false F_UNLCK, otherwise defers to [exclusive]
- *   [blocking] If true F_SETLKW, otherwise F_SETLK (ignored when [locking] is false)
- *   [exclusive] If true F_WRLCK, otherwise F_RDLCK (ignored when [locking] is false)
+ *   [position] The start of the byte-range to lock.
+ *   [length] The number of bytes from [position] to lock.
+ *   [locking] If false F_UNLCK, otherwise defers to [exclusive].
+ *   [blocking] If true F_SETLKW, otherwise F_SETLK (ignored when [locking] is false).
+ *   [exclusive] If true F_WRLCK, otherwise F_RDLCK (ignored when [locking] is false).
  *
  *   See: https://man7.org/linux/man-pages/man2/F_SETLK.2const.html
  *
@@ -29,11 +29,14 @@ package = io.matthewnelson.kmp.log.file.internal
  *   record locking.
  *
  *   [h] The file HANDLE of the open file.
- *   [position] The start of the byte-range to lock
- *   [length] The number of bytes from [position] to lock
- *   [locking] If true, LockFileEx, otherwise UnlockFileEx
- *   [blocking] If false, LOCKFILE_FAIL_IMMEDIATELY (ignored when [locking] is false)
- *   [exclusive] If true, LOCKFILE_EXCLUSIVE_LOCK (ignored when [locking] is false)
+ *   [position] The start of the byte-range to lock.
+ *   [length] The number of bytes from [position] to lock.
+ *   [locking] If true, LockFileEx, otherwise UnlockFileEx.
+ *   [blocking] If false, LOCKFILE_FAIL_IMMEDIATELY (ignored when [locking] is false).
+ *   [exclusive] If true, LOCKFILE_EXCLUSIVE_LOCK (ignored when [locking] is false).
+ *
+ *    See: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-lockfileex
+ *    See: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-unlockfileex
  *
  * Returns 0 on success, -1 otherwise.
  * */

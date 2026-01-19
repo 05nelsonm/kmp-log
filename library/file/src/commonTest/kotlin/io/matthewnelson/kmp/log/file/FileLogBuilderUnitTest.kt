@@ -207,19 +207,24 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenMaxLogs_whenLessThan2_thenUses2() {
-        assertEquals(2, newBuilder().maxLogs(0).build().logFiles.size)
+    fun givenMaxLogBuffered_whenLessThan1000_thenUses1000() {
+        assertEquals(1_000, newBuilder().maxLogBuffered(0).build().maxLogBuffered)
     }
 
     @Test
-    fun givenMaxLogs_whenLogFiles_thenSizeEquals() {
+    fun givenMaxLogFiles_whenLessThan2_thenUses2() {
+        assertEquals(2, newBuilder().maxLogFiles(0).build().logFiles.size)
+    }
+
+    @Test
+    fun givenMaxLogFiles_whenLogFiles_thenSizeEquals() {
         val expected = 10
-        assertEquals(expected, newBuilder().maxLogs(expected.toByte()).build().logFiles.size)
+        assertEquals(expected, newBuilder().maxLogFiles(expected.toByte()).build().logFiles.size)
     }
 
     @Test
-    fun givenMaxLogSize_whenLessThan50Kb_thenUses50Kb() {
-        assertEquals(50 * 1024L, newBuilder().maxLogSize(5).build().maxLogSize)
+    fun givenMaxLogFileSize_whenLessThan50Kb_thenUses50Kb() {
+        assertEquals(50 * 1024L, newBuilder().maxLogFileSize(5).build().maxLogFileSize)
     }
 
     @Test
@@ -242,7 +247,7 @@ class FileLogBuilderUnitTest {
 
     @Test
     fun givenLogFiles_whenIndexGreaterThan0_thenHasNumberSuffix() {
-        val files = newBuilder().maxLogs(5).build().logFiles
+        val files = newBuilder().maxLogFiles(5).build().logFiles
         assertEquals(5, files.size)
         for (i in 1 until 5) {
             val end = files.elementAt(i).substringAfterLast('.', "_")
@@ -259,14 +264,21 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenWhitelistDomains_whenCastAsMutable_thenThrowsClassCastException() {
+    fun givenBlacklistDomain_whenCastAsMutable_thenThrowsClassCastException() {
+        val domains = newBuilder().blacklistDomain("kmp.log").build().blacklistDomain
+        assertEquals(1, domains.size)
+        assertFailsWith<ClassCastException> { domains as MutableSet<String> }
+    }
+
+    @Test
+    fun givenWhitelistDomain_whenCastAsMutable_thenThrowsClassCastException() {
         val domains = newBuilder().whitelistDomain("kmp.log").build().whitelistDomain
         assertEquals(1, domains.size)
         assertFailsWith<ClassCastException> { domains as MutableSet<String> }
     }
 
     @Test
-    fun givenBuilder_whenWhitelistDomains_thenChecksValidity() {
+    fun givenBuilder_whenWhitelistDomain_thenChecksValidity() {
         val b = newBuilder()
         arrayOf<FileLog.Builder.() -> Unit>(
             { whitelistDomain("") },

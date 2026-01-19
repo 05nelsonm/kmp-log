@@ -20,8 +20,13 @@ package io.matthewnelson.kmp.log.file.internal
 import io.matthewnelson.encoding.core.EncoderDecoder.Companion.DEFAULT_BUFFER_SIZE
 import io.matthewnelson.kmp.file.FileStream
 import io.matthewnelson.kmp.log.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
+import kotlinx.coroutines.launch
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
@@ -72,7 +77,24 @@ internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, sizeLog: 
 
 @JvmInline
 internal value class LogBuffer private constructor(internal val channel: Channel<LogAction>) {
+
     internal constructor(): this(Channel(UNLIMITED))
+
+    @Throws(IllegalArgumentException::class)
+    internal constructor(capacity: Int, LOG: Log.Logger?, scope: CoroutineScope): this(Channel(
+        capacity = capacity,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        onUndeliveredElement = { logAction ->
+            @OptIn(DelicateCoroutinesApi::class)
+            scope.launch(start = CoroutineStart.ATOMIC) {
+                logAction.consumeAndIgnore(EMPTY_BUF)
+                LOG?.w { "LogBuffer[capacity=$capacity] exceeded. Oldest log has been dropped." }
+            }
+        }
+    )) {
+        require(capacity > 0) { "capacity < 1" }
+        require(capacity != UNLIMITED) { "capacity == Channel.UNLIMITED" }
+    }
 
     internal companion object {
 
@@ -89,6 +111,8 @@ internal value class LogBuffer private constructor(internal val channel: Channel
         // is needed AGAIN. If the value is exceeded, LogAction produced by
         // FileLog.log() will simply write its log and move on.
         internal const val MAX_RETRIES = 5
+
+        private val EMPTY_BUF = ByteArray(0)
     }
 }
 

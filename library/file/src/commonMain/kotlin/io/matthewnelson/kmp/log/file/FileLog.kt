@@ -78,6 +78,7 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -130,8 +131,9 @@ public class FileLog: Log {
          *         .fileName("file_log")
          *         .fileExtension("err")
          *         .min(Log.Level.Warn)
-         *         .maxLogSize(0) // Will default to the minimum size
-         *         .maxLogs(0) // Will default to the minimum
+         *         .maxLogBuffered(0) // Will default to the minimum
+         *         .maxLogFileSize(0) // Will default to the minimum
+         *         .maxLogFiles(0) // Will default to the minimum
          *         .build()
          *
          *     val fileLog1 = FileLog.Builder(myLogDirectory)
@@ -186,7 +188,13 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
-    public val maxLogSize: Long
+    public val maxLogBuffered: Int
+
+    /**
+     * TODO
+     * */
+    @JvmField
+    public val maxLogFileSize: Long
 
     /**
      * TODO
@@ -273,8 +281,9 @@ public class FileLog: Log {
         private var _modeFile = ModeBuilder.of(isDirectory = false)
         private var _fileName = "log"
         private var _fileExtension = ""
-        private var _maxLogSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
-        private var _maxLogs: Byte = if (isDesktop()) 5 else 3
+        private var _maxLogBuffered: Int = Channel.UNLIMITED
+        private var _maxLogFileSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
+        private var _maxLogFiles: Byte = if (isDesktop()) 5 else 3
         private var _maxLogYield: Byte = 10
         private val _blacklistDomain = mutableSetOf<String>()
         private val _whitelistDomain = mutableSetOf<String>()
@@ -437,6 +446,15 @@ public class FileLog: Log {
         }
 
         /**
+         * DEFAULT: [Channel.UNLIMITED] (i.e. [Int.MAX_VALUE])
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun maxLogBuffered(capacity: Int): Builder = apply { _maxLogBuffered = capacity }
+
+        /**
          * DEFAULT:
          *  - `5 Mb` on `Android`, `AndroidNative`, `iOS`, `tvOS`, `watchOS`
          *  - `10 Mb` otherwise
@@ -445,7 +463,7 @@ public class FileLog: Log {
          *
          * @return The [Builder]
          * */
-        public fun maxLogSize(bytes: Long): Builder = apply { _maxLogSize = bytes }
+        public fun maxLogFileSize(bytes: Long): Builder = apply { _maxLogFileSize = bytes }
 
         /**
          * DEFAULT:
@@ -456,7 +474,7 @@ public class FileLog: Log {
          *
          * @return The [Builder]
          * */
-        public fun maxLogs(max: Byte): Builder = apply { _maxLogs = max }
+        public fun maxLogFiles(max: Byte): Builder = apply { _maxLogFiles = max }
 
         /**
          * DEFAULT: `10`
@@ -701,9 +719,9 @@ public class FileLog: Log {
             val directory = logDirectory.toFile().canonicalFile2()
 
             // Current and 1 previous.
-            val maxLogs = _maxLogs.coerceAtLeast(2)
-            val files = ArrayList<File>(maxLogs.toInt())
-            for (i in 0 until maxLogs) {
+            val maxLogFiles = _maxLogFiles.coerceAtLeast(2)
+            val files = ArrayList<File>(maxLogFiles.toInt())
+            for (i in 0 until maxLogFiles) {
                 var name = fileName
                 if (fileExtension.isNotEmpty()) {
                     name += '.'
@@ -737,7 +755,8 @@ public class FileLog: Log {
                 files0Hash = files0Hash,
                 modeDirectory = _modeDirectory.build(),
                 modeFile = _modeFile.build(),
-                maxLogSize = _maxLogSize.coerceAtLeast(50L * 1024L), // 50kb
+                maxLogBuffered = _maxLogBuffered.coerceAtLeast(1_000),
+                maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L), // 50kb
                 maxLogYield = _maxLogYield.coerceAtLeast(1),
                 blacklistDomain = blacklistDomain,
                 whitelistDomain = whitelistDomain,
@@ -782,7 +801,8 @@ public class FileLog: Log {
         files0Hash: String,
         modeDirectory: String,
         modeFile: String,
-        maxLogSize: Long,
+        maxLogBuffered: Int,
+        maxLogFileSize: Long,
         maxLogYield: Byte,
         blacklistDomain: Set<String>,
         whitelistDomain: Set<String>,
@@ -844,7 +864,8 @@ public class FileLog: Log {
         this.logFiles0Hash = files0Hash
         this.modeDirectory = modeDirectory
         this.modeFile = modeFile
-        this.maxLogSize = maxLogSize
+        this.maxLogBuffered = maxLogBuffered
+        this.maxLogFileSize = maxLogFileSize
         this.maxLogYield = maxLogYield
         this.blacklistDomain = blacklistDomain
         this.whitelistDomain = whitelistDomain
@@ -916,7 +937,7 @@ public class FileLog: Log {
             }
 
             // TODO: Skip if fatalJob != null???
-            if (sizeUTF8 >= maxLogSize) {
+            if (sizeUTF8 >= maxLogFileSize) {
                 // Ideally this will NEVER be the case. But, if it is, a rotation
                 // will be executed to truncate log file to 0 and commit the entire
                 // log to a single log file. After return, another log rotation will
@@ -932,7 +953,7 @@ public class FileLog: Log {
                     }
                 }
             } else {
-                if ((sizeLog + sizeUTF8) !in 0L..maxLogSize) {
+                if ((sizeLog + sizeUTF8) !in 0L..maxLogFileSize) {
                     if (retries++ < MAX_RETRIES) {
                         return@logAction EXECUTE_ROTATE_LOGS_AND_RETRY
                     }
@@ -989,7 +1010,12 @@ public class FileLog: Log {
     }
 
     override fun onInstall() {
-        val logBuffer = LogBuffer()
+        val logBuffer = if (maxLogBuffered == Channel.UNLIMITED) {
+            LogBuffer()
+        } else {
+            LogBuffer(capacity = maxLogBuffered, LOG, logScope)
+        }
+
         val logJob = _logJob
 
         @OptIn(DelicateCoroutinesApi::class)
@@ -1282,15 +1308,15 @@ public class FileLog: Log {
                         logD { "Wrote $written bytes to ${files[0].name}" }
                     } else {
                         if (written == EXECUTE_ROTATE_LOGS) {
-                            size = maxLogSize // To force a log rotation
+                            size = maxLogFileSize // To force a log rotation
                             logAction = null
                             break
                         }
                         if (written == EXECUTE_ROTATE_LOGS_AND_RETRY) {
-                            size = maxLogSize // To force a log rotation
+                            size = maxLogFileSize // To force a log rotation
                             logAction = null
                             retryActionQueue.add(action)
-                            logD { "Write would exceed maxLogSize[$maxLogSize]. Retrying after a log rotation." }
+                            logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after a log rotation." }
                             break
                         }
                     }
@@ -1302,7 +1328,7 @@ public class FileLog: Log {
                         // We lost our logStream, pop out.
                         !logStream.isOpen() -> null
                         // Log rotation is needed
-                        size >= maxLogSize -> null
+                        size >= maxLogFileSize -> null
                         // Yield to another process (potentially)
                         processed >= maxLogYield -> null
                         // Job cancellation
@@ -1340,7 +1366,7 @@ public class FileLog: Log {
                 logD { "Processed $processed " + if (processed > 1) "logs" else "log" }
             }
 
-            if (thisJob.isActive && size >= maxLogSize) {
+            if (thisJob.isActive && size >= maxLogFileSize) {
                 if (lockLog.isValid()) {
                     CurrentThread.uninterrupted {
                         rotateLogs(
@@ -1474,7 +1500,7 @@ public class FileLog: Log {
         if (!dotRotateFile.exists2Robustly()) {
             // Not picking up an interrupted log rotation to finish off.
 
-            val size = if (retryActionQueueIsNotEmpty) maxLogSize else try {
+            val size = if (retryActionQueueIsNotEmpty) maxLogFileSize else try {
                 logStream.size()
             } catch (e: IOException) {
                 LOG.w(e) { "Failed to obtain size of ${files[0].name}. Retrying log rotation." }
@@ -1498,7 +1524,7 @@ public class FileLog: Log {
                 0L
             }
 
-            if (size < maxLogSize) {
+            if (size < maxLogFileSize) {
                 if (lockRotate.isValid()) try {
                     lockRotate.release()
                     logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
@@ -1777,7 +1803,7 @@ public class FileLog: Log {
         sizeLog: Long,
         processed: Int,
     ): Long {
-        if (sizeLog >= maxLogSize) return EXECUTE_ROTATE_LOGS
+        if (sizeLog >= maxLogFileSize) return EXECUTE_ROTATE_LOGS
         if (dotRotateFile.exists2Robustly()) return EXECUTE_ROTATE_LOGS
         return 0L
     }

@@ -38,6 +38,16 @@ extensions.configure<DokkaExtension> {
                 url.set(URI("https://kmp-file.matthewnelson.io/"))
             }
         }
+        externalDocumentationLinks {
+            register(project.path + ":kotlinx-coroutines") {
+                url.set(URI("https://kotlinlang.org/api/kotlinx.coroutines/"))
+            }
+        }
+        externalDocumentationLinks {
+            register(project.path + ":ktor") {
+                url.set(URI("https://api.ktor.io/"))
+            }
+        }
 
         sourceLink {
             localDirectory.set(rootDir)
