@@ -926,17 +926,30 @@ public class FileLog: Log {
                 return@logAction 0L
             }
 
-            val (formatted, sizeUTF8) = try {
-                val result = preProcessing.await()
-                if (result == null) {
-                    fatalJob?.cancel()
-                    return@logAction 0L
-                }
-                result
+            var threw: Throwable? = null
+            val result = try {
+                preProcessing.await()
             } catch (t: Throwable) {
-                fatalJob?.cancel()
-                throw t
+                threw = t
+                null
             }
+
+            if (result == null) {
+                if (fatalJob != null) {
+                    // fsync no matter what before the process is aborted.
+                    try {
+                        stream.sync(meta = true)
+                    } catch (_: Throwable) {}
+                    fatalJob.cancel()
+                }
+
+                // threw will only ever be non-null when result == null
+                threw?.let { throw it }
+
+                return@logAction 0L
+            }
+
+            val (formatted, sizeUTF8) = result
 
             // TODO: Skip if fatalJob != null???
             if (sizeUTF8 >= maxLogFileSize) {
@@ -962,7 +975,6 @@ public class FileLog: Log {
                 }
             }
 
-            var threw: Throwable? = null
             val written = try {
                 formatted.decodeBuffered(
                     UTF8,
