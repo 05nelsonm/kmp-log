@@ -103,12 +103,53 @@ import kotlin.time.Duration.Companion.milliseconds
  * TODO
  *
  * @see [Builder]
+ * @see [DOMAIN]
  * */
 public class FileLog: Log {
 
-    // TODO: Make public (Issue #59)
-    private companion object {
-        private const val DOMAIN = "kmp-log:file"
+    public companion object {
+
+        /**
+         * The [Logger.domain] used by [FileLog] instances to dispatch [Level.Warn] and
+         * [Level.Error] logs (and [Level.Debug] if [debug] is set to `true`). For obvious
+         * reasons, a [FileLog] instance cannot log to itself, but it can to other installed
+         * [Log] instances (including other [FileLog]).
+         *
+         * This reference is meant to be used in conjunction with [Builder.blacklistDomain]
+         * and [Builder.whitelistDomain] to configure a set of [FileLog] instances for a
+         * cooperative logging experience. All logs produced by [FileLog] instances can
+         * be centralized to a single [FileLog] instance (or other [Log] implementation),
+         * while all *other* [FileLog] instances can be configured to ignore the [DOMAIN].
+         *
+         * e.g.
+         *
+         *     val fileLogErrors = FileLog.Builder(myLogDirectory)
+         *         // ONLY allow logs from other FileLog instances.
+         *         .whitelistDomain(FileLog.DOMAIN)
+         *         .whitelistDomainNull(false)
+         *         .fileName("file_log")
+         *         .fileExtension("err")
+         *         .min(Log.Level.Warn)
+         *         .maxLogSize(0) // Will default to the minimum size
+         *         .maxLogs(0) // Will default to the minimum
+         *         .build()
+         *
+         *     val fileLog1 = FileLog.Builder(myLogDirectory)
+         *         // Capture all logs, EXCEPT those produced
+         *         // by other FileLog instances.
+         *         .blacklistDomain(FileLog.DOMAIN)
+         *         // configure further...
+         *         .build()
+         *
+         *     // val fileLog2 = ...
+         *     // val fileLog3 = ...
+         *
+         *     Log.Root.install(fileLogErrors)
+         *     Log.Root.install(fileLog1)
+         *     // Log.Root.install(fileLog2)
+         *     // Log.Root.install(fileLog3)
+         * */
+        public const val DOMAIN: String = "kmp-log:file"
     }
 
     /**
@@ -152,6 +193,12 @@ public class FileLog: Log {
      * */
     @JvmField
     public val maxLogYield: Byte
+
+    /**
+     * TODO
+     * */
+    @JvmField
+    public val blacklistDomain: Set<String>
 
     /**
      * TODO
@@ -229,6 +276,7 @@ public class FileLog: Log {
         private var _maxLogSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
         private var _maxLogs: Byte = if (isDesktop()) 5 else 3
         private var _maxLogYield: Byte = 10
+        private val _blacklistDomain = mutableSetOf<String>()
         private val _whitelistDomain = mutableSetOf<String>()
         private var _whitelistDomainNull = true
         private val _whitelistTag = mutableSetOf<String>()
@@ -420,6 +468,71 @@ public class FileLog: Log {
         public fun maxLogYield(num: Byte): Builder = apply { _maxLogYield = num }
 
         /**
+         * DEFAULT: empty (i.e. Do not reject any [Logger.domain])
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [blacklistDomainReset]
+         * @see [whitelistDomain]
+         * @see [whitelistDomainNull]
+         * @see [DOMAIN]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
+         * */
+        public fun blacklistDomain(domain: String): Builder {
+            Logger.checkDomain(domain)
+            _blacklistDomain.add(domain)
+            return this
+        }
+
+        /**
+         * DEFAULT: empty (i.e. Do not reject any [Logger.domain])
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [blacklistDomainReset]
+         * @see [whitelistDomain]
+         * @see [whitelistDomainNull]
+         * @see [DOMAIN]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
+         * */
+        public fun blacklistDomain(vararg domains: String): Builder {
+            domains.forEach { domain -> Logger.checkDomain(domain) }
+            _blacklistDomain.addAll(domains)
+            return this
+        }
+
+        /**
+         * DEFAULT: empty (i.e. Do not reject any [Logger.domain])
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [blacklistDomainReset]
+         * @see [whitelistDomain]
+         * @see [whitelistDomainNull]
+         * @see [DOMAIN]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
+         * */
+        public fun blacklistDomain(domains: Collection<String>): Builder {
+            domains.forEach { domain -> Logger.checkDomain(domain) }
+            _blacklistDomain.addAll(domains)
+            return this
+        }
+
+        /**
+         * TODO
+         * */
+        public fun blacklistDomainReset(): Builder = apply { _blacklistDomain.clear() }
+
+        /**
          * DEFAULT: empty (i.e. Allow all [Logger.domain])
          *
          * TODO
@@ -428,6 +541,8 @@ public class FileLog: Log {
          *
          * @see [whitelistDomainNull]
          * @see [whitelistDomainReset]
+         * @see [blacklistDomain]
+         * @see [DOMAIN]
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
@@ -446,6 +561,8 @@ public class FileLog: Log {
          *
          * @see [whitelistDomainNull]
          * @see [whitelistDomainReset]
+         * @see [blacklistDomain]
+         * @see [DOMAIN]
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
@@ -464,6 +581,8 @@ public class FileLog: Log {
          *
          * @see [whitelistDomainNull]
          * @see [whitelistDomainReset]
+         * @see [blacklistDomain]
+         * @see [DOMAIN]
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
@@ -482,6 +601,7 @@ public class FileLog: Log {
          *
          * @see [whitelistDomain]
          * @see [whitelistDomainReset]
+         * @see [DOMAIN]
          * */
         public fun whitelistDomainNull(allow: Boolean): Builder = apply { _whitelistDomainNull = allow }
 
@@ -492,6 +612,7 @@ public class FileLog: Log {
          *
          * @see [whitelistDomain]
          * @see [whitelistDomainNull]
+         * @see [DOMAIN]
          * */
         public fun whitelistDomainReset(): Builder = apply { _whitelistDomain.clear() }.whitelistDomainNull(true)
 
@@ -574,6 +695,7 @@ public class FileLog: Log {
         public fun build(): FileLog {
             val fileName = _fileName
             val fileExtension = _fileExtension
+            val blacklistDomain = _blacklistDomain.toImmutableSet()
             val whitelistDomain = _whitelistDomain.toImmutableSet()
             val whitelistTag = _whitelistTag.toImmutableSet()
             val directory = logDirectory.toFile().canonicalFile2()
@@ -617,6 +739,7 @@ public class FileLog: Log {
                 modeFile = _modeFile.build(),
                 maxLogSize = _maxLogSize.coerceAtLeast(50L * 1024L), // 50kb
                 maxLogYield = _maxLogYield.coerceAtLeast(1),
+                blacklistDomain = blacklistDomain,
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
                 whitelistTag = whitelistTag,
@@ -638,6 +761,7 @@ public class FileLog: Log {
     @get:JvmSynthetic
     internal val dotRotateTmpFile: File
 
+    private val _blacklistDomain: Array<String?>
     private val _whitelistDomain: Array<String>
     private val _whitelistTag: Array<String>
 
@@ -660,6 +784,7 @@ public class FileLog: Log {
         modeFile: String,
         maxLogSize: Long,
         maxLogYield: Byte,
+        blacklistDomain: Set<String>,
         whitelistDomain: Set<String>,
         whitelistDomainNull: Boolean,
         whitelistTag: Set<String>,
@@ -698,7 +823,9 @@ public class FileLog: Log {
             this.dotRotateTmpFile = directory.resolve("$dotName0.tmp")
         }
 
+        this._blacklistDomain = blacklistDomain.toTypedArray()
         this._whitelistDomain = whitelistDomain.toTypedArray()
+
         this._whitelistTag = whitelistTag.toTypedArray()
         this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
         this.logScope = CoroutineScope(context =
@@ -719,6 +846,7 @@ public class FileLog: Log {
         this.modeFile = modeFile
         this.maxLogSize = maxLogSize
         this.maxLogYield = maxLogYield
+        this.blacklistDomain = blacklistDomain
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull
         this.whitelistTag = whitelistTag
@@ -729,6 +857,7 @@ public class FileLog: Log {
         // Do not log to self, only to other Log instances (if installed).
         if (domain == LOG.domain && tag == LOG.tag) return false
 
+        if (_blacklistDomain.contains(domain)) return false
         if (_whitelistDomain.isNotEmpty()) {
             if (domain == null) {
                 if (!whitelistDomainNull) return false
@@ -1615,12 +1744,12 @@ public class FileLog: Log {
 
 //        val startSize = moves.size
         while (moves.isNotEmpty()) {
-            yield()
             val (source, dest) = moves.removeFirst()
 
             try {
                 source.moveTo(dest)
                 logD { "Moved ${source.name} >> ${dest.name}" }
+                yield()
             } catch (e: IOException) {
                 // Source file did not exist, ignore.
                 if (e is FileNotFoundException) continue

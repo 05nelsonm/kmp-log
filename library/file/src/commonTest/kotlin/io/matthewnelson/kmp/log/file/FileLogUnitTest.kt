@@ -33,6 +33,21 @@ import kotlin.time.Duration.Companion.milliseconds
 class FileLogUnitTest {
 
     @Test
+    fun givenBlacklistDomains_whenIsLoggable_thenReturnsExpected() = runTest {
+        withTmpFile { tmp ->
+            val log = FileLog.Builder(tmp.path)
+                .blacklistDomain("blacklist.domain")
+                .build()
+
+            log.installAndTest {
+                assertFalse(Log.Logger.of(tag = "Tag", domain = "blacklist.domain").isLoggable(Level.Error))
+                assertTrue(Log.Logger.of(tag = "Tag", domain = "not.blacklist.domain").isLoggable(Level.Error))
+                assertTrue(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
+            }
+        }
+    }
+
+    @Test
     fun givenWhitelistDomains_whenIsLoggable_thenReturnsExpected() = runTest {
         withTmpFile { tmp ->
             val log = FileLog.Builder(tmp.path)
@@ -118,7 +133,7 @@ class FileLogUnitTest {
                     return false
                 }
                 override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
-                    if (domain != "kmp-log:file") return false
+                    if (domain != FileLog.DOMAIN) return false
                     return log.uid.endsWith(tag)
                 }
             }
