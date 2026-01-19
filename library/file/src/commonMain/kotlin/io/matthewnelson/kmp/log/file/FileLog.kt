@@ -47,6 +47,9 @@ import io.matthewnelson.kmp.log.file.internal.FileLock
 import io.matthewnelson.kmp.log.file.internal.InvalidFileLock
 import io.matthewnelson.kmp.log.file.internal.LockFile
 import io.matthewnelson.kmp.log.file.internal.LogBuffer
+import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE_LOGS
+import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE_LOGS_AND_RETRY
+import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.MAX_RETRIES
 import io.matthewnelson.kmp.log.file.internal.LogAction
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
 import io.matthewnelson.kmp.log.file.internal.consumeAndIgnore
@@ -102,6 +105,11 @@ import kotlin.time.Duration.Companion.milliseconds
  * @see [Builder]
  * */
 public class FileLog: Log {
+
+    // TODO: Make public (Issue #59)
+    private companion object {
+        private const val DOMAIN = "kmp-log:file"
+    }
 
     /**
      * TODO
@@ -187,7 +195,7 @@ public class FileLog: Log {
         (instance as FileLog)._logJob?.join()
     }
 
-    // TODO:
+    // TODO: (Issue #60)
     //  @Throws(CancellationException::class, IOException:class)
     //  public suspend fun enqueueRead(buf: ByteArray, offset: Int, len: Int, position: Long): Int
 
@@ -618,24 +626,6 @@ public class FileLog: Log {
         }
     }
 
-    private companion object {
-        private const val DOMAIN = "kmp-log:file"
-
-        // Special return value for a LogAction to trigger rotateLogs
-        private const val EXECUTE_ROTATE_LOGS = -42L
-
-        // Special return value for a LogAction to trigger rotateLogs
-        // and then retry the LogAction again. See FileLog.log().
-        private const val EXECUTE_ROTATE_LOGS_AND_RETRY = -615L
-
-        // To prevent infinite loops. In the unlikely event a log rotation
-        // results in a lost lock for the log file and another process writes
-        // to it before we are able to re-acquire it, and then the log rotation
-        // is needed AGAIN. If the value is exceeded, LogAction produced by
-        // FileLog.log() will simply write its log and move on.
-        private const val MAX_RETRIES = 5
-    }
-
     private val directory: File
 
     // Exposed for testing
@@ -687,7 +677,8 @@ public class FileLog: Log {
         // is because if we do so conditionally (only do it if it did not start with
         // one), another FileLog instance could have the same files[0].name as this
         // one, but without the '.' prefix, and we'd end up utilizing the same dot
-        // files for 2 different logs.
+        // files for 2 different logs (bad day).
+        // TODO: Add tests that ensure these names do NOT change...
         ('.' + files[0].name).let { dotName0 ->
 
             // This will be the longest named file we are dealing with, as
@@ -759,6 +750,9 @@ public class FileLog: Log {
             val time = now()
             val tid = CurrentThread.id()
 
+            // LAZY start as to not do unnecessary work until we are
+            // certain that the LogAction was committed to LogBuffer
+            // successfully, which may be closed for sending.
             logScope.async(start = CoroutineStart.LAZY) {
                 val formatted = format(time, pid(), tid, level, domain, tag, msg, t)
                 if (formatted.isNullOrEmpty()) return@async null
@@ -794,7 +788,7 @@ public class FileLog: Log {
 
             // TODO: Skip if fatalJob != null???
             if (sizeUTF8 >= maxLogSize) {
-                // Ideally this will NEVER be the case, but if it is, a rotation
+                // Ideally this will NEVER be the case. But, if it is, a rotation
                 // will be executed to truncate log file to 0 and commit the entire
                 // log to a single log file. After return, another log rotation will
                 // transpire. This "should" be ok b/c retries will not release the
@@ -1016,6 +1010,7 @@ public class FileLog: Log {
 
         var lockLog: FileLock = InvalidFileLock
 
+        // The loop
         while (true) {
             var logAction: LogAction? = try {
                 rotateActionQueue.channel.tryReceive().getOrNull()
@@ -1131,6 +1126,7 @@ public class FileLog: Log {
             var processed = 0
             CurrentThread.uninterrupted {
 
+                // The inner loop
                 while (true) {
                     val action = logAction ?: break
 
@@ -1145,7 +1141,7 @@ public class FileLog: Log {
                             // TODO:
                             //  - Check for InterruptedIOException.bytesTransferred???
                             //  - Truncate to size to wipe out any partially written logs???
-                            //  - Increment processed???
+                            //  - Increment processed to ensure a sync occurs???
                         }
                         0L
                     }
@@ -1470,7 +1466,7 @@ public class FileLog: Log {
             // Checking for existence here is redundant, simply schedule all
             // moves and rip through them while ignoring FileNotFoundException.
             // Eventually we'll reach a full log rotation and never have any
-            // failures, so.
+            // failures attributed to non-existence, so.
             var source = dotRotateFile
             for (i in 1 until files.size) {
                 val dest = files[i]
@@ -1681,21 +1677,6 @@ public class FileLog: Log {
             logD(tt) { "Closed >> $closeable" }
         }
     }
-
-//    private inline fun logD(msg: String): Int {
-//        if (!debug) return 0
-//        return LOG.d(msg)
-//    }
-//
-//    private inline fun logD(t: Throwable): Int {
-//        if (!debug) return 0
-//        return LOG.d(t)
-//    }
-//
-//    private inline fun logD(t: Throwable?, msg: String?): Int {
-//        if (!debug) return 0
-//        return LOG.d(t, msg)
-//    }
 
     @OptIn(ExperimentalContracts::class)
     private inline fun logD(lazyMsg: () -> Any?): Int {

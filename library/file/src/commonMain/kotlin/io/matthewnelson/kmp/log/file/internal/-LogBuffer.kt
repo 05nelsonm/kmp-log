@@ -57,10 +57,11 @@ internal typealias LogAction = suspend (
     // processing more LogAction, so.
     processed: Int,
 
-// Return value is the number of bytes written to the stream, or 0L
-// to indicate no write occurred. There are special negative return
-// values within FileLog that are utilized to trigger log rotations.
-// See FileLog.Companion for those.
+// Return value is the number of bytes written to the stream, or
+// 0L to indicate no write occurred.
+//
+// There are special negative return values that are utilized to
+// trigger log rotations. See LogBuffer.Companion
 ) -> Long
 
 internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, sizeLog: Long = 0L, processed: Int = 0) {
@@ -72,6 +73,23 @@ internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, sizeLog: 
 @JvmInline
 internal value class LogBuffer private constructor(internal val channel: Channel<LogAction>) {
     internal constructor(): this(Channel(UNLIMITED))
+
+    internal companion object {
+
+        // Special return value for a LogAction to trigger rotateLogs
+        internal const val EXECUTE_ROTATE_LOGS = -42L
+
+        // Special return value for a LogAction to trigger rotateLogs
+        // and then retry the LogAction again. See FileLog.log().
+        internal const val EXECUTE_ROTATE_LOGS_AND_RETRY = -615L
+
+        // To prevent infinite loops. In the unlikely event a log rotation
+        // results in a lost lock for the log file and another process writes
+        // to it before we are able to re-acquire it, and then the log rotation
+        // is needed AGAIN. If the value is exceeded, LogAction produced by
+        // FileLog.log() will simply write its log and move on.
+        internal const val MAX_RETRIES = 5
+    }
 }
 
 @OptIn(ExperimentalContracts::class)
