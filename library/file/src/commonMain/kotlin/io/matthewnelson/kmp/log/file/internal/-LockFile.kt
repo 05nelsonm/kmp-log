@@ -78,6 +78,11 @@ internal expect abstract class FileLock {
     final override fun toString(): String
 }
 
+internal expect object InvalidFileLock: FileLock {
+    override fun isValid(): Boolean
+    override fun release()
+}
+
 internal expect abstract class LockFile: Closeable {
     final override fun close()
 }

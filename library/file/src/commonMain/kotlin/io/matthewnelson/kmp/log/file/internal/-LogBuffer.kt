@@ -38,24 +38,58 @@ internal typealias LogAction = suspend (
     // A pre-allocated buffer to use for UTF-8 encoding.
     buf: ByteArray,
 
+    // The current size of the log file being written to. This
+    // is utilized to trigger a log rotation + retry, in the
+    // event that writing a log entry would cause it to exceed
+    // the configured maxLogSize.
+    //
+    // NOTE: This should be reflective of stream.size(), but is
+    // a local value tracked by the log loop and updated with
+    // LogAction return values. This is in order to mitigate
+    // repeated (unnecessary) calls to stream.size().
+    sizeLog: Long,
+
     // The number of LogActions prior to this one which resulted
     // in data written to the log (i.e. had a return of > 0L).
     //
     // LogActions are processed in chunks whereby the log loop
-    // will yield to another process and then continue processing
-    // buffered LogAction, so.
+    // will sync then yield to another process, and then continue
+    // processing more LogAction, so.
     processed: Int,
+
+// Return value is the number of bytes written to the stream, or
+// 0L to indicate no write occurred.
+//
+// There are special negative return values that are utilized to
+// trigger log rotations. See LogBuffer.Companion
 ) -> Long
 
-internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, processed: Int = 0) {
+internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, sizeLog: Long = 0L, processed: Int = 0) {
     try {
-        invoke(null, buf, processed)
+        invoke(null, buf, sizeLog, processed)
     } catch (_: Throwable) {}
 }
 
 @JvmInline
 internal value class LogBuffer private constructor(internal val channel: Channel<LogAction>) {
     internal constructor(): this(Channel(UNLIMITED))
+
+    internal companion object {
+
+        // Special return value for a LogAction to trigger rotateLogs
+        internal const val EXECUTE_ROTATE_LOGS = -42L
+
+        // Special return value for a LogAction to trigger rotateLogs
+        // and then retry the LogAction again. See FileLog.log().
+        internal const val EXECUTE_ROTATE_LOGS_AND_RETRY = -615L
+
+        // To prevent infinite loops. In the unlikely event a log rotation
+        // results in a lost lock for the log file and another process writes
+        // to it before we are able to re-acquire it, and then the log rotation
+        // is needed AGAIN. If the value is exceeded, LogAction produced by
+        // FileLog.log() will simply write its log and move on.
+        internal const val MAX_RETRIES = 5
+    }
 }
 
 @OptIn(ExperimentalContracts::class)
