@@ -72,6 +72,13 @@ class LogBufferUnitTest {
     }
 
     @Test
+    fun givenCapacity_whenLessThan1_thenThrowsIllegalArgumentException() = runTest {
+        assertFailsWith<IllegalArgumentException> {
+            LogBuffer(capacity = 0, null, scope = this)
+        }
+    }
+
+    @Test
     fun givenMaxBuffered_whenCapacityExceeded_thenOldestDroppedIsConsumed() = runTest {
         val logBuffer = LogBuffer(capacity = 5, null, scope = this)
         var invocations = 0

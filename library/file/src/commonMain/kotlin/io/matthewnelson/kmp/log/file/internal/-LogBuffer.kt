@@ -80,6 +80,7 @@ internal value class LogBuffer private constructor(internal val channel: Channel
 
     internal constructor(): this(Channel(UNLIMITED))
 
+    @Throws(IllegalArgumentException::class)
     internal constructor(capacity: Int, LOG: Log.Logger?, scope: CoroutineScope): this(Channel(
         capacity = capacity,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -91,7 +92,7 @@ internal value class LogBuffer private constructor(internal val channel: Channel
             }
         }
     )) {
-        // Use other constructor
+        require(capacity > 0) { "capacity < 1" }
         require(capacity != UNLIMITED) { "capacity == Channel.UNLIMITED" }
     }
 
