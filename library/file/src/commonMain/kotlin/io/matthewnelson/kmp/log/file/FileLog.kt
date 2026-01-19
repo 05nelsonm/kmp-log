@@ -78,6 +78,7 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -186,6 +187,12 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
+    public val maxLogBuffered: Int
+
+    /**
+     * TODO
+     * */
+    @JvmField
     public val maxLogSize: Long
 
     /**
@@ -273,6 +280,7 @@ public class FileLog: Log {
         private var _modeFile = ModeBuilder.of(isDirectory = false)
         private var _fileName = "log"
         private var _fileExtension = ""
+        private var _maxLogBuffered: Int = Channel.UNLIMITED
         private var _maxLogSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
         private var _maxLogs: Byte = if (isDesktop()) 5 else 3
         private var _maxLogYield: Byte = 10
@@ -435,6 +443,15 @@ public class FileLog: Log {
             _fileExtension = name
             return this
         }
+
+        /**
+         * DEFAULT: [Channel.UNLIMITED] (i.e. [Int.MAX_VALUE])
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun maxLogBuffered(capacity: Int): Builder = apply { _maxLogBuffered = capacity }
 
         /**
          * DEFAULT:
@@ -737,6 +754,7 @@ public class FileLog: Log {
                 files0Hash = files0Hash,
                 modeDirectory = _modeDirectory.build(),
                 modeFile = _modeFile.build(),
+                maxLogBuffered = _maxLogBuffered.coerceAtLeast(1_000),
                 maxLogSize = _maxLogSize.coerceAtLeast(50L * 1024L), // 50kb
                 maxLogYield = _maxLogYield.coerceAtLeast(1),
                 blacklistDomain = blacklistDomain,
@@ -782,6 +800,7 @@ public class FileLog: Log {
         files0Hash: String,
         modeDirectory: String,
         modeFile: String,
+        maxLogBuffered: Int,
         maxLogSize: Long,
         maxLogYield: Byte,
         blacklistDomain: Set<String>,
@@ -844,6 +863,7 @@ public class FileLog: Log {
         this.logFiles0Hash = files0Hash
         this.modeDirectory = modeDirectory
         this.modeFile = modeFile
+        this.maxLogBuffered = maxLogBuffered
         this.maxLogSize = maxLogSize
         this.maxLogYield = maxLogYield
         this.blacklistDomain = blacklistDomain
@@ -989,7 +1009,12 @@ public class FileLog: Log {
     }
 
     override fun onInstall() {
-        val logBuffer = LogBuffer()
+        val logBuffer = if (maxLogBuffered == Channel.UNLIMITED) {
+            LogBuffer()
+        } else {
+            LogBuffer(capacity = maxLogBuffered, LOG, logScope)
+        }
+
         val logJob = _logJob
 
         @OptIn(DelicateCoroutinesApi::class)

@@ -6,6 +6,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 	public final field logDirectory Ljava/lang/String;
 	public final field logFiles Ljava/util/List;
 	public final field logFiles0Hash Ljava/lang/String;
+	public final field maxLogBuffered I
 	public final field maxLogSize J
 	public final field maxLogYield B
 	public final field modeDirectory Ljava/lang/String;
@@ -13,7 +14,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 	public final field whitelistDomain Ljava/util/Set;
 	public final field whitelistDomainNull Z
 	public final field whitelistTag Ljava/util/Set;
-	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JBLjava/util/Set;Ljava/util/Set;ZLjava/util/Set;ZLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IJBLjava/util/Set;Ljava/util/Set;ZLjava/util/Set;ZLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun isActive ()Z
 	public final fun uninstallAndJoin (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
@@ -38,6 +39,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 	public final fun fileOtherReadable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun fileOtherWritable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun max (Lio/matthewnelson/kmp/log/Log$Level;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
+	public final fun maxLogBuffered (I)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun maxLogSize (J)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun maxLogYield (B)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun maxLogs (B)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
