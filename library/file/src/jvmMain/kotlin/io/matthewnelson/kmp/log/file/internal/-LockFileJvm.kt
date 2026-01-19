@@ -23,6 +23,10 @@ import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.wrapIOException
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.MappedByteBuffer
+import java.nio.channels.ReadableByteChannel
+import java.nio.channels.WritableByteChannel
 
 @Suppress("ACTUAL_WITHOUT_EXPECT", "ACTUAL_ANNOTATIONS_NOT_MATCH_EXPECT")
 internal actual typealias FileLock = java.nio.channels.FileLock
@@ -58,4 +62,44 @@ internal fun File.openNioFileChannel(): LockFile  = try {
         throw e
     }
     throw t.wrapIOException()
+}
+
+// java.nio.channels.FileLock requires non-null FileChannel
+// for first parameter. This satisfies that requirement...
+@Suppress("RedundantNullableReturnType")
+private object InvalidLockFile: LockFile() {
+    override fun read(p0: ByteBuffer?): Int = error("unused")
+    override fun read(p0: Array<out ByteBuffer?>?, p1: Int, p2: Int): Long = error("unused")
+    override fun write(p0: ByteBuffer?): Int = error("unused")
+    override fun write(p0: Array<out ByteBuffer?>?, p1: Int, p2: Int): Long = error("unused")
+    override fun position(): Long = error("unused")
+    override fun position(p0: Long): LockFile? = error("unused")
+    override fun size(): Long = error("unused")
+    override fun truncate(p0: Long): LockFile? = error("unused")
+    override fun force(p0: Boolean) { error("unused") }
+    override fun transferTo(p0: Long, p1: Long, p2: WritableByteChannel?): Long = error("unused")
+    override fun transferFrom(p0: ReadableByteChannel?, p1: Long, p2: Long): Long = error("unused")
+    override fun read(p0: ByteBuffer?, p1: Long): Int = error("unused")
+    override fun write(p0: ByteBuffer?, p1: Long): Int = error("unused")
+    override fun map(p0: MapMode?, p1: Long, p2: Long): MappedByteBuffer? = error("unused")
+    override fun lock(p0: Long, p1: Long, p2: Boolean): FileLock? = error("unused")
+    override fun tryLock(p0: Long, p1: Long, p2: Boolean): FileLock? = error("unused")
+    override fun implCloseChannel() {}
+}
+
+internal actual object InvalidFileLock: FileLock(
+    /* channel = */ InvalidLockFile,
+    /* position = */ FILE_LOCK_POS_LOG,
+    /* size = */ FILE_LOCK_SIZE,
+    /* shared = */ false,
+) {
+
+    actual override fun isValid(): Boolean = false
+    actual override fun release() {}
+
+    init {
+        try {
+            channel()?.close()
+        } catch (_: Throwable) {}
+    }
 }
