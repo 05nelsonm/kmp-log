@@ -13,11 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:JvmName("FileLogNonJs")
+@file:JvmName("FileLogConcurrent")
 
 package io.matthewnelson.kmp.log.file
 
 import io.matthewnelson.kmp.log.file.internal.CurrentThread
+import io.matthewnelson.kmp.log.file.internal.uninstallAndAwait
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -27,12 +28,16 @@ import kotlin.jvm.JvmName
 /**
  * TODO
  *
+ * @see [FileLog.uninstallAndJoin]
+ *
  * @throws [ClassCastException]
  * */
 public fun FileLog.uninstallAndBlock() {
-    CurrentThread.uninterrupted {
-        runBlocking(Dispatchers.IO) {
-            uninstallAndJoin()
+    uninstallAndAwait { internalLogJobJoin ->
+        CurrentThread.uninterrupted {
+            runBlocking(Dispatchers.IO) {
+                internalLogJobJoin.invoke()
+            }
         }
     }
 }
