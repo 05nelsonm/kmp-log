@@ -7,6 +7,8 @@
 
 // Library unique name: <io.matthewnelson.kmp-log:file>
 final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log { // io.matthewnelson.kmp.log.file/FileLog|null[0]
+    final val blacklistDomain // io.matthewnelson.kmp.log.file/FileLog.blacklistDomain|{}blacklistDomain[0]
+        final fun <get-blacklistDomain>(): kotlin.collections/Set<kotlin/String> // io.matthewnelson.kmp.log.file/FileLog.blacklistDomain.<get-blacklistDomain>|<get-blacklistDomain>(){}[0]
     final val isActive // io.matthewnelson.kmp.log.file/FileLog.isActive|{}isActive[0]
         final fun <get-isActive>(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.isActive.<get-isActive>|<get-isActive>(){}[0]
     final val logDirectory // io.matthewnelson.kmp.log.file/FileLog.logDirectory|{}logDirectory[0]
@@ -42,6 +44,10 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         final val logDirectory // io.matthewnelson.kmp.log.file/FileLog.Builder.logDirectory|{}logDirectory[0]
             final fun <get-logDirectory>(): kotlin/String // io.matthewnelson.kmp.log.file/FileLog.Builder.logDirectory.<get-logDirectory>|<get-logDirectory>(){}[0]
 
+        final fun blacklistDomain(kotlin.collections/Collection<kotlin/String>): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.blacklistDomain|blacklistDomain(kotlin.collections.Collection<kotlin.String>){}[0]
+        final fun blacklistDomain(kotlin/Array<out kotlin/String>...): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.blacklistDomain|blacklistDomain(kotlin.Array<out|kotlin.String>...){}[0]
+        final fun blacklistDomain(kotlin/String): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.blacklistDomain|blacklistDomain(kotlin.String){}[0]
+        final fun blacklistDomainReset(): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.blacklistDomainReset|blacklistDomainReset(){}[0]
         final fun build(): io.matthewnelson.kmp.log.file/FileLog // io.matthewnelson.kmp.log.file/FileLog.Builder.build|build(){}[0]
         final fun debug(kotlin/Boolean): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.debug|debug(kotlin.Boolean){}[0]
         final fun directoryGroupReadable(kotlin/Boolean): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.directoryGroupReadable|directoryGroupReadable(kotlin.Boolean){}[0]
@@ -68,6 +74,11 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         final fun whitelistTag(kotlin/Array<out kotlin/String>...): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistTag|whitelistTag(kotlin.Array<out|kotlin.String>...){}[0]
         final fun whitelistTag(kotlin/String): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistTag|whitelistTag(kotlin.String){}[0]
         final fun whitelistTagReset(): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistTagReset|whitelistTagReset(){}[0]
+    }
+
+    final object Companion { // io.matthewnelson.kmp.log.file/FileLog.Companion|null[0]
+        final const val DOMAIN // io.matthewnelson.kmp.log.file/FileLog.Companion.DOMAIN|{}DOMAIN[0]
+            final fun <get-DOMAIN>(): kotlin/String // io.matthewnelson.kmp.log.file/FileLog.Companion.DOMAIN.<get-DOMAIN>|<get-DOMAIN>(){}[0]
     }
 }
 
