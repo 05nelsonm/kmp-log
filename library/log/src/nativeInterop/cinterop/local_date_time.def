@@ -7,7 +7,7 @@ package = io.matthewnelson.kmp.log.internal
 #endif // _WIN32
 
 /**
- * The size of the array required by kmp_log_local_date_time
+ * The size of the array required by kmp_log_local_date_time.
  **/
 #define KMP_LOG_LOCAL_DATE_TIME_SIZE 7
 

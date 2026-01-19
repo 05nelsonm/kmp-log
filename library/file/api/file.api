@@ -58,7 +58,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 public final class io/matthewnelson/kmp/log/file/FileLog$Companion {
 }
 
-public final class io/matthewnelson/kmp/log/file/FileLogNonJs {
+public final class io/matthewnelson/kmp/log/file/FileLogConcurrent {
 	public static final fun uninstallAndBlock (Lio/matthewnelson/kmp/log/file/FileLog;)V
 }
 

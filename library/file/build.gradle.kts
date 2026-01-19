@@ -59,8 +59,8 @@ kmpConfiguration {
                     main to getByName(name + "Test")
                 }
                 if (sets.isEmpty()) return@kotlin
-                val main = maybeCreate("nonJsMain").apply { dependsOn(getByName("commonMain")) }
-                val test = maybeCreate("nonJsTest").apply { dependsOn(getByName("commonTest")) }
+                val main = maybeCreate("concurrentMain").apply { dependsOn(getByName("commonMain")) }
+                val test = maybeCreate("concurrentTest").apply { dependsOn(getByName("commonTest")) }
                 sets.forEach { (m, t) -> m.dependsOn(main); t.dependsOn(test) }
             }
         }

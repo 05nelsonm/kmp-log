@@ -64,6 +64,7 @@ import io.matthewnelson.kmp.log.file.internal.now
 import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
 import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
 import io.matthewnelson.kmp.log.file.internal.pid
+import io.matthewnelson.kmp.log.file.internal.uninstallAndAwait
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
 import io.matthewnelson.kmp.log.file.internal.use
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -246,8 +247,9 @@ public class FileLog: Log {
      * @throws [ClassCastException]
      * */
     public suspend fun uninstallAndJoin() {
-        val instance = uninstallAndGet(uid) ?: return
-        (instance as FileLog)._logJob?.join()
+        uninstallAndAwait { internalLogJobJoin ->
+            internalLogJobJoin.invoke()
+        }
     }
 
     // TODO: (Issue #60)
@@ -1855,4 +1857,7 @@ public class FileLog: Log {
             t?.printStackTrace()
         }
     }
+
+    @JvmSynthetic
+    internal suspend fun internalLogJobJoin() { _logJob?.join() }
 }
