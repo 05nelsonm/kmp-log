@@ -16,21 +16,9 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.log.Log
-import io.matthewnelson.kmp.log.file.FileLog
-import kotlin.contracts.ExperimentalContracts
-import kotlin.contracts.InvocationKind
-import kotlin.contracts.contract
 
 internal expect inline fun Log.Root.isDesktop(): Boolean
 
 internal expect fun Log.Root.now(): CharSequence
 
 internal expect fun Log.Root.pid(): Int
-
-@Throws(ClassCastException::class)
-@OptIn(ExperimentalContracts::class)
-internal inline fun FileLog.uninstallAndAwait(block: (internalLogJobJoin: suspend () -> Unit) -> Unit) {
-    contract { callsInPlace(block, InvocationKind.AT_MOST_ONCE) }
-    val instance = Log.uninstallAndGet(uid) ?: return
-    block((instance as FileLog)::internalLogJobJoin)
-}

@@ -50,22 +50,6 @@ kmpConfiguration {
         }
 
         kotlin {
-            with(sourceSets) {
-                val sets = arrayOf(
-                    "jvm",
-                    "native",
-                ).mapNotNull { name ->
-                    val main = findByName(name + "Main") ?: return@mapNotNull null
-                    main to getByName(name + "Test")
-                }
-                if (sets.isEmpty()) return@kotlin
-                val main = maybeCreate("concurrentMain").apply { dependsOn(getByName("commonMain")) }
-                val test = maybeCreate("concurrentTest").apply { dependsOn(getByName("commonTest")) }
-                sets.forEach { (m, t) -> m.dependsOn(main); t.dependsOn(test) }
-            }
-        }
-
-        kotlin {
             val cinteropDir = project.projectDir
                 .resolve("src")
                 .resolve("nativeInterop")

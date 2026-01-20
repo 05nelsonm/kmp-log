@@ -1021,6 +1021,7 @@ public abstract class Log {
             check(uninstall(uid)) { "A Log instance with uid[$uid] is not currently installed." }
         }
 
+        // NOTE: If ever changed, update FileLog.Companion
         private const val ROOT_DOMAIN: String = "kmp-log:log"
         private const val ROOT_TAG: String = "Log.Root"
 

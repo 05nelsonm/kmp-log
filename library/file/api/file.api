@@ -9,14 +9,16 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 	public final field maxLogBuffered I
 	public final field maxLogFileSize J
 	public final field maxLogYield B
+	public final field minWaitOn Lio/matthewnelson/kmp/log/Log$Level;
 	public final field modeDirectory Ljava/lang/String;
 	public final field modeFile Ljava/lang/String;
 	public final field whitelistDomain Ljava/util/Set;
 	public final field whitelistDomainNull Z
 	public final field whitelistTag Ljava/util/Set;
-	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IJBLjava/util/Set;Ljava/util/Set;ZLjava/util/Set;ZLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IJBLjava/util/Set;Ljava/util/Set;ZLjava/util/Set;ZLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun isActive ()Z
-	public final fun uninstallAndJoin (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun uninstallAndAwaitAsync (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun uninstallAndAwaitSync ()Z
 }
 
 public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
@@ -44,6 +46,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 	public final fun maxLogFiles (B)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun maxLogYield (B)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun min (Lio/matthewnelson/kmp/log/Log$Level;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
+	public final fun minWaitOn (Lio/matthewnelson/kmp/log/Log$Level;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomain (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomain (Ljava/util/Collection;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomain ([Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
@@ -56,9 +59,5 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 }
 
 public final class io/matthewnelson/kmp/log/file/FileLog$Companion {
-}
-
-public final class io/matthewnelson/kmp/log/file/FileLogConcurrent {
-	public static final fun uninstallAndBlock (Lio/matthewnelson/kmp/log/file/FileLog;)V
 }
 
