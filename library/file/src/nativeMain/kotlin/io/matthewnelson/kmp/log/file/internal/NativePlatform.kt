@@ -17,7 +17,7 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
-import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.file.FileLog
 import io.matthewnelson.kmp.log.internal.KMP_LOG_LOCAL_DATE_TIME_SIZE
 import io.matthewnelson.kmp.log.internal.kmp_log_local_date_time
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -27,7 +27,7 @@ import platform.posix.getpid
 
 private const val ZERO_TIME = "00-00 00:00:00.000"
 
-internal actual fun Log.Root.now(): CharSequence {
+internal actual fun FileLog.Companion.now(): CharSequence {
     @OptIn(ExperimentalForeignApi::class)
     val dateTime = IntArray(KMP_LOG_LOCAL_DATE_TIME_SIZE)
     @OptIn(ExperimentalForeignApi::class)
@@ -66,4 +66,4 @@ internal actual fun Log.Root.now(): CharSequence {
     }
 }
 
-internal actual fun Log.Root.pid(): Int = getpid()
+internal actual fun FileLog.Companion.pid(): Int = getpid()

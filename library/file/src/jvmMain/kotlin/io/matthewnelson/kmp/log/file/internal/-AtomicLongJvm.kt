@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Matthew Nelson
+ * Copyright (c) 2026 Matthew Nelson
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,10 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("NOTHING_TO_INLINE")
+@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING", "NOTHING_TO_INLINE")
 
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.log.file.FileLog
 
-internal actual inline fun FileLog.Companion.isDesktop(): Boolean = true
+@Suppress("ACTUAL_WITHOUT_EXPECT")
+internal actual typealias AtomicLong = java.util.concurrent.atomic.AtomicLong
+
+internal actual inline fun FileLog.Companion.atomicLong(initialValue: Long): AtomicLong = AtomicLong(initialValue)
+
+internal actual inline fun AtomicLong.valueGet(): Long = get()
+internal actual inline fun AtomicLong.valueIncrement() { incrementAndGet() }
+internal actual inline fun AtomicLong.valueDecrement() { decrementAndGet() }

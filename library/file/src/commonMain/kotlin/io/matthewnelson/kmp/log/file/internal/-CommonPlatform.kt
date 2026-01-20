@@ -15,10 +15,10 @@
  **/
 package io.matthewnelson.kmp.log.file.internal
 
-import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.file.FileLog
 
-internal expect inline fun Log.Root.isDesktop(): Boolean
+internal expect inline fun FileLog.Companion.isDesktop(): Boolean
 
-internal expect fun Log.Root.now(): CharSequence
+internal expect fun FileLog.Companion.now(): CharSequence
 
-internal expect fun Log.Root.pid(): Int
+internal expect fun FileLog.Companion.pid(): Int
