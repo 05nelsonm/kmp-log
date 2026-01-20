@@ -43,6 +43,7 @@ internal fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite = try 
     }
 }
 
+// NOTE: Do NOT use on FileLog.dotLockFile
 internal fun File.exists2Robustly(): Boolean {
     try {
         if (exists2()) return true
