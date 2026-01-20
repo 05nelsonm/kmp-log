@@ -110,7 +110,7 @@ internal value class LogBuffer private constructor(internal val channel: Channel
         // to it before we are able to re-acquire it, and then the log rotation
         // is needed AGAIN. If the value is exceeded, LogAction produced by
         // FileLog.log() will simply write its log and move on.
-        internal const val MAX_RETRIES = 5
+        internal const val MAX_RETRIES = 3
 
         private val EMPTY_BUF = ByteArray(0)
     }
