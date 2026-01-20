@@ -957,8 +957,18 @@ public class FileLog: Log {
             logScope.async(start = CoroutineStart.LAZY) {
                 val formatted = format(time, pid(), tid, level, domain, tag, msg, t)
                 if (formatted.isNullOrEmpty()) return@async null
-                yield()
-                formatted to formatted.sizeUTF8(UTF8)
+
+                // Highly unlikely, but if it is the case skip the work
+                // which is only used to see if a log rotation is needed;
+                // the value is not returned by the below LogAction, so.
+                val sizeUTF8 = if (formatted.length >= maxLogFileSize) {
+                    maxLogFileSize
+                } else {
+                    yield()
+                    formatted.sizeUTF8(UTF8)
+                }
+
+                formatted to sizeUTF8
             }
         }
 
@@ -1065,7 +1075,7 @@ public class FileLog: Log {
         }
 
         if (trySendResult.isFailure) {
-            // Channel is closed for sending
+            // LogBuffer.channel is closed for sending
             waitJob?.cancel()
             preprocessing.cancel()
             return false
