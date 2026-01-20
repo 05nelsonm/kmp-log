@@ -16,12 +16,13 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.file.FileLog
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
 @OptIn(ExperimentalContracts::class)
-internal inline fun Log.Root.format(
+internal inline fun FileLog.Companion.format(
     time: CharSequence,
     pid: Int,
     tid: Long,
@@ -71,7 +72,7 @@ internal inline fun Log.Root.format(
 }
 
 @OptIn(ExperimentalContracts::class)
-internal inline fun Log.Root.formatPrefix(
+internal inline fun FileLog.Companion.formatPrefix(
     time: CharSequence,
     pid: Int,
     tid: Long,

@@ -52,6 +52,7 @@ import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE
 import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.MAX_RETRIES
 import io.matthewnelson.kmp.log.file.internal.LogAction
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
+import io.matthewnelson.kmp.log.file.internal.atomicLong
 import io.matthewnelson.kmp.log.file.internal.consumeAndIgnore
 import io.matthewnelson.kmp.log.file.internal.exists2Robustly
 import io.matthewnelson.kmp.log.file.internal.format
@@ -66,6 +67,9 @@ import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
 import io.matthewnelson.kmp.log.file.internal.pid
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
 import io.matthewnelson.kmp.log.file.internal.use
+import io.matthewnelson.kmp.log.file.internal.valueDecrement
+import io.matthewnelson.kmp.log.file.internal.valueGet
+import io.matthewnelson.kmp.log.file.internal.valueIncrement
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -254,6 +258,12 @@ public class FileLog: Log {
      * */
     @get:JvmName("isActive")
     public val isActive: Boolean get() = _logJob?.isActive ?: false
+
+    /**
+     * TODO
+     * */
+    @get:JvmName("bufferedLogCount")
+    public val bufferedLogCount: Long get() = _bufferedLogCount.valueGet()
 
     /**
      * TODO
@@ -841,6 +851,7 @@ public class FileLog: Log {
     private var _logBuffer: LogBuffer? = null
     @Volatile
     private var _logJob: Job? = null
+    private val _bufferedLogCount = atomicLong(0L)
 
     private constructor(
         min: Level,
@@ -994,6 +1005,7 @@ public class FileLog: Log {
             if (stream == null) {
                 preprocessing.cancel()
                 waitJob?.cancel()
+                _bufferedLogCount.valueDecrement()
                 return@logAction 0L
             }
 
@@ -1015,6 +1027,7 @@ public class FileLog: Log {
                     }
                 }
 
+                _bufferedLogCount.valueDecrement()
                 waitJob?.cancel()
 
                 // threw will only ever be non-null when result == null
@@ -1065,6 +1078,7 @@ public class FileLog: Log {
                 }
             }
 
+            _bufferedLogCount.valueDecrement()
             threw?.let { t ->
                 waitJob?.cancel()
                 throw t
@@ -1081,6 +1095,7 @@ public class FileLog: Log {
             return false
         }
 
+        _bufferedLogCount.valueIncrement()
         preprocessing.start()
         if (waitJob == null) return true
 
@@ -1362,7 +1377,11 @@ public class FileLog: Log {
                 }
             }
 
-            logD { "Current ${files[0].name} size is $size" }
+            logD {
+                val count = _bufferedLogCount.valueGet()
+                val word = if (count == 1L) "log" else "logs"
+                "Current ${files[0].name} file byte size is $size, with $count $word in the buffer"
+            }
 
             var processed = 0
             CurrentThread.uninterrupted {

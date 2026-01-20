@@ -9,6 +9,8 @@
 final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log { // io.matthewnelson.kmp.log.file/FileLog|null[0]
     final val blacklistDomain // io.matthewnelson.kmp.log.file/FileLog.blacklistDomain|{}blacklistDomain[0]
         final fun <get-blacklistDomain>(): kotlin.collections/Set<kotlin/String> // io.matthewnelson.kmp.log.file/FileLog.blacklistDomain.<get-blacklistDomain>|<get-blacklistDomain>(){}[0]
+    final val bufferedLogCount // io.matthewnelson.kmp.log.file/FileLog.bufferedLogCount|{}bufferedLogCount[0]
+        final fun <get-bufferedLogCount>(): kotlin/Long // io.matthewnelson.kmp.log.file/FileLog.bufferedLogCount.<get-bufferedLogCount>|<get-bufferedLogCount>(){}[0]
     final val isActive // io.matthewnelson.kmp.log.file/FileLog.isActive|{}isActive[0]
         final fun <get-isActive>(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.isActive.<get-isActive>|<get-isActive>(){}[0]
     final val logDirectory // io.matthewnelson.kmp.log.file/FileLog.logDirectory|{}logDirectory[0]

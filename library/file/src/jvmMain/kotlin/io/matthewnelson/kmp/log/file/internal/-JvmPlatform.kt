@@ -18,19 +18,19 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.ANDROID
-import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.file.FileLog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-internal actual inline fun Log.Root.isDesktop(): Boolean = ANDROID.SDK_INT == null
+internal actual inline fun FileLog.Companion.isDesktop(): Boolean = ANDROID.SDK_INT == null
 
-internal actual fun Log.Root.now(): CharSequence {
+internal actual fun FileLog.Companion.now(): CharSequence {
     val now = Date(System.currentTimeMillis())
     return LOG_TIME_FORMAT.format(now)
 }
 
-internal actual fun Log.Root.pid(): Int = JVM_PID
+internal actual fun FileLog.Companion.pid(): Int = JVM_PID
 
 private val LOG_TIME_FORMAT = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
 

@@ -17,6 +17,6 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
-import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.file.FileLog
 
-internal actual inline fun Log.Root.isDesktop(): Boolean = true
+internal actual inline fun FileLog.Companion.isDesktop(): Boolean = true

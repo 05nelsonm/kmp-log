@@ -17,7 +17,8 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
-import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.Log.Level
+import io.matthewnelson.kmp.log.file.FileLog
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -29,7 +30,7 @@ class FormatUnitTest {
 
     @Test
     fun givenTime_whenNow_thenIsFormattedAsExpected() {
-        val actual = Log.Root.now()
+        val actual = FileLog.now()
         assertEquals(TEST_TIME.length, actual.length)
         assertEquals(1, actual.count { c -> c.isWhitespace() })
         assertEquals(1, actual.count { c -> c == '-'})
@@ -41,11 +42,11 @@ class FormatUnitTest {
     fun givenFormat_whenTrace_thenCalculatedCapacityEqualsResultLength() {
         var invocations = 0
 
-        val actual = Log.Root.format(
+        val actual = FileLog.format(
             time = TEST_TIME,
             pid = 2,
             tid = 2L,
-            level = Log.Level.Debug,
+            level = Level.Debug,
             domain = null,
             tag = "Tag",
             msg = "some\nmessage\n",
@@ -65,11 +66,11 @@ class FormatUnitTest {
 
     @Test
     fun givenFormat_whenCalculatedCapacityIsO_thenReturnsNull() {
-        val actual = Log.Root.format(
+        val actual = FileLog.format(
             time = TEST_TIME,
             pid = 2,
             tid = 2L,
-            level = Log.Level.Debug,
+            level = Level.Debug,
             domain = null,
             tag = "Tag",
             msg = "\n\n", // Will be empty lines
@@ -81,11 +82,11 @@ class FormatUnitTest {
 
     @Test
     fun givenFormatPrefix_whenPidLessThan1_thenIsUnknown() {
-        val actual = Log.Root.formatPrefix(
+        val actual = FileLog.formatPrefix(
             time = TEST_TIME,
             pid = -1,
             tid = 2L,
-            level = Log.Level.Debug,
+            level = Level.Debug,
             domain = null,
             tag = "Tag",
         )
@@ -96,11 +97,11 @@ class FormatUnitTest {
 
     @Test
     fun givenFormatPrefix_whenTidLessThan0_thenIsUnknown() {
-        val actual = Log.Root.formatPrefix(
+        val actual = FileLog.formatPrefix(
             time = TEST_TIME,
             pid = 5555,
             tid = -1L,
-            level = Log.Level.Debug,
+            level = Level.Debug,
             domain = null,
             tag = "Tag",
         )
@@ -111,11 +112,11 @@ class FormatUnitTest {
 
     @Test
     fun givenFormatPrefix_whenDomainPresent_thenIsFormattedAsExpected() {
-        val actual = Log.Root.formatPrefix(
+        val actual = FileLog.formatPrefix(
             time = TEST_TIME,
             pid = 5555,
             tid = 1L,
-            level = Log.Level.Debug,
+            level = Level.Debug,
             domain = "some.domain",
             tag = "Tag",
         )
