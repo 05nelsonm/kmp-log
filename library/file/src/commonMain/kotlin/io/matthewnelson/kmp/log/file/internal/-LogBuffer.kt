@@ -23,6 +23,9 @@ import io.matthewnelson.kmp.log.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
@@ -78,7 +81,17 @@ internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, sizeLog: 
 @JvmInline
 internal value class LogBuffer private constructor(internal val channel: Channel<LogAction>) {
 
-    internal constructor(): this(Channel(UNLIMITED))
+    internal constructor(): this(Channel(
+        capacity = UNLIMITED,
+        // This "should" NEVER happen because LogBuffer.use is
+        // utilized in the FileLog.onInstall LogJob, so.
+        onUndeliveredElement = { logAction ->
+            @OptIn(DelicateCoroutinesApi::class)
+            GlobalScope.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
+                logAction.consumeAndIgnore(EMPTY_BUF)
+            }
+        }
+    ))
 
     @Throws(IllegalArgumentException::class)
     internal constructor(capacity: Int, LOG: Log.Logger?, scope: CoroutineScope): this(Channel(
