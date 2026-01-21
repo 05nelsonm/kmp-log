@@ -17,6 +17,7 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
+import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
@@ -26,24 +27,31 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlin.jvm.JvmInline
 
 @JvmInline
 internal value class LogScope private constructor(
-    @Deprecated("Use LogScope.{launch/async}", level = DeprecationLevel.ERROR)
+    @Deprecated("Use LogScope.{launch/async/supervisorJob}", level = DeprecationLevel.ERROR)
     internal val scope: CoroutineScope
 ) {
+
     internal constructor(
         uidSuffix: String,
         handler: CoroutineExceptionHandler,
     ): this(scope = CoroutineScope(context =
-        CoroutineName(uidSuffix)
-        + SupervisorJob()
+        CoroutineName(name = uidSuffix)
+        + SupervisorJob(parent = null)
         + handler
         // A CoroutineDispatcher is intentionally NOT specified
-        // because FileLog allocates one in onInstall.
+        // because FileLog allocates one via onInstall.
     ))
+
+    internal inline val supervisorJob: CompletableJob get() {
+        @Suppress("DEPRECATION_ERROR")
+        return scope.coroutineContext.job as CompletableJob
+    }
 }
 
 // Intentionally does not define defaults to force declarations

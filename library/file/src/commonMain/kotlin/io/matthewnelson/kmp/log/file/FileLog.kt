@@ -999,12 +999,12 @@ public class FileLog: Log {
 
         val logWait = if (level >= minWaitOn) {
             when (domain) {
-                null -> LogWait()
+                null -> LogWait(logScope)
                 // Do not block for FileLog or Log.Root logs. They should NEVER
                 // be Level.Fatal, but it is checked for regardless, just in case
                 // someone is attempting to bypass it.
-                DOMAIN, ROOT_DOMAIN -> if (level == Level.Fatal) LogWait() else null
-                else -> LogWait()
+                DOMAIN, ROOT_DOMAIN -> if (level == Level.Fatal) LogWait(logScope) else null
+                else -> LogWait(logScope)
             }
         } else {
             null
@@ -1337,16 +1337,15 @@ public class FileLog: Log {
         var lockFileCompletion = _lockFileCompletion
         var logStream = _logStream
         var logStreamCompletion = _logStreamCompletion
-        val thisJob = currentCoroutineContext().job
 
-        thisJob.invokeOnCompletion { logD { "$LOG_LOOP Stopped >> $thisJob" } }
+        logLoopJob.invokeOnCompletion { logD { "$LOG_LOOP Stopped >> $logLoopJob" } }
 
         // Utilized for log rotation things. These actions contain no actual
         // write functionality, but are to be woven into the loop as a "priority
         // queue" for scheduling retries and coordinating lockFile/logStream
         // re-open behavior.
         val rotateActionQueue = LogBuffer()
-        thisJob.invokeOnCompletion { rotateActionQueue.channel.cancel() }
+        logLoopJob.invokeOnCompletion { rotateActionQueue.channel.cancel() }
 
         // By queueing up an empty action for immediate execution, the loop
         // will be able to check for an interrupted log rotation. If the
@@ -1359,7 +1358,7 @@ public class FileLog: Log {
         // here and retried after a log rotation is performed. This allows
         // us to not drop lockLog and perform an immediate retry.
         val retryActionQueue = ArrayDeque<LogAction>(1)
-        thisJob.invokeOnCompletion {
+        logLoopJob.invokeOnCompletion {
             // This should NEVER be the case...
             var count = 0
             while (true) {
@@ -1377,11 +1376,11 @@ public class FileLog: Log {
 
         // Migrate completion handles to this scope (take ownership over them)
         lockFileCompletion.dispose()
-        lockFileCompletion = thisJob.closeOnCompletion(lockFile, logOpen = false)
+        lockFileCompletion = logLoopJob.closeOnCompletion(lockFile, logOpen = false)
         logStreamCompletion.dispose()
-        logStreamCompletion = thisJob.closeOnCompletion(logStream, logOpen = false)
+        logStreamCompletion = logLoopJob.closeOnCompletion(logStream, logOpen = false)
 
-        logD { "$LOG_LOOP Started >> $thisJob" }
+        logD { "$LOG_LOOP Started >> $logLoopJob" }
 
         var lockLog: FileLock = InvalidFileLock
 
@@ -1443,9 +1442,9 @@ public class FileLog: Log {
 
                     try {
                         logD(ee) { "Closed >> $lockFile" }
-                        thisJob.ensureActive()
+                        logLoopJob.ensureActive()
                         lockFile = dotLockFile.openLockFileRobustly()
-                        lockFileCompletion = thisJob.closeOnCompletion(lockFile)
+                        lockFileCompletion = logLoopJob.closeOnCompletion(lockFile)
                         // TODO: Blocking timeout monitor
                         lockFile.lockLog()
                     } catch (tt: Throwable) {
@@ -1485,9 +1484,9 @@ public class FileLog: Log {
 
                     try {
                         logD(ee) { "Closed >> $logStream" }
-                        thisJob.ensureActive()
+                        logLoopJob.ensureActive()
                         logStream = files[0].openLogFileRobustly(modeFile)
-                        logStreamCompletion = thisJob.closeOnCompletion(logStream)
+                        logStreamCompletion = logLoopJob.closeOnCompletion(logStream)
                         size = logStream.size()
                         logStream.position(size)
                     } catch (t: Throwable) {
@@ -1560,7 +1559,7 @@ public class FileLog: Log {
                         // Yield to another process (potentially)
                         processed >= maxLogYield -> null
                         // Job cancellation
-                        !thisJob.isActive -> null
+                        !logLoopJob.isActive -> null
                         else -> rotateActionQueue.channel.tryReceive().getOrNull()
                             ?: retryActionQueue.removeFirstOrNull()
                             ?: channel.tryReceive().getOrNull()
@@ -1596,7 +1595,7 @@ public class FileLog: Log {
                 }
             }
 
-            if (thisJob.isActive && size >= maxLogFileSize) {
+            if (logLoopJob.isActive && size >= maxLogFileSize) {
                 if (lockLog.isValid()) {
                     CurrentThread.uninterrupted {
                         rotateLogs(
@@ -2059,9 +2058,8 @@ public class FileLog: Log {
         return 0L
     }
 
-    @Suppress("UnusedReceiverParameter")
     private suspend fun LogLoopScope.awaitLogRotation() {
-        currentCoroutineContext().job.children.forEach { child ->
+        logLoopJob.children.forEach { child ->
             logD {
                 if (!child.isActive) null
                 else "Waiting for $LOG_ROTATION to complete >> $child"

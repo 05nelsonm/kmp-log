@@ -16,7 +16,9 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.job
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
@@ -24,6 +26,7 @@ import kotlin.jvm.JvmInline
 
 @JvmInline
 internal value class LogLoopScope private constructor(internal val scope: CoroutineScope) {
+
     internal companion object {
         @OptIn(ExperimentalContracts::class)
         internal suspend inline fun <R> logLoopScope(
@@ -33,4 +36,6 @@ internal value class LogLoopScope private constructor(internal val scope: Corout
             return coroutineScope { block(LogLoopScope(this)) }
         }
     }
+
+    internal inline val logLoopJob: Job get() = scope.coroutineContext.job
 }
