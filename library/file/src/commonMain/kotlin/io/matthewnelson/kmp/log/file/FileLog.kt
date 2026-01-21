@@ -285,7 +285,7 @@ public class FileLog: Log {
      * */
     public suspend fun uninstallAndAwaitAsync(): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
-        (instance as FileLog)._logJob?.join()
+        (instance as FileLog)._logJob?.join() ?: return false
         return true
     }
 
@@ -1211,7 +1211,7 @@ public class FileLog: Log {
         val dispatcher = newSingleThreadContext(LOG.tag + "-[" + (++_onInstallInvocations) + ']')
 
         val logBuffer = LogBuffer(capacity = maxLogBuffered)
-        val logJob = _logJob
+        val previousLogJob = _logJob
 
         logScope.launch(dispatcher, start = CoroutineStart.ATOMIC) {
             logBuffer.use(LOG) { buf ->
@@ -1219,12 +1219,12 @@ public class FileLog: Log {
 
                 logD { "$LOG_JOB Started >> $thisJob" }
 
-                if (logJob != null) {
+                if (previousLogJob != null) {
                     logD {
-                        if (!logJob.isActive) null
-                        else "Waiting for previous $LOG_JOB to complete >> $logJob"
+                        if (!previousLogJob.isActive) null
+                        else "Waiting for previous $LOG_JOB to complete >> $previousLogJob"
                     }
-                    logJob.join()
+                    previousLogJob.join()
                 }
 
                 directory.mkdirs2(mode = modeDirectory, mustCreate = false)
