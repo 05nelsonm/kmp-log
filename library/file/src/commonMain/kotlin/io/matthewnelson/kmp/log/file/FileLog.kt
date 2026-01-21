@@ -51,6 +51,8 @@ import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE
 import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE_LOGS_AND_RETRY
 import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.MAX_RETRIES
 import io.matthewnelson.kmp.log.file.internal.LogAction
+import io.matthewnelson.kmp.log.file.internal.LogLoopScope
+import io.matthewnelson.kmp.log.file.internal.LogLoopScope.Companion.logLoopScope
 import io.matthewnelson.kmp.log.file.internal.LogScope
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
 import io.matthewnelson.kmp.log.file.internal.async
@@ -76,7 +78,6 @@ import io.matthewnelson.kmp.log.file.internal.valueIncrement
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -89,7 +90,6 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.channels.ClosedSendChannelException
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -173,6 +173,9 @@ public class FileLog: Log {
 
         // See Log.Root.ROOT_DOMAIN
         private const val ROOT_DOMAIN: String = "kmp-log:log"
+
+        private const val LOG_JOB: String = "LogJob"
+        private const val LOG_LOOP: String = "LogLoop"
         private const val LOG_ROTATION: String = "LogRotation"
     }
 
@@ -1008,10 +1011,9 @@ public class FileLog: Log {
 
         var retries = 0
         val logAction: LogAction = logAction@ { stream, buf, sizeLog, _ ->
-            // Can be null if there was an error with LogLoop which
-            // is shutting down, or the LogAction is being dropped
-            // due to buffer capacity being exceeded (if configured
-            // via Builder.maxLogBuffered).
+            // Can be null if we're being dropped by LogBuffer.use {} completion
+            // or LogBuffer.channel's onUndeliveredElement callback being triggered
+            // due to a send failure because Channel.close had been called.
             if (stream == null) {
                 preprocessing.cancel()
                 waitJob?.cancel()
@@ -1212,6 +1214,10 @@ public class FileLog: Log {
         // a logging dispatcher. If we were to use Dispatchers.IO for everything, then
         // it could result in a deadlock if caller is also using Dispatchers.IO whereby
         // thread starvation occurs and the LogLoop is unable to continue.
+        // TODO: Does each FileLog need its own dispatcher, or can this be done with
+        //  a single dispatcher for all of them? Would need to use non-blocking FileLock
+        //  acquisition, but it IS possible...
+        //  Maybe make it configurable??? >> Builder.useDedicatedLogThread(enable = true)
         val dispatcher = newSingleThreadContext(LOG.tag + "-[" + (++_onInstallInvocations) + ']')
 
         val logBuffer = LogBuffer(capacity = maxLogBuffered)
@@ -1221,12 +1227,12 @@ public class FileLog: Log {
             logBuffer.use(LOG) { buf ->
                 val thisJob = currentCoroutineContext().job
 
-                logD { "LogJob Started >> $thisJob" }
+                logD { "$LOG_JOB Started >> $thisJob" }
 
                 if (logJob != null) {
                     logD {
                         if (!logJob.isActive) null
-                        else "Waiting for previous LogJob to complete >> $logJob"
+                        else "Waiting for previous $LOG_JOB to complete >> $logJob"
                     }
                     logJob.join()
                 }
@@ -1311,7 +1317,7 @@ public class FileLog: Log {
                 }
             }
 
-            job.invokeOnCompletion { logD { "LogJob Stopped >> $job" } }
+            job.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $job" } }
             _logJob = job
         }
 
@@ -1336,14 +1342,14 @@ public class FileLog: Log {
         _lockFileCompletion: DisposableHandle,
         _logStream: FileStream.ReadWrite,
         _logStreamCompletion: DisposableHandle,
-    ): Unit = coroutineScope { // logLoop scope
+    ): Unit = logLoopScope {
         var lockFile = _lockFile
         var lockFileCompletion = _lockFileCompletion
         var logStream = _logStream
         var logStreamCompletion = _logStreamCompletion
         val thisJob = currentCoroutineContext().job
 
-        thisJob.invokeOnCompletion { logD { "LogLoop Stopped >> $thisJob" } }
+        thisJob.invokeOnCompletion { logD { "$LOG_LOOP Stopped >> $thisJob" } }
 
         // Utilized for log rotation things. These actions contain no actual
         // write functionality, but are to be woven into the loop as a "priority
@@ -1385,7 +1391,7 @@ public class FileLog: Log {
         logStreamCompletion.dispose()
         logStreamCompletion = thisJob.closeOnCompletion(logStream, logOpen = false)
 
-        logD { "LogLoop Started >> $thisJob" }
+        logD { "$LOG_LOOP Started >> $thisJob" }
 
         var lockLog: FileLock = InvalidFileLock
 
@@ -1421,7 +1427,7 @@ public class FileLog: Log {
                         try {
                             // If a log rotation is currently underway, we must wait
                             // for it so that we do not invalidate its file lock
-                            thisJob.awaitLogRotationChildJob()
+                            awaitLogRotation()
                         } catch (t: CancellationException) {
                             logAction?.consumeAndIgnore(buf)
                             throw t
@@ -1626,7 +1632,7 @@ public class FileLog: Log {
             } catch (e: IOException) {
                 // If a log rotation is currently underway, we must wait
                 // for it so that we do not invalidate its file lock.
-                thisJob.awaitLogRotationChildJob()
+                awaitLogRotation()
 
                 try {
                     // Close the lock file. Next logLoop iteration will fail
@@ -1647,7 +1653,7 @@ public class FileLog: Log {
     * the renaming of files. This allows for a prompt return to processing logs
     * while the rotation executes.
     * */
-    private suspend fun CoroutineScope.rotateLogs(
+    private suspend fun LogLoopScope.rotateLogs(
         rotateActionQueue: LogBuffer,
         logStream: FileStream.ReadWrite,
         lockFile: LockFile,
@@ -1663,7 +1669,7 @@ public class FileLog: Log {
         // before the initial one finishes moving files. In that
         // event, this will suspend (and in doing so inhibit further
         // log writes because we currently hold lockLog).
-        currentCoroutineContext().job.awaitLogRotationChildJob()
+        awaitLogRotation()
 
         run {
             // At this point, the rotateActionQueue:
@@ -2007,10 +2013,10 @@ public class FileLog: Log {
         }
     }
 
-    private fun CoroutineScope.launchLogRotation(
+    private fun LogLoopScope.launchLogRotation(
         rotateActionQueue: LogBuffer,
         moves: ArrayDeque<Pair<File, File>>,
-    ): Job = launch(context = CoroutineName("$LOG_ROTATION-$logFiles0Hash")) {
+    ): Job = scope.launch(context = CoroutineName("$LOG_ROTATION-$logFiles0Hash")) {
         logD { "$LOG_ROTATION Started >> ${currentCoroutineContext().job}" }
 
 //        val startSize = moves.size
@@ -2063,8 +2069,9 @@ public class FileLog: Log {
         return 0L
     }
 
-    private suspend fun Job.awaitLogRotationChildJob() {
-        children.forEach { child ->
+    @Suppress("UnusedReceiverParameter")
+    private suspend fun LogLoopScope.awaitLogRotation() {
+        currentCoroutineContext().job.children.forEach { child ->
             logD {
                 if (!child.isActive) null
                 else "Waiting for $LOG_ROTATION to complete >> $child"
