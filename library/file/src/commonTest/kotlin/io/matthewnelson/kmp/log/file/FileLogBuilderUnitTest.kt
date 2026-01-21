@@ -207,8 +207,8 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenMaxLogBuffered_whenLessThan1000_thenUses1000() {
-        assertEquals(1_000, newBuilder().maxLogBuffered(0).build().maxLogBuffered)
+    fun givenMaxLogBuffered_whenLessThan0_thenUses0() {
+        assertEquals(0, newBuilder().maxLogBuffered(-1).build().maxLogBuffered)
     }
 
     @Test
