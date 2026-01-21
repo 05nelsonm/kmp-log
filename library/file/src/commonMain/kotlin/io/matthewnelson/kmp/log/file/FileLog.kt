@@ -54,7 +54,9 @@ import io.matthewnelson.kmp.log.file.internal.LogAction
 import io.matthewnelson.kmp.log.file.internal.LogLoopScope
 import io.matthewnelson.kmp.log.file.internal.LogLoopScope.Companion.logLoopScope
 import io.matthewnelson.kmp.log.file.internal.LogScope
+import io.matthewnelson.kmp.log.file.internal.LogSend
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
+import io.matthewnelson.kmp.log.file.internal.LogWait
 import io.matthewnelson.kmp.log.file.internal.async
 import io.matthewnelson.kmp.log.file.internal.atomicLong
 import io.matthewnelson.kmp.log.file.internal.consumeAndIgnore
@@ -89,7 +91,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
-import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -996,14 +997,14 @@ public class FileLog: Log {
             }
         }
 
-        val waitJob = if (level >= minWaitOn) {
+        val logWait = if (level >= minWaitOn) {
             when (domain) {
-                null -> Job()
+                null -> LogWait()
                 // Do not block for FileLog or Log.Root logs. They should NEVER
                 // be Level.Fatal, but it is checked for regardless, just in case
                 // someone is attempting to bypass it.
-                DOMAIN, ROOT_DOMAIN -> if (level == Level.Fatal) Job() else null
-                else -> Job()
+                DOMAIN, ROOT_DOMAIN -> if (level == Level.Fatal) LogWait() else null
+                else -> LogWait()
             }
         } else {
             null
@@ -1016,7 +1017,7 @@ public class FileLog: Log {
             // due to a send failure because Channel.close had been called.
             if (stream == null) {
                 preprocessing.cancel()
-                waitJob?.cancel()
+                logWait?.fail()
                 _pendingLogCount.valueDecrement()
                 return@logAction 0L
             }
@@ -1046,7 +1047,7 @@ public class FileLog: Log {
                 }
 
                 _pendingLogCount.valueDecrement()
-                waitJob?.cancel()
+                logWait?.fail()
 
                 // threw will only ever be non-null when result == null
                 threw?.let { throw it }
@@ -1105,25 +1106,25 @@ public class FileLog: Log {
 
             _pendingLogCount.valueDecrement()
             threw?.let { t ->
-                waitJob?.cancel()
+                logWait?.fail()
                 throw t
             }
 
-            waitJob?.complete()
+            logWait?.succeed()
             written
         }
 
         val trySendResult = logBuffer.channel.trySend(logAction)
-        val deferredSend = if (trySendResult.isSuccess) null else {
+        val logSend = if (trySendResult.isSuccess) null else {
             // Failure
             if (trySendResult.isClosed) {
-                waitJob?.cancel()
+                logWait?.fail()
                 preprocessing.cancel()
                 return false
             }
             if (logBuffer != _logHandle?.first) {
                 // Log.Root.uninstall was called between the time log was invoked and now
-                waitJob?.cancel()
+                logWait?.fail()
                 preprocessing.cancel()
                 return false
             }
@@ -1138,35 +1139,25 @@ public class FileLog: Log {
             //
             // Additionally, there needs to exist a way to selectively block for the result
             // based on domain; this provides us that optionality.
-            @OptIn(DelicateCoroutinesApi::class)
-            logScope.async(dispatcher, start = CoroutineStart.ATOMIC) {
-                try {
-                    withContext(NonCancellable) { logBuffer.channel.send(logAction) }
-                    true
-                } catch (_: ClosedSendChannelException) {
-                    // LogBuffer.channel's onUndeliveredElement will consume
-                    // the LogAction and clean everything up for us.
-                    false
-                }
-            }
+            LogSend(logScope, dispatcher, logBuffer, logAction)
         }
 
         _pendingLogCount.valueIncrement()
         preprocessing.start()
 
-        val deferredSendResult: Boolean = run {
-            if (deferredSend == null) return@run true
-            logD { "LogBuffer[capacity=$maxLogBuffered] is full >> $deferredSend" }
+        val logSendResult: Boolean = run {
+            if (logSend == null) return@run true
+            logD { "LogBuffer[capacity=$maxLogBuffered] is full >> $logSend" }
 
             // Do not block for FileLog or Log.Root logs.
             when (domain) {
                 DOMAIN, ROOT_DOMAIN -> {
-                    logD { "Non-Blocking[domain=$domain] >> $deferredSend" }
+                    logD { "Non-Blocking[domain=$domain] >> $logSend" }
                     return@run true
                 }
             }
 
-            logD { "Blocking[tid=$tid] >> $deferredSend" }
+            logD { "Blocking[tid=$tid] >> $logSend" }
             var result: Boolean? = null
             while (result == null) {
                 try {
@@ -1175,7 +1166,7 @@ public class FileLog: Log {
                             // This will NOT throw CancellationException, as
                             // CoroutineStart.ATOMIC + withContext(NonCancellable)
                             // were used.
-                            deferredSend.await()
+                            logSend.await()
                         }
                     }
                 } catch (_: Throwable) {
@@ -1185,27 +1176,26 @@ public class FileLog: Log {
             result
         }
 
-        if (waitJob == null) return deferredSendResult
+        if (logWait == null) return logSendResult
 
-        while (waitJob.isActive) {
-            logD { "Blocking[tid=$tid] >> $waitJob" }
+        while (logWait.isActive) {
+            logD { "Blocking[tid=$tid] >> $logWait" }
             try {
                 CurrentThread.uninterrupted {
                     runBlocking(handler + dispatcher) {
-                        // If deferredSendResult was false (closed channel) then
+                        // If logSendResult was false (closed channel) then
                         // LogBuffer.channel's onUndeliveredElement will clean
-                        // everything up for us and cancel waitJob (eventually).
-                        waitJob.join()
+                        // everything up for us and cancel logWait (eventually).
+                        logWait.join()
                     }
                 }
             } catch (_: Throwable) {
                 // InterruptedException (Jvm/Android)
-                // CancellationException (in which case waitJob.isActive will be false)
+                // CancellationException (in which case logWait.isActive will be false)
             }
         }
 
-        // LogAction will call Job.cancel on any failure, and Job.complete on success
-        return !waitJob.isCancelled
+        return logWait.isSuccess()
     }
 
     @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
@@ -1527,7 +1517,7 @@ public class FileLog: Log {
                         action.invoke(logStream, buf, size, processed)
                     } catch (t: Throwable) {
                         if (t is CancellationException) {
-                            // Deferred.await() threw. We're about to die. Nothing
+                            // preprocessing.await() threw. We're about to die. Nothing
                             // was written, so no need to do anything here.
                         } else {
                             logE(t) { "Failed to write log entry to ${files[0].name}" }
