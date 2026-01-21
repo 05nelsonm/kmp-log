@@ -51,13 +51,16 @@ import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE
 import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE_LOGS_AND_RETRY
 import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.MAX_RETRIES
 import io.matthewnelson.kmp.log.file.internal.LogAction
+import io.matthewnelson.kmp.log.file.internal.LogScope
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
+import io.matthewnelson.kmp.log.file.internal.async
 import io.matthewnelson.kmp.log.file.internal.atomicLong
 import io.matthewnelson.kmp.log.file.internal.consumeAndIgnore
 import io.matthewnelson.kmp.log.file.internal.exists2Robustly
 import io.matthewnelson.kmp.log.file.internal.format
 import io.matthewnelson.kmp.log.file.internal.id
 import io.matthewnelson.kmp.log.file.internal.isDesktop
+import io.matthewnelson.kmp.log.file.internal.launch
 import io.matthewnelson.kmp.log.file.internal.lockLog
 import io.matthewnelson.kmp.log.file.internal.lockRotate
 import io.matthewnelson.kmp.log.file.internal.moveTo
@@ -70,6 +73,7 @@ import io.matthewnelson.kmp.log.file.internal.use
 import io.matthewnelson.kmp.log.file.internal.valueDecrement
 import io.matthewnelson.kmp.log.file.internal.valueGet
 import io.matthewnelson.kmp.log.file.internal.valueIncrement
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -78,19 +82,22 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.kotlincrypto.hash.blake2.BLAKE2s
 import kotlin.concurrent.Volatile
@@ -115,14 +122,14 @@ public class FileLog: Log {
     public companion object {
 
         /**
-         * [FileLog] itself utilizes a [Logger] instance to log [Level.Warn] and
-         * [Level.Error] logs, if and when it is necessary. For obvious reasons
-         * a [FileLog] instance can **never** log to itself, as that would create
-         * a cyclical loop, but it *can* log to other installed [Log] instances
-         * (including other [FileLog]). This reference is for the [Logger.domain]
-         * used by all [FileLog] instance instantiated [Logger] to dispatch its
-         * [Level.Warn] and [Level.Error] logs (as well as [Level.Debug] logs if
-         * [FileLog.debug] is set to `true`).
+         * [FileLog] itself utilizes a [Logger] instance to log [Level.Info],
+         * [Level.Warn] and [Level.Error] logs, if and when it is necessary. For
+         * obvious reasons a [FileLog] instance can **never** log to itself, as
+         * that would create a cyclical loop, but it *can* log to other installed
+         * [Log] instances (including other [FileLog]). This reference is for the
+         * [Logger.domain] used by all [FileLog] instance instantiated [Logger]
+         * for dispatching their [Level.Info], [Level.Warn] and [Level.Error] logs
+         * (as well as [Level.Debug] logs if [FileLog.debug] is set to `true`).
          *
          * This reference is meant to be used with [Builder.blacklistDomain] and
          * [Builder.whitelistDomain] to configure a set of [FileLog] instances
@@ -144,7 +151,6 @@ public class FileLog: Log {
          *         .fileName("file_log")
          *         .fileExtension("err")
          *         .min(Log.Level.Warn)
-         *         .maxLogBuffered(0) // Will default to the minimum
          *         .maxLogFileSize(0) // Will default to the minimum
          *         .maxLogFiles(0) // Will default to the minimum
          *         .build()
@@ -263,8 +269,8 @@ public class FileLog: Log {
     /**
      * TODO
      * */
-    @get:JvmName("bufferedLogCount")
-    public val bufferedLogCount: Long get() = _bufferedLogCount.valueGet()
+    @get:JvmName("pendingLogCount")
+    public val pendingLogCount: Long get() = _pendingLogCount.valueGet()
 
     /**
      * TODO
@@ -289,12 +295,16 @@ public class FileLog: Log {
     public fun uninstallAndAwaitSync(): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
         val job = (instance as FileLog)._logJob ?: return false
+        val context = instance.handler + Dispatchers.IO
         while (job.isActive) {
             try {
                 CurrentThread.uninterrupted {
-                    runBlocking(Dispatchers.IO) { job.join() }
+                    runBlocking(context) { job.join() }
                 }
-            } catch (_: Throwable) {}
+            } catch (_: Throwable) {
+                // InterruptedException (Jvm/Android)
+                // CancellationException (in which case job.isActive will be false)
+            }
         }
         return true
     }
@@ -815,7 +825,7 @@ public class FileLog: Log {
                 files0Hash = files0Hash,
                 modeDirectory = _modeDirectory.build(),
                 modeFile = _modeFile.build(),
-                maxLogBuffered = _maxLogBuffered.coerceAtLeast(1_000),
+                maxLogBuffered = _maxLogBuffered.coerceAtLeast(Channel.RENDEZVOUS /* 0 */),
                 maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L), // 50kb
                 maxLogYield = _maxLogYield.coerceAtLeast(1),
                 blacklistDomain = blacklistDomain,
@@ -846,13 +856,16 @@ public class FileLog: Log {
 
     private val LOG: Logger
 
-    private val logScope: CoroutineScope
+    private val handler: CoroutineExceptionHandler
+    private val logScope: LogScope
 
     @Volatile
-    private var _logBuffer: LogBuffer? = null
+    private var _onInstallInvocations: Long = 0L
+    @Volatile
+    private var _logHandle: Pair<LogBuffer, CoroutineDispatcher>? = null
     @Volatile
     private var _logJob: Job? = null
-    private val _bufferedLogCount = atomicLong(0L)
+    private val _pendingLogCount = atomicLong(0L)
 
     private constructor(
         min: Level,
@@ -910,16 +923,12 @@ public class FileLog: Log {
 
         this._whitelistTag = whitelistTag.toTypedArray()
         this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
-        this.logScope = CoroutineScope(context =
-            CoroutineName(uidSuffix)
-            + Dispatchers.IO
-            + SupervisorJob()
-            + CoroutineExceptionHandler Handler@ { context, t ->
-                if (t is CancellationException) return@Handler // Ignore...
-                // TODO: Set global error variable which can be retrieved externally???
-                logE(t) { context }
-            }
-        )
+
+        this.handler = CoroutineExceptionHandler handler@ { context, t ->
+            if (t is CancellationException) return@handler // Ignore...
+            logE(t) { context }
+        }
+        this.logScope = LogScope(uidSuffix, this.handler)
 
         this.logDirectory = directory.path
         this.logFiles = files.map { it.path }.toImmutableList()
@@ -952,21 +961,21 @@ public class FileLog: Log {
         if (_whitelistTag.isNotEmpty()) {
             if (!_whitelistTag.contains(tag)) return false
         }
-        return _logBuffer != null
+        return _logHandle != null
     }
 
     override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        val logBuffer = _logBuffer ?: return false
+        val (logBuffer, dispatcher) = _logHandle ?: return false
+        val tid = CurrentThread.id()
 
         // The formatted text to write, and its pre-calculated UTF-8 byte-size.
         val preprocessing: Deferred<Pair<CharSequence, Long>?> = run {
             val time = now()
-            val tid = CurrentThread.id()
 
             // LAZY start as to not do unnecessary work until we are
             // certain that the LogAction was committed to LogBuffer
             // successfully, which may be closed for sending.
-            logScope.async(start = CoroutineStart.LAZY) {
+            logScope.async(dispatcher, start = CoroutineStart.LAZY) {
                 val formatted = format(time, pid(), tid, level, domain, tag, msg, t)
                 if (formatted.isNullOrEmpty()) return@async null
 
@@ -998,7 +1007,7 @@ public class FileLog: Log {
         }
 
         var retries = 0
-        val trySendResult = logBuffer.channel.trySend logAction@ { stream, buf, sizeLog, _ ->
+        val logAction: LogAction = logAction@ { stream, buf, sizeLog, _ ->
             // Can be null if there was an error with LogLoop which
             // is shutting down, or the LogAction is being dropped
             // due to buffer capacity being exceeded (if configured
@@ -1006,7 +1015,7 @@ public class FileLog: Log {
             if (stream == null) {
                 preprocessing.cancel()
                 waitJob?.cancel()
-                _bufferedLogCount.valueDecrement()
+                _pendingLogCount.valueDecrement()
                 return@logAction 0L
             }
 
@@ -1034,7 +1043,7 @@ public class FileLog: Log {
                     }
                 }
 
-                _bufferedLogCount.valueDecrement()
+                _pendingLogCount.valueDecrement()
                 waitJob?.cancel()
 
                 // threw will only ever be non-null when result == null
@@ -1060,6 +1069,7 @@ public class FileLog: Log {
                 (sizeLog + sizeUTF8) !in 0L..maxLogFileSize
             }
 
+            @Suppress("AssignedValueIsNeverRead")
             if (needsRotation && retries++ < MAX_RETRIES) {
                 return@logAction EXECUTE_ROTATE_LOGS_AND_RETRY
             }
@@ -1091,7 +1101,7 @@ public class FileLog: Log {
                 }
             }
 
-            _bufferedLogCount.valueDecrement()
+            _pendingLogCount.valueDecrement()
             threw?.let { t ->
                 waitJob?.cancel()
                 throw t
@@ -1101,39 +1111,113 @@ public class FileLog: Log {
             written
         }
 
-        if (trySendResult.isFailure) {
-            // LogBuffer.channel is closed for sending
-            waitJob?.cancel()
-            preprocessing.cancel()
-            return false
+        val trySendResult = logBuffer.channel.trySend(logAction)
+        val deferredSend = if (trySendResult.isSuccess) null else {
+            // Failure
+            if (trySendResult.isClosed) {
+                waitJob?.cancel()
+                preprocessing.cancel()
+                return false
+            }
+            if (logBuffer != _logHandle?.first) {
+                // Log.Root.uninstall was called between the time log was invoked and now
+                waitJob?.cancel()
+                preprocessing.cancel()
+                return false
+            }
+
+            // This will only ever be the case when Builder.maxLogBuffered was specified
+            // and the LogBuffer.channel has reached capacity. The kotlinx.coroutines
+            // Channel.trySendBlocking extension function cannot be used here because
+            // it throws InterruptedException on Jvm/Android, and we must guarantee LogAction
+            // is only ever enqueued ONCE; CurrentThread.uninterrupted gets us 95% of the
+            // way, but there exists in that remaining 5% the possibility of another Thread
+            // interrupting this one while the runBlocking lambda is executing.
+            //
+            // Additionally, there needs to exist a way to selectively block for the result
+            // based on domain; this provides us that optionality.
+            @OptIn(DelicateCoroutinesApi::class)
+            logScope.async(dispatcher, start = CoroutineStart.ATOMIC) {
+                try {
+                    withContext(NonCancellable) { logBuffer.channel.send(logAction) }
+                    true
+                } catch (_: ClosedSendChannelException) {
+                    // LogBuffer.channel's onUndeliveredElement will consume
+                    // the LogAction and clean everything up for us.
+                    false
+                }
+            }
         }
 
-        _bufferedLogCount.valueIncrement()
+        _pendingLogCount.valueIncrement()
         preprocessing.start()
-        if (waitJob == null) return true
+
+        val deferredSendResult: Boolean = run {
+            if (deferredSend == null) return@run true
+            logD { "LogBuffer[capacity=$maxLogBuffered] is full >> $deferredSend" }
+
+            // Do not block for FileLog or Log.Root logs.
+            when (domain) {
+                DOMAIN, ROOT_DOMAIN -> {
+                    logD { "Non-Blocking[domain=$domain] >> $deferredSend" }
+                    return@run true
+                }
+            }
+
+            logD { "Blocking[tid=$tid] >> $deferredSend" }
+            var result: Boolean? = null
+            while (result == null) {
+                try {
+                    result = CurrentThread.uninterrupted {
+                        runBlocking(handler + dispatcher) {
+                            // This will NOT throw CancellationException, as
+                            // CoroutineStart.ATOMIC + withContext(NonCancellable)
+                            // were used.
+                            deferredSend.await()
+                        }
+                    }
+                } catch (_: Throwable) {
+                    // InterruptedException (Jvm/Android)
+                }
+            }
+            result
+        }
+
+        if (waitJob == null) return deferredSendResult
 
         while (waitJob.isActive) {
+            logD { "Blocking[tid=$tid] >> $waitJob" }
             try {
                 CurrentThread.uninterrupted {
-                    runBlocking(Dispatchers.IO) { waitJob.join() }
+                    runBlocking(handler + dispatcher) {
+                        // If deferredSendResult was false (closed channel) then
+                        // LogBuffer.channel's onUndeliveredElement will clean
+                        // everything up for us and cancel waitJob (eventually).
+                        waitJob.join()
+                    }
                 }
-            } catch (_: Throwable) {}
+            } catch (_: Throwable) {
+                // InterruptedException (Jvm/Android)
+                // CancellationException (in which case waitJob.isActive will be false)
+            }
         }
 
+        // LogAction will call Job.cancel on any failure, and Job.complete on success
         return !waitJob.isCancelled
     }
 
+    @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
     override fun onInstall() {
-        val logBuffer = if (maxLogBuffered == Channel.UNLIMITED) {
-            LogBuffer()
-        } else {
-            LogBuffer(capacity = maxLogBuffered, LOG, logScope)
-        }
+        // Because runBlocking is being utilized by FileLog.log, we must always specify
+        // a logging dispatcher. If we were to use Dispatchers.IO for everything, then
+        // it could result in a deadlock if caller is also using Dispatchers.IO whereby
+        // thread starvation occurs and the LogLoop is unable to continue.
+        val dispatcher = newSingleThreadContext(LOG.tag + "-[" + (++_onInstallInvocations) + ']')
 
+        val logBuffer = LogBuffer(capacity = maxLogBuffered)
         val logJob = _logJob
 
-        @OptIn(DelicateCoroutinesApi::class)
-        logScope.launch(start = CoroutineStart.ATOMIC) {
+        logScope.launch(dispatcher, start = CoroutineStart.ATOMIC) {
             logBuffer.use(LOG) { buf ->
                 val thisJob = currentCoroutineContext().job
 
@@ -1206,17 +1290,41 @@ public class FileLog: Log {
                 )
             }
         }.let { job ->
+
+            // Paranoia.
+            //
+            // LogBuffer.use {} will close the channel and consume all
+            // undelivered LogAction, but this will guarantee that
+            // LogBuffer.channel's onUndeliveredElement callback is
+            // invoked for any stragglers.
+            job.invokeOnCompletion { logBuffer.channel.cancel() }
+
+            job.invokeOnCompletion {
+                logD { "Closing > $dispatcher" }
+
+                // Must close lazily from a different thread
+                logScope.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
+                    withContext(NonCancellable) { delay(250.milliseconds) }
+                    dispatcher.close()
+                    // Only 1 carrot because Closeable tests search for 2 (i.e. Closed >> $closeable)
+                    logD { "Closed > $dispatcher" }
+                }
+            }
+
             job.invokeOnCompletion { logD { "LogJob Stopped >> $job" } }
             _logJob = job
         }
-        _logBuffer = logBuffer
+
+        _logHandle = logBuffer to dispatcher
         log(Level.Info, LOG.domain, LOG.tag, "Log file opened at ${files[0].name}", t = null)
     }
 
     override fun onUninstall() {
-        val logBuffer = _logBuffer
-        _logBuffer = null
-        logBuffer?.channel?.close(cause = null)
+        val (logBuffer, _) = _logHandle ?: return
+        _logHandle = null
+        // Close for send only. All remaining LogAction will be
+        // processed by the LogLoop until exhaustion.
+        logBuffer.channel.close(cause = null)
     }
 
     /*
@@ -1253,7 +1361,7 @@ public class FileLog: Log {
         // If a write operation for a log entry would end up causing the
         // log file to exceed the configured maxLogFileSize, it is cached
         // here and retried after a log rotation is performed. This allows
-        // for us to not drop lockLog and perform an immediate retry.
+        // us to not drop lockLog and perform an immediate retry.
         val retryActionQueue = ArrayDeque<LogAction>(1)
         thisJob.invokeOnCompletion {
             // This should NEVER be the case...
@@ -1262,7 +1370,9 @@ public class FileLog: Log {
                 val action = retryActionQueue.removeFirstOrNull() ?: break
                 count++
                 @OptIn(DelicateCoroutinesApi::class)
-                logScope.launch(start = CoroutineStart.ATOMIC) { action.consumeAndIgnore(buf) }
+                logScope.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
+                    action.consumeAndIgnore(buf)
+                }
             }
             if (count > 0) {
                 logE(t = null) { "Retry LogAction were present in the queue. Skipped $count logs." }
@@ -1279,7 +1389,7 @@ public class FileLog: Log {
 
         var lockLog: FileLock = InvalidFileLock
 
-        // The loop
+        // The main loop
         while (true) {
             var logAction: LogAction? = try {
                 rotateActionQueue.channel.tryReceive().getOrNull()
@@ -1330,7 +1440,8 @@ public class FileLog: Log {
 
                     try {
                         directory.mkdirs2(mode = modeDirectory, mustCreate = false)
-                    } catch (_: IOException) {
+                    } catch (eee: IOException) {
+                        t.addSuppressed(eee)
                         // Not a show-stopper. Ignore.
                     }
 
@@ -1371,7 +1482,8 @@ public class FileLog: Log {
 
                     try {
                         directory.mkdirs2(mode = modeDirectory, mustCreate = false)
-                    } catch (_: IOException) {
+                    } catch (eee: IOException) {
+                        e.addSuppressed(eee)
                         // Not a show-stopper. Ignore.
                     }
 
@@ -1393,9 +1505,9 @@ public class FileLog: Log {
             }
 
             logD {
-                val count = _bufferedLogCount.valueGet()
+                val count = _pendingLogCount.valueGet()
                 val word = if (count == 1L) "log" else "logs"
-                "Current ${files[0].name} file byte size is $size, with $count $word in the buffer"
+                "Current ${files[0].name} file byte size is $size, with $count $word pending"
             }
 
             var processed = 0
@@ -1436,7 +1548,7 @@ public class FileLog: Log {
                             size = maxLogFileSize // To force a log rotation
                             logAction = null
                             retryActionQueue.add(action)
-                            logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after a $LOG_ROTATION." }
+                            logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after $LOG_ROTATION." }
                             break
                         }
                     }
@@ -1482,7 +1594,10 @@ public class FileLog: Log {
                     }
                 }
 
-                logD { "Processed $processed " + if (processed > 1) "logs" else "log" }
+                logD {
+                    val word = if (processed > 1) "logs" else "log"
+                    "Processed $processed $word"
+                }
             }
 
             if (thisJob.isActive && size >= maxLogFileSize) {

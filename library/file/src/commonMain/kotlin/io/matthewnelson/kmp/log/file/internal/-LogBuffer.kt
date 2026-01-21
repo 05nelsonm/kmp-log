@@ -20,7 +20,6 @@ package io.matthewnelson.kmp.log.file.internal
 import io.matthewnelson.encoding.core.EncoderDecoder.Companion.DEFAULT_BUFFER_SIZE
 import io.matthewnelson.kmp.file.FileStream
 import io.matthewnelson.kmp.log.Log
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +27,6 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.launch
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
@@ -81,32 +79,21 @@ internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, sizeLog: 
 @JvmInline
 internal value class LogBuffer private constructor(internal val channel: Channel<LogAction>) {
 
-    internal constructor(): this(Channel(
-        capacity = UNLIMITED,
-        // This "should" NEVER happen because LogBuffer.use is
-        // utilized in the FileLog.onInstall LogJob, so.
-        onUndeliveredElement = { logAction ->
-            @OptIn(DelicateCoroutinesApi::class)
-            GlobalScope.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
-                logAction.consumeAndIgnore(EMPTY_BUF)
-            }
-        }
-    ))
+    internal constructor(): this(capacity = Channel.UNLIMITED)
 
     @Throws(IllegalArgumentException::class)
-    internal constructor(capacity: Int, LOG: Log.Logger?, scope: CoroutineScope): this(Channel(
+    internal constructor(capacity: Int): this(Channel(
         capacity = capacity,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        onBufferOverflow = BufferOverflow.SUSPEND,
         onUndeliveredElement = { logAction ->
             @OptIn(DelicateCoroutinesApi::class)
-            scope.launch(start = CoroutineStart.ATOMIC) {
+            GlobalScope.launch(context = Dispatchers.IO, start = CoroutineStart.ATOMIC) {
                 logAction.consumeAndIgnore(EMPTY_BUF)
-                LOG?.w { "LogBuffer[capacity=$capacity] exceeded. Oldest log has been dropped." }
             }
         }
     )) {
-        require(capacity > 0) { "capacity < 1" }
-        require(capacity != UNLIMITED) { "capacity == Channel.UNLIMITED" }
+        // Channel.RENDEZVOUS == 0
+        require(capacity >= Channel.RENDEZVOUS) { "capacity[$capacity] < Channel.RENDEZVOUS" }
     }
 
     internal companion object {
