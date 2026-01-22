@@ -73,6 +73,7 @@ import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
 import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
 import io.matthewnelson.kmp.log.file.internal.pid
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
+import io.matthewnelson.kmp.log.file.internal.uninterruptedRunBlocking
 import io.matthewnelson.kmp.log.file.internal.use
 import io.matthewnelson.kmp.log.file.internal.valueDecrement
 import io.matthewnelson.kmp.log.file.internal.valueGet
@@ -97,7 +98,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.kotlincrypto.hash.blake2.BLAKE2s
@@ -302,8 +302,8 @@ public class FileLog: Log {
         val context = instance.handler + Dispatchers.IO
         while (job.isActive) {
             try {
-                CurrentThread.uninterrupted {
-                    runBlocking(context) { job.join() }
+                CurrentThread.uninterruptedRunBlocking(context) {
+                    job.join()
                 }
             } catch (_: Throwable) {
                 // InterruptedException (Jvm/Android)
@@ -1147,7 +1147,6 @@ public class FileLog: Log {
 
         val logSendResult: Boolean = run {
             if (logSend == null) return@run true
-            logD { "LogBuffer[capacity=$maxLogBuffered] is full >> $logSend" }
 
             // Do not block for FileLog or Log.Root logs.
             when (domain) {
@@ -1157,41 +1156,40 @@ public class FileLog: Log {
                 }
             }
 
-            logD { "Blocking[tid=$tid] >> $logSend" }
+            logD { "Block[blocked=1, threadId=$tid] >> $logSend" }
             var result: Boolean? = null
             while (result == null) {
                 try {
-                    result = CurrentThread.uninterrupted {
-                        runBlocking(handler + dispatcher) {
-                            // This will NOT throw CancellationException, as
-                            // CoroutineStart.ATOMIC + withContext(NonCancellable)
-                            // were used.
-                            logSend.await()
-                        }
+                    result = CurrentThread.uninterruptedRunBlocking(handler + dispatcher) {
+                        // This will NOT throw CancellationException, as
+                        // CoroutineStart.ATOMIC + withContext(NonCancellable)
+                        // were used.
+                        logSend.await()
                     }
                 } catch (_: Throwable) {
                     // InterruptedException (Jvm/Android)
                 }
             }
+            logD { "Block[blocked=0, threadId=$tid] >> $logSend" }
             result
         }
 
         if (logWait == null) return logSendResult
 
         while (logWait.isActive) {
-            logD { "Blocking[tid=$tid] >> $logWait" }
+            logD { "Block[blocked=1, threadId=$tid] >> $logWait" }
             try {
-                CurrentThread.uninterrupted {
-                    runBlocking(handler + dispatcher) {
-                        // If logSendResult was false (closed channel) then
-                        // LogBuffer.channel's onUndeliveredElement will clean
-                        // everything up for us and cancel logWait (eventually).
-                        logWait.join()
-                    }
+                CurrentThread.uninterruptedRunBlocking(handler + dispatcher) {
+                    // If logSendResult was false (closed channel) then
+                    // LogBuffer.channel's onUndeliveredElement will clean
+                    // everything up for us and cancel logWait (eventually).
+                    logWait.join()
                 }
             } catch (_: Throwable) {
                 // InterruptedException (Jvm/Android)
                 // CancellationException (in which case logWait.isActive will be false)
+            } finally {
+                logD { "Block[blocked=0, threadId=$tid] >> $logWait" }
             }
         }
 
@@ -1849,7 +1847,7 @@ public class FileLog: Log {
                 return
             }
 
-            logStream.truncate0AndSync(file = files[0])
+            truncate0AndSync(logStream, file = files[0])
 
             // Checking for existence here is redundant, simply schedule all
             // moves and rip through them while ignoring FileNotFoundException.
@@ -1943,13 +1941,13 @@ public class FileLog: Log {
     * whereby file is then used to attempt openWrite (O_TRUNC) + sync + close. Failure
     * beyond that is ignored (currently).
     * */
-    private fun FileStream.ReadWrite.truncate0AndSync(file: File) {
+    private fun truncate0AndSync(logStream: FileStream.ReadWrite, file: File) {
         try {
-            size(new = 0L)
+            logStream.size(new = 0L)
 
             logD { "Syncing ${file.name}" }
             try {
-                sync(meta = true)
+                logStream.sync(meta = true)
             } catch (e: IOException) {
                 LOG.w(e) { "Sync failure >> $this" }
                 throw e
@@ -1959,7 +1957,7 @@ public class FileLog: Log {
         } catch (e: IOException) {
             // Try a different way.
             try {
-                close()
+                logStream.close()
             } catch (ee: IOException) {
                 e.addSuppressed(ee)
             }

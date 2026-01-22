@@ -17,11 +17,19 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.runBlocking
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
+import kotlin.coroutines.CoroutineContext
 
 internal object CurrentThread
+
+internal inline fun <T> CurrentThread.uninterruptedRunBlocking(
+    context: CoroutineContext,
+    noinline block: suspend CoroutineScope.() -> T,
+): T = uninterrupted { runBlocking(context, block) }
 
 @OptIn(ExperimentalContracts::class)
 internal inline fun <T> CurrentThread.uninterrupted(block: () -> T): T {
