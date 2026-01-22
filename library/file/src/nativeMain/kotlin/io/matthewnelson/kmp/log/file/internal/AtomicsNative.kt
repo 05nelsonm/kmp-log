@@ -21,9 +21,15 @@ import io.matthewnelson.kmp.log.file.FileLog
 
 @Suppress("ACTUAL_WITHOUT_EXPECT")
 internal actual typealias AtomicLong = kotlin.concurrent.AtomicLong
+@Suppress("ACTUAL_WITHOUT_EXPECT")
+internal actual typealias AtomicRef<T> = kotlin.concurrent.AtomicReference<T>
 
 internal actual inline fun FileLog.Companion.atomicLong(initialValue: Long): AtomicLong = AtomicLong(initialValue)
+internal actual inline fun <T> FileLog.Companion.atomicRef(initialValue: T): AtomicRef<T> = AtomicRef(initialValue)
 
 internal actual inline fun AtomicLong.valueGet(): Long = value
 internal actual inline fun AtomicLong.valueIncrement() { incrementAndGet() }
 internal actual inline fun AtomicLong.valueDecrement() { decrementAndGet() }
+
+internal actual inline fun <T> AtomicRef<T>.valueGet(): T = value
+internal actual inline fun <T> AtomicRef<T>.valueGetAndSet(newValue: T): T = getAndSet(newValue)

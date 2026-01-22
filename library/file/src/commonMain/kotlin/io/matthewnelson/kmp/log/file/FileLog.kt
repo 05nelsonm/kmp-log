@@ -59,6 +59,7 @@ import io.matthewnelson.kmp.log.file.internal.ModeBuilder
 import io.matthewnelson.kmp.log.file.internal.LogWait
 import io.matthewnelson.kmp.log.file.internal.async
 import io.matthewnelson.kmp.log.file.internal.atomicLong
+import io.matthewnelson.kmp.log.file.internal.atomicRef
 import io.matthewnelson.kmp.log.file.internal.consumeAndIgnore
 import io.matthewnelson.kmp.log.file.internal.exists2Robustly
 import io.matthewnelson.kmp.log.file.internal.format
@@ -77,6 +78,7 @@ import io.matthewnelson.kmp.log.file.internal.uninterruptedRunBlocking
 import io.matthewnelson.kmp.log.file.internal.use
 import io.matthewnelson.kmp.log.file.internal.valueDecrement
 import io.matthewnelson.kmp.log.file.internal.valueGet
+import io.matthewnelson.kmp.log.file.internal.valueGetAndSet
 import io.matthewnelson.kmp.log.file.internal.valueIncrement
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -1368,7 +1370,7 @@ public class FileLog: Log {
         // here and retried after a log rotation is performed. This allows
         // us to not drop lockLog and perform an immediate retry of the
         // LogAction after returning from rotateLogs.
-        val retryActionQueue = ArrayDeque<LogAction>(1)
+        val retryAction = atomicRef<LogAction?>(initialValue = null)
         logLoopJob.invokeOnCompletion {
             // This should never really be the case because the main loop
             // would have dequeued this for processing over ever calling
@@ -1376,20 +1378,17 @@ public class FileLog: Log {
             //
             // Only in the event of an error within the loop (such as file
             // re-open failure) where a LogAction from rotateActionQueue
-            // was dequeued over one from retryActionQueue would there be
+            // was dequeued over one from retryAction would there be
             // unprocessed LogAction present.
-            var count = 0
-            while (true) {
-                val action = retryActionQueue.removeFirstOrNull() ?: break
-                count++
-                @OptIn(DelicateCoroutinesApi::class)
-                logScope.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
-                    action.consumeAndIgnore(buf)
-                }
+            val action = retryAction.valueGetAndSet(newValue = null)
+                ?: return@invokeOnCompletion
+
+            @OptIn(DelicateCoroutinesApi::class)
+            logScope.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
+                action.consumeAndIgnore(buf)
             }
-            if (count > 0) {
-                LOG.w { "$count cached LogAction awaiting retry after log rotation were dropped." }
-            }
+
+            LOG.w { "A cached LogAction awaiting retry after log rotation was dropped." }
         }
 
         // Migrate completion handles to LogLoopScope (take ownership over them)
@@ -1410,9 +1409,9 @@ public class FileLog: Log {
                 rotateActionQueue.channel.tryReceive().getOrNull()
 
                     // Priority 2 LogAction that came from FileLog.log()
-                    // and were cached here in order to perform a log
-                    // rotation to make room for their write.
-                    ?: retryActionQueue.removeFirstOrNull()
+                    // and was cached in order to perform a log rotation
+                    // to make room for its write.
+                    ?: retryAction.valueGetAndSet(newValue = null)
 
                     // Lastly, LogAction sent from FileLog.log()
                     ?: channel.receive()
@@ -1424,7 +1423,7 @@ public class FileLog: Log {
             }
 
             // Will be valid if and only if it was not released due to
-            // retryActionQueue containing a cached LogAction.
+            // retryAction containing a cached LogAction.
             lockLog = if (lockLog.isValid()) lockLog else CurrentThread.uninterrupted {
                 try {
                     // TODO: Blocking timeout monitor
@@ -1568,7 +1567,12 @@ public class FileLog: Log {
                         if (written == EXECUTE_ROTATE_LOGS_AND_RETRY) {
                             size = maxLogFileSize // To force a log rotation
                             logAction = null
-                            retryActionQueue.add(action)
+                            val previous = retryAction.valueGetAndSet(newValue = action)
+                            if (previous != null) {
+                                previous.consumeAndIgnore(buf)
+                                // HARD fail.... There should ONLY ever be 1 retryAction.
+                                throw IllegalStateException("retryAction's previous value was non-null")
+                            }
                             logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after $LOG_ROTATION." }
                             break
                         }
@@ -1587,7 +1591,7 @@ public class FileLog: Log {
                         // Job cancellation
                         !logLoopJob.isActive -> null
                         else -> rotateActionQueue.channel.tryReceive().getOrNull()
-                            ?: retryActionQueue.removeFirstOrNull()
+                            ?: retryAction.valueGetAndSet(newValue = null)
                             ?: channel.tryReceive().getOrNull()
                     }
                 }
@@ -1626,7 +1630,7 @@ public class FileLog: Log {
                             logStream = logStream,
                             lockFile = lockFile,
                             buf = buf,
-                            retryActionQueueIsNotEmpty = retryActionQueue.isNotEmpty(),
+                            retryActionIsNotNull = retryAction.valueGet() != null,
                         )
                     }
                 } else {
@@ -1638,7 +1642,7 @@ public class FileLog: Log {
             // Do not release lockLog if there is a retry scheduled. It will
             // be immediately dequeued and executed while still holding our
             // lock on log writes.
-            if (retryActionQueue.isEmpty() && lockLog.isValid()) try {
+            if (retryAction.valueGet() == null && lockLog.isValid()) try {
                 lockLog.release()
                 logD { "Released lock on ${dotLockFile.name} >> $lockLog" }
             } catch (e: IOException) {
@@ -1674,7 +1678,7 @@ public class FileLog: Log {
         logStream: FileStream.ReadWrite,
         lockFile: LockFile,
         buf: ByteArray,
-        retryActionQueueIsNotEmpty: Boolean,
+        retryActionIsNotNull: Boolean,
     ) {
         // If a previous log rotation is currently underway, we must
         // wait for it to complete before doing another one.
@@ -1763,7 +1767,7 @@ public class FileLog: Log {
             // If was successful (moves is populated), logStream may not have
             // been truncated and may still need to have another full log rotation
             // done. The current state could also be that there is a LogAction
-            // present still in the retryActionQueue. In any event, the LogAction
+            // present still in the retryAction. In any event, the LogAction
             // produced by FileLog.log() will return EXECUTE_ROTATE_LOGS_AND_RETRY
             // again where we'll go through another log rotation. Next time,
             // however, dotRotateFile should have already been moved into place
@@ -1773,7 +1777,7 @@ public class FileLog: Log {
 
             // If a LogAction returned EXECUTE_ROTATE_LOGS_AND_RETRY, it wants a
             // log rotation so it can fit its log in there; fake it till we make it.
-            val size = if (retryActionQueueIsNotEmpty) maxLogFileSize else try {
+            val size = if (retryActionIsNotNull) maxLogFileSize else try {
                 logStream.size()
             } catch (e: IOException) {
                 // Since we're not picking up an interrupted rotation, closing
@@ -1788,7 +1792,7 @@ public class FileLog: Log {
 
                 LOG.w(e) { "Failed to obtain size of ${files[0].name}. Retrying $LOG_ROTATION." }
 
-                // The retryActionQueue is currently empty, so trigger an immediate
+                // The retryAction is currently null, so trigger an immediate
                 // retry with a freshly opened logStream. If another process is also
                 // logging, it may finish off the log rotation for us, so.
                 rotateActionQueue.channel.trySend(::checkIfLogRotationIsNeeded)
@@ -2213,6 +2217,9 @@ public class FileLog: Log {
         sizeLog: Long,
         processed: Int,
     ): Long {
+        // This is being consumed and ignored. Return early.
+        if (stream == null) return 0L
+
         if (sizeLog >= maxLogFileSize) return EXECUTE_ROTATE_LOGS
 
         // Moving dotRotateFile -> *.001 is the last move that gets
