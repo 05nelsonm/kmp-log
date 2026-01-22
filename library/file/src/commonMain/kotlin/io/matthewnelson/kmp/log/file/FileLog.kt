@@ -1254,7 +1254,7 @@ public class FileLog: Log {
                     val canonical = dotLockFile.canonicalFile2()
                     if (canonical != dotLockFile) {
                         LOG.w { "Symbolic link detected >> [$dotLockFile] != [$canonical]" }
-                        canonical.delete2(ignoreReadOnly = true)
+                        dotLockFile.delete2(ignoreReadOnly = true)
                         delay(10.milliseconds)
                     }
                 } catch (t: Throwable) {
@@ -1270,7 +1270,7 @@ public class FileLog: Log {
                     val canonical = files[0].canonicalFile2()
                     if (canonical != files[0]) {
                         LOG.w { "Symbolic link detected >> [${files[0]}] != [$canonical]" }
-                        canonical.delete2(ignoreReadOnly = true)
+                        files[0].delete2(ignoreReadOnly = true)
                         delay(10.milliseconds)
                     }
                 } catch (t: Throwable) {
