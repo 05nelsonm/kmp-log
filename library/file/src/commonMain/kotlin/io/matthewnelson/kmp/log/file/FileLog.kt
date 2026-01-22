@@ -1553,36 +1553,34 @@ public class FileLog: Log {
                         0L
                     }
 
-                    @Suppress("AssignedValueIsNeverRead")
                     if (written > 0L) {
                         processed++
                         size += written
                         logD { "Wrote $written bytes to ${files[0].name}" }
                     } else {
+                        // Check "special" negative return values
                         if (written == EXECUTE_ROTATE_LOGS) {
-                            size = maxLogFileSize // To force a log rotation
-                            logAction = null
-                            break
+                            size = maxLogFileSize // Force a log rotation
                         }
                         if (written == EXECUTE_ROTATE_LOGS_AND_RETRY) {
-                            size = maxLogFileSize // To force a log rotation
-                            logAction = null
+                            size = maxLogFileSize // Force a log rotation
+
                             val previous = retryAction.valueGetAndSet(newValue = action)
                             if (previous != null) {
                                 previous.consumeAndIgnore(buf)
                                 // HARD fail.... There should ONLY ever be 1 retryAction.
                                 throw IllegalStateException("retryAction's previous value was non-null")
                             }
+
                             logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after $LOG_ROTATION." }
-                            break
                         }
                     }
 
                     // Rip through some more buffered actions (if available) while we hold a lock.
                     logAction = when {
-                        // We lost our lock, pop out.
+                        // We lost our lock
                         !lockLog.isValid() -> null
-                        // We lost our logStream, pop out.
+                        // We lost our logStream
                         !logStream.isOpen() -> null
                         // Log rotation is needed
                         size >= maxLogFileSize -> null
@@ -1590,6 +1588,8 @@ public class FileLog: Log {
                         processed >= maxLogYield -> null
                         // Job cancellation
                         !logLoopJob.isActive -> null
+
+                        // Dequeue next LogAction (if available)
                         else -> rotateActionQueue.channel.tryReceive().getOrNull()
                             ?: retryAction.valueGetAndSet(newValue = null)
                             ?: channel.tryReceive().getOrNull()
