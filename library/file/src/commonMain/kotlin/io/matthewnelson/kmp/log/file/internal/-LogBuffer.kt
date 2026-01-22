@@ -135,10 +135,8 @@ internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: LogBuffer.(bu
             count++
             logAction.consumeAndIgnore(buf)
         }
-        if (LOG != null && count > 0L) {
-            LOG.w { "Skipped $count logs" }
-        }
         buf.fill(0)
+        if (count > 0L) LOG?.w(threw) { "$count LogAction awaiting processing were dropped." }
     }
 
     threw?.let { throw it }
