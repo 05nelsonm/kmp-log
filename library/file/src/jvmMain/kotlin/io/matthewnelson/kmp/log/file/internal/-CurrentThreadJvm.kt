@@ -29,13 +29,13 @@ private val METHOD_THREAD_ID by lazy {
 }
 
 internal actual fun CurrentThread.id(): Long {
-    val current = Thread.currentThread()
+    val thread = Thread.currentThread()
     METHOD_THREAD_ID?.let { threadId ->
-        return threadId.invoke(current) as Long
+        return threadId.invoke(thread) as Long
     }
 
     @Suppress("DEPRECATION")
-    return current.id
+    return thread.id
 }
 
 @OptIn(ExperimentalContracts::class)
