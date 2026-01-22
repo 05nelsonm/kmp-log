@@ -1162,8 +1162,8 @@ public class FileLog: Log {
             }
 
             logD { "Block[blocked=1, threadId=$tid] >> $logSend" }
-            var result: Boolean? = null
-            while (result == null) {
+            var result = LogSend.RESULT_UNKNOWN
+            while (result == LogSend.RESULT_UNKNOWN) {
                 try {
                     result = CurrentThread.uninterruptedRunBlocking(handler + dispatcher) {
                         // This will NOT throw CancellationException, as
@@ -1176,7 +1176,7 @@ public class FileLog: Log {
                 }
             }
             logD { "Block[blocked=0, threadId=$tid] >> $logSend" }
-            result
+            result == LogSend.RESULT_TRUE
         }
 
         if (logWait == null) return logSendResult

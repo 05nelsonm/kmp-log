@@ -25,7 +25,7 @@ import kotlinx.coroutines.withContext
 import kotlin.jvm.JvmInline
 
 @JvmInline
-internal value class LogSend private constructor(private val job: Deferred<Boolean>) {
+internal value class LogSend private constructor(private val job: Deferred<Byte>) {
 
     @OptIn(DelicateCoroutinesApi::class)
     internal constructor(
@@ -36,15 +36,21 @@ internal value class LogSend private constructor(private val job: Deferred<Boole
     ): this(job = logScope.async(dispatcher, start = CoroutineStart.ATOMIC) {
         try {
             withContext(NonCancellable) { logBuffer.channel.send(logAction) }
-            true
+            RESULT_TRUE
         } catch (_: ClosedSendChannelException) {
             // LogBuffer.channel's onUndeliveredElement will consume
             // the LogAction and clean everything up for us.
-            false
+            RESULT_FALSE
         }
     })
 
-    internal suspend inline fun await(): Boolean = job.await()
+    internal suspend inline fun await(): Byte = job.await()
+
+    internal companion object {
+        internal const val RESULT_TRUE: Byte = 1
+        internal const val RESULT_FALSE: Byte = 0
+        internal const val RESULT_UNKNOWN: Byte = -1
+    }
 
     override fun toString(): String = "LogSend[job=$job]"
 }
