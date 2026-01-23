@@ -128,7 +128,7 @@ public class FileLog: Log {
         /**
          * [FileLog] itself utilizes a [Logger] instance to log [Level.Error] and
          * [Level.Warn] logs, if and when it is necessary. For obvious reasons
-         * a [FileLog] instance can **never** log to itself, as that would create
+         * a [FileLog] instance can **never** log to itself as that would create
          * a cyclical loop, but it *can* log to other installed [Log] instances
          * (including other [FileLog]). This reference is for the [Logger.domain]
          * used by all [FileLog] instance instantiated [Logger] for dispatching
@@ -160,7 +160,7 @@ public class FileLog: Log {
          *         .build()
          *
          *     val fileLog1 = FileLog.Builder(myLogDirectory)
-         *         // Allow all logs, EXCEPT those from FileLog instances.
+         *         // Allow all logs, EXCEPT from other FileLog instances.
          *         .blacklistDomain(FileLog.DOMAIN)
          *         // configure further...
          *         .build()
@@ -1330,8 +1330,8 @@ public class FileLog: Log {
     }
 
     /*
-    * Loops until LogBuffer is closed via onUninstall and is drained of all its
-    * LogAction.
+    * Loops until LogBuffer is closed via onUninstall and is "drained" of all its
+    * remaining LogAction.
     * */
     private suspend fun LogBuffer.logLoop(
         buf: ByteArray,
@@ -1349,37 +1349,34 @@ public class FileLog: Log {
 
         // Utilized for log rotation things. These LogAction contain no actual
         // write functionality, but are to be woven into the loop as "priority
-        // 1 actions" for scheduling retries and coordinating lockFile/logStream
+        // 1" LogAction for scheduling retries and coordinating lockFile/logStream
         // closure/re-open behavior.
         //
         // Channel(Channel.UNLIMITED) is used under the hood instead of ArrayDequeue
-        // to protect against potential ConcurrentModificationException if a
-        // LogAction needs to be sent from the completion handle of the child
-        // job created by executeLogRotationMoves, which has no guarantees
-        // on its execution context.
+        // to protect against potential ConcurrentModificationException. If a
+        // LogAction needs to be enqueued from the completion handle of the child
+        // job created by executeLogRotationMoves due to lockRotate.release failure,
+        // there are no guarantees on the completion handler's execution context, so.
         val rotateActionQueue = RotateActionQueue(scope = this)
 
-        // By queueing up an action for immediate execution, the loop will be
-        // able to check for an interrupted log rotation. If the program previously
-        // terminated in the midst of moving files, that needs to be finished off
-        // firstly.
+        // By queueing up an action for immediate execution, the loop will be able
+        // to check for an interrupted log rotation before any writes to logStream
+        // occur. If the program previously terminated in the midst of moving files,
+        // that needs to be finished off firstly.
         rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
 
-        // If a write operation for a log entry would end up causing the
-        // log file to exceed the configured maxLogFileSize, it is cached
-        // here and retried after a log rotation is performed. This allows
-        // us to not drop lockLog and perform an immediate retry of the
-        // LogAction after returning from rotateLogs.
+        // If a write operation for a log entry would end up causing the log file to
+        // exceed the configured maxLogFileSize, it is cached here and retried after
+        // a log rotation is performed. This allows us to not drop lockLog and perform
+        // an immediate retry of the LogAction after returning from rotateLogs.
         val retryAction = atomicRef<LogAction?>(initialValue = null)
         logLoopJob.invokeOnCompletion {
-            // This should never really be the case because the main loop
-            // would have dequeued this for processing over ever calling
-            // logBuffer.channel.receive.
+            // This should never really be the case because the main loop would have
+            // dequeued this for processing over ever calling logBuffer.channel.receive.
             //
-            // Only in the event of an error within the loop (such as file
-            // re-open failure) where a LogAction from rotateActionQueue
-            // was dequeued over one from retryAction would there be
-            // unprocessed LogAction present.
+            // Only in the event of an error within the loop (such as file re-open
+            // failure) where a LogAction from rotateActionQueue was dequeued over one
+            // from retryAction would there be unprocessed LogAction present.
             val action = retryAction.valueGetAndSet(newValue = null)
                 ?: return@invokeOnCompletion
 
@@ -1405,45 +1402,53 @@ public class FileLog: Log {
         while (true) {
             yield()
 
+            // Will only be set to null via the inner loop. Once available, it MUST be
+            // processed or LogAction.consumeAndIgnore called on it.
             var logAction: LogAction? = try {
-
                 // Priority 1 LogAction to process immediately.
                 rotateActionQueue.dequeueOrNull()
 
-                    // Priority 2 LogAction that came from FileLog.log()
-                    // and was cached in order to perform a log rotation
-                    // to make room for its write.
+                    // Priority 2 LogAction that came from FileLog.log and was cached
+                    // in order to perform a log rotation to make room for its write.
                     ?: retryAction.valueGetAndSet(newValue = null)
 
-                    // Lastly, LogAction sent from FileLog.log()
+                    // Lastly, LogAction sent from FileLog.log
                     ?: channel.receive()
             } catch (_: ClosedReceiveChannelException) {
-                // FileLog was uninstalled via Log.Root.uninstall, and
-                // there are no remaining LogAction within LogBuffer left
-                // to process after it was closed by FileLog.onUninstall.
+                // FileLog was uninstalled via Log.Root.uninstall, and there are no
+                // remaining LogAction within the LogBuffer to process.
                 break
             }
 
-            // Will be valid if and only if it was not released due to
-            // retryAction containing a cached LogAction.
+            //
+            // CRITICAL SECTION BELOW. Any exceptions that are to be thrown before
+            // making it to the inner loop MUST consume logAction.
+            //
+
+            // Obtain a FileLock for writing to logStream
+            //
+            // Will be valid if and only if it was not released due to retryAction
+            // containing a cached LogAction.
             lockLog = if (lockLog.isValid()) lockLog else CurrentThread.uninterrupted {
                 try {
                     // TODO: Blocking timeout monitor
                     lockFile.lockLog()
                 } catch (t: Throwable) {
-                    // Could be an Overlapped exception on Jvm/Android, or
-                    // on Native/Windows. Someone within this process may
-                    // be holding a lock on our requested range (maliciously?).
-                    // By closing and re-opening the file, this should invalidate
-                    // all other locks held by this process (which we should be
-                    // the ONLY ones acquiring).
+                    // Could be an OverlappingFileLockException on Jvm/Android. Someone
+                    // within this process may be holding a lock on our requested range
+                    // (maliciously?). By closing and re-opening the file, this should
+                    // invalidate all other locks held by this process (which we should
+                    // be the ONLY ones acquiring).
+                    //
+                    // Alternatively, lockFile was previously closed due to a release
+                    // failure requiring a re-open.
 
-                    // If it was closed, the rotation job's lock is already
-                    // invalid, so no reason to wait for it.
+                    // If it was closed, the rotation job's lock is already invalid, so
+                    // no reason to wait for it.
                     if (t !is ClosedException) {
                         try {
-                            // If a log rotation is currently underway, we must wait
-                            // for it so that we do not invalidate its file lock
+                            // If a log rotation is currently underway, we must wait for it
+                            // so that we do not invalidate its lockRotate inadvertently.
                             awaitLogRotation()
                         } catch (t: CancellationException) {
                             logAction?.consumeAndIgnore(buf)
@@ -1487,11 +1492,12 @@ public class FileLog: Log {
                 }
             }
 
+            // Obtain size and set logStream.position to it.
             var size: Long
             CurrentThread.uninterrupted {
                 try {
                     size = logStream.size()
-                    logStream.position(size)
+                    logStream.position(new = size)
                 } catch (e: IOException) {
                     val ee: IOException? = try {
                         logStream.close()
@@ -1516,7 +1522,7 @@ public class FileLog: Log {
                         logStream = files[0].openLogFileRobustly(modeFile)
                         logStreamCompletion = logLoopJob.closeOnCompletion(logStream)
                         size = logStream.size()
-                        logStream.position(size)
+                        logStream.position(new = size)
                     } catch (t: Throwable) {
                         // Total failure. Close up shop.
                         logAction?.consumeAndIgnore(buf)
@@ -1532,7 +1538,7 @@ public class FileLog: Log {
                 "Current ${files[0].name} file byte size is $size, with $count log(s) pending"
             }
 
-            var processed = 0
+            var processedWrites = 0
             CurrentThread.uninterrupted {
 
                 // The inner loop
@@ -1540,7 +1546,7 @@ public class FileLog: Log {
                     val action = logAction ?: break
 
                     val written = try {
-                        action.invoke(logStream, buf, size, processed)
+                        action.invoke(logStream, buf, size, processedWrites)
                     } catch (t: Throwable) {
                         if (t is CancellationException) {
                             // preprocessing.await() threw. We're about to die. Nothing
@@ -1556,7 +1562,7 @@ public class FileLog: Log {
                     }
 
                     if (written > 0L) {
-                        processed++
+                        processedWrites++
                         size += written
                         logD { "Wrote $written bytes to ${files[0].name}" }
                     } else {
@@ -1578,7 +1584,7 @@ public class FileLog: Log {
                         }
                     }
 
-                    // Rip through some more buffered actions (if available) while we hold a lock.
+                    // Rip through some more LogAction (if able) while we hold a lock.
                     logAction = when {
                         // We lost our lock
                         !lockLog.isValid() -> null
@@ -1587,8 +1593,7 @@ public class FileLog: Log {
                         // Log rotation is needed
                         size >= maxLogFileSize -> null
                         // Yield to another process (potentially)
-                        processed >= maxLogYield -> null
-
+                        processedWrites >= maxLogYield -> null
                         // Job cancellation
                         !logLoopJob.isActive -> null
 
@@ -1602,14 +1607,15 @@ public class FileLog: Log {
                                 ?: channel.tryReceive().getOrNull()
                         } catch (_: CancellationException) {
                             // Shouldn't happen b/c just checked isActive, but if so
-                            // we want to ensure we pop out for logStream.sync
+                            // we want to ensure we pop out for logStream.sync. The
+                            // main loop will re-throw the exception when it yields.
                             null
                         }
                     }
                 }
             }
 
-            if (processed > 0) {
+            if (processedWrites > 0) {
                 if (logStream.isOpen()) {
                     // Ensure everything is synced to disk before going further,
                     // either to do a log rotation or release lockLog for another
@@ -1631,7 +1637,7 @@ public class FileLog: Log {
                     }
                 }
 
-                logD { "Processed $processed log(s)" }
+                logD { "Processed $processedWrites log(s)" }
             }
 
             if (logLoopJob.isActive && size >= maxLogFileSize) {
@@ -1651,20 +1657,21 @@ public class FileLog: Log {
                 }
             }
 
-            // Do not release lockLog if there is a retry scheduled. It will
-            // be immediately dequeued and executed while still holding our
-            // lock on log writes.
+            // Do not release lockLog if there is a retry LogAction. It will be
+            // immediately dequeued and executed while still holding our lock
+            // on writes to logStream (unless there are LogAction present in the
+            // rotateActionQueue which come first).
             if (retryAction.valueGet() == null && lockLog.isValid()) try {
                 lockLog.release()
                 logD { "Released lock on ${dotLockFile.name} >> $lockLog" }
             } catch (e: IOException) {
-                // If a log rotation is currently underway, we must wait
-                // for it so that we do not invalidate its file lock.
+                // If a log rotation is currently underway, we must wait for it
+                // so that we do not invalidate its lockRotate inadvertently.
                 awaitLogRotation()
 
                 try {
-                    // Close the lock file. Next logLoop iteration will fail
-                    // to obtain its lock due to a ClosedException and then
+                    // Close the lock file (if not already). Next logLoop iteration
+                    // will fail to obtain its lock due to a ClosedException and then
                     // re-open lockFile to retry acquisition.
                     lockFile.close()
                 } catch (ee: IOException) {
@@ -1700,46 +1707,44 @@ public class FileLog: Log {
         // logStream are so large that it triggers another rotation
         // before the initial one finishes moving files. In that
         // event, this will suspend (and in doing so inhibit further
-        // log writes because we currently hold lockLog).
+        // writes to logStream because we currently hold lockLog).
         awaitLogRotation()
 
-        run {
-            // At this point, the rotateActionQueue:
-            //  - Is empty.
-            //  - Contains a lockFile.close action due to lockRotate.release
-            //    failure in a previous rotation job's completion handle.
-            //      - If that lockFile is the same as this function's
-            //        lockFile and is closed here and now, we will fail to
-            //        acquire lockRotate below and schedule a retry with a
-            //        newly-opened lockFile.
-            //  - Contains a rotation retry action scheduled by a previous
-            //    rotation job due to a log file move error (or something).
-            //      - If that is the case, we're retrying a rotation now.
-            //
-            // Either way, the queue should be exhausted here and contain
-            // NO actions before continuing.
-            while (true) {
-                val action = rotateActionQueue.dequeueOrNull() ?: break
-                action.consumeAndIgnore(buf)
-            }
+        // At this point, the rotateActionQueue:
+        //  - Is empty.
+        //  - Contains a lockFile.close action due to lockRotate.release
+        //    failure in a previous rotation job's completion handle.
+        //      - If that lockFile is the same as this function's
+        //        lockFile (it should be at this point) and is closed
+        //        here and now when the action is consumed, then we will
+        //        fail to acquire lockRotate below and schedule a retry.
+        //  - Contains a rotation retry action scheduled by a previous
+        //    rotation job due to a log file move error (or something).
+        //      - If that is the case, we're doing a rotation now.
+        //
+        // Either way, the queue should be exhausted here and contain
+        // NO LogAction before continuing.
+        while (true) {
+            val action = rotateActionQueue.dequeueOrNull() ?: break
+            action.consumeAndIgnore(buf)
         }
 
         val lockRotate = try {
             // TODO: Blocking timeout monitor
             lockFile.lockRotate()
         } catch (t: Throwable) {
-            // This can potentially happen if we had to wait on another
-            // log rotation to finish up before running this one, and in
-            // its completion handle there was a lockRotate.release failure
-            // requiring it to close the lockFile.
+            // Could be an OverlappingFileLockException on Jvm/Android. Someone
+            // within this process may be holding a lock on our requested range
+            // (maliciously?). By closing and re-opening the file, this should
+            // invalidate all other locks held by this process (which we should
+            // be the ONLY ones acquiring).
             //
-            // Alternatively, it's due to an Overlapped lock exception on
-            // Jvm/Android or Native/Windows because someone within this
-            // process is holding a lock on the requested range (maliciously?).
+            // Alternatively, lockFile was previously closed due to a release
+            // failure and requires a re-open.
 
             try {
-                // Close the lock file. Next logLoop iteration will fail
-                // to obtain its lock due to a ClosedException and then
+                // Close the lock file (if not already). Next logLoop iteration
+                // will fail to obtain its lock due to a ClosedException and then
                 // re-open lockFile to retry acquisition.
                 lockFile.close()
             } catch (e: IOException) {
@@ -1815,8 +1820,8 @@ public class FileLog: Log {
                     logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
                 } catch (e: IOException) {
                     try {
-                        // Close the lock file. Next logLoop iteration will fail
-                        // to obtain its lock due to a ClosedException and then
+                        // Close the lock file (if not already). Next logLoop iteration
+                        // will fail to obtain its lock due to a ClosedException and then
                         // re-open lockFile to retry acquisition.
                         lockFile.close()
                     } catch (ee: IOException) {
@@ -1830,19 +1835,19 @@ public class FileLog: Log {
                 return
             }
 
-            prepareLogRotationFully(logStream, buf, moves)
+            prepareLogRotationFull(logStream, buf, moves)
         }
 
         if (moves.isEmpty()) {
-            // An error occurred in prepareLogRotation{Fully/Interrupted}
+            // An error occurred in prepareLogRotation{Full/Interrupted}
 
             if (lockRotate.isValid()) try {
                 lockRotate.release()
                 logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
             } catch (e: IOException) {
                 try {
-                    // Close the lock file. Next logLoop iteration will fail
-                    // to obtain its lock due to a ClosedException and then
+                    // Close the lock file (if not already). Next logLoop iteration
+                    // will fail to obtain its lock due to a ClosedException and then
                     // re-open lockFile to retry acquisition.
                     lockFile.close()
                 } catch (ee: IOException) {
@@ -1873,10 +1878,10 @@ public class FileLog: Log {
                 // next log rotation may deadlock when attempting to acquire
                 // lockRotate.
                 rotateActionQueue.enqueue { stream, _, _, processed ->
-                    // This is done lazily here as a priority action in order
+                    // This is done lazily here as a priority LogAction in order
                     // to not inadvertently invalidate a lockLog in the midst
-                    // of a write action. If the lockFile is already closed for
-                    // some other reason, it does nothing.
+                    // of executing a LogAction that is writing to logStream. If
+                    // the lockFile is already closed, it does nothing.
 
                     // Ensure any writes are synced to disk before invalidating
                     // all locks. The inner loop within logLoop may have processed
@@ -1906,6 +1911,9 @@ public class FileLog: Log {
                     }
 
                     try {
+                        // Close the lock file (if not already). Next logLoop iteration
+                        // will fail to obtain its lock due to a ClosedException and then
+                        // re-open lockFile to retry acquisition.
                         lockFile.close()
                     } catch (_: Throwable) {}
 
@@ -1927,7 +1935,7 @@ public class FileLog: Log {
     * If moves is left unpopulated after returning, an error has occurred and
     * an immediate retry should be scheduled.
     * */
-    private fun prepareLogRotationFully(
+    private fun prepareLogRotationFull(
         logStream: FileStream.ReadWrite,
         buf: ByteArray,
         moves: ArrayDeque<Pair<File, File>>,
@@ -2241,6 +2249,7 @@ public class FileLog: Log {
         return 0L
     }
 
+    @Throws(CancellationException::class)
     private suspend fun LogLoopScope.awaitLogRotation() {
         logLoopJob.children.forEach { child ->
             logD {
