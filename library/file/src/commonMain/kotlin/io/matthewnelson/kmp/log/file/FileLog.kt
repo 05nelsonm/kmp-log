@@ -36,6 +36,7 @@ import io.matthewnelson.kmp.file.canonicalFile2
 import io.matthewnelson.kmp.file.delete2
 import io.matthewnelson.kmp.file.mkdirs2
 import io.matthewnelson.kmp.file.name
+import io.matthewnelson.kmp.file.openRead
 import io.matthewnelson.kmp.file.openWrite
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.file.resolve
@@ -1307,8 +1308,8 @@ public class FileLog: Log {
                 dispatcherCloseLazily = {
                     logD { "Closing > $dispatcher" }
 
-                    // Must close lazily from a different thread
-                    scopeLog.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
+                    // Must close lazily
+                    scopeLog.launch(Dispatchers.Unconfined, start = CoroutineStart.ATOMIC) {
                         withContext(NonCancellable) { delay(250.milliseconds) }
                         dispatcher.close()
                         // Only 1 carrot because Closeable tests search for 2 (i.e. Closed >> $closeable)
@@ -2022,6 +2023,7 @@ public class FileLog: Log {
     * If moves is left unpopulated after returning, an error has occurred and
     * an immediate retry should be scheduled.
     * */
+    @Suppress("UnnecessaryVariable")
     private fun prepareLogRotationInterrupted(
         logStream: FileStream.ReadWrite,
         buf: ByteArray,
@@ -2076,7 +2078,7 @@ public class FileLog: Log {
 
         logD { "Hole in archived logs was not found. Checking if ${files[0].name} needs to be truncated to 0." }
 
-        val size = try {
+        val sizeLog = try {
             logStream.size()
         } catch (e: IOException) {
             try {
@@ -2094,12 +2096,124 @@ public class FileLog: Log {
             return
         }
 
-        if (size == 0L) {
-            logD { "Truncation of ${files[0].name} to 0 detected. Finishing up $LOG_ROTATION." }
+        if (sizeLog <= 0L) {
+            logD { "Truncation of ${files[0].name} detected. Finishing up $LOG_ROTATION." }
             return
         }
 
-        // TODO: open dotRotateFile and compare it to logStream
+        // Shouldn't be the case because of maxLogFileSize min, but just in case leave
+        // it alone if it's too small.
+        //
+        // buf.size == DEFAULT_BUFFER_SIZE == (8 * 1024)
+        (buf.size * 2).let { minimum ->
+            if (sizeLog >= minimum) return@let
+
+            logD {
+                "Skipping truncation of ${files[0].name} to 0 >> " +
+                "${files[0].name} size[$sizeLog] < minimum[$minimum]"
+            }
+            return
+        }
+
+        var dotStream: FileStream.Read? = null
+        var threw: Throwable? = null
+        try {
+            dotStream = dotRotateFile.openRead()
+            logD { "Opened >> $dotStream" }
+
+            val sizeDot = dotStream.size()
+            if (sizeLog != sizeDot) {
+                // File sizes do not match. Leave it alone.
+                logD {
+                    "Skipping truncation of ${files[0].name} to 0 >> " +
+                    "${files[0].name} size[$sizeLog] != ${dotRotateFile.name} size[$sizeDot]"
+                }
+                return
+            }
+
+            val bufLog = buf
+            bufLog.fill(0)
+            val bufDot = bufLog.copyOf()
+
+            // Compare first and last 8192 bytes of each file. Because we're dealing with
+            // a file that contains timestamp + pid + tid, we should know pretty early
+            // on if they are the same or not.
+            val reads = arrayOf(0L, sizeDot - bufLog.size).map { pos ->
+                val readLog = logStream.read(bufLog, position = pos)
+                val readDot = dotStream.read(bufDot, position = pos)
+
+                if (readLog != readDot) {
+                    logD {
+                        "Skipping truncation of ${files[0].name} to 0 >> " +
+                        "${files[0].name} read[$readLog] != ${dotRotateFile.name} " +
+                        "read[$readDot] at position[$pos]"
+                    }
+                    return
+                }
+
+                // Negative, or not enough bytes read to make a comparison
+                // valuable enough (that I would be safe with) to determine
+                // the need for truncation.
+                (bufLog.size / 4).let { minimum ->
+                    if (readLog >= minimum) return@let
+
+                    logD {
+                        "Skipping truncation of ${files[0].name} to 0 >> " +
+                        "read[$readLog] < minimum[$minimum] at position[$pos]"
+                    }
+                    return
+                }
+
+                // Byte for byte comparison
+                for (i in 0 until readLog) {
+                    if (bufLog[i] == bufDot[i]) continue
+
+                    logD {
+                        "Skipping truncation of ${files[0].name} to 0 >> " +
+                        "${files[0].name} byte[${bufLog[i]}] != ${dotRotateFile.name} " +
+                        "byte[${bufDot[i]}] at position[${pos + i}]"
+                    }
+                    return
+                }
+
+                bufLog.fill(0)
+                bufDot.fill(0)
+
+                readLog
+            }
+
+            logD {
+                "Truncation of ${files[0].name} to 0 needed. " +
+                "First ${reads[0]} and last ${reads[1]} bytes " +
+                "of ${files[0].name} matched ${dotRotateFile.name}, and " +
+                "both have a size of $sizeLog bytes."
+            }
+
+            truncate0AndSync(logStream, file = files[0])
+        } catch (e: IOException) {
+            threw = e
+        } finally {
+            try {
+                // FileStream.close is called here instead of using
+                // Closeable.use above to ensure errors related to
+                // FileStream.close do not create false positives.
+                dotStream?.close()
+            } catch (e: IOException) {
+                // Only add as suppressed. Ignore otherwise.
+                threw?.addSuppressed(e)
+            } finally {
+                logD { dotStream?.let { "Closed >> $it" } }
+            }
+        }
+
+        if (threw == null) return
+
+        LOG.w(threw) { "Failed to compare ${files[0].name} with ${dotRotateFile.name}. Retrying $LOG_ROTATION." }
+
+        // Will signal an error in calling function (i.e. rotateLogs) which will
+        // release lockRotate and enqueue an immediate retry with a newly opened
+        // logStream.
+        moves.clear()
     }
 
     /*
@@ -2138,6 +2252,7 @@ public class FileLog: Log {
             try {
                 // O_TRUNC
                 s = file.openWrite(excl = OpenExcl.MustExist)
+                logD { "Opened >> $s" }
 
                 logD { "Syncing ${file.name}" }
                 try {
@@ -2162,6 +2277,8 @@ public class FileLog: Log {
                     s?.close()
                 } catch (ee: IOException) {
                     e.addSuppressed(ee)
+                } finally {
+                    logD { s?.let { "Closed >> $it" } }
                 }
             }
 
@@ -2189,7 +2306,7 @@ public class FileLog: Log {
     private fun ScopeLogLoop.executeLogRotationMoves(
         rotateActionQueue: RotateActionQueue,
         moves: ArrayDeque<Pair<File, File>>,
-    ): Job = scope.launch(context = CoroutineName("$LOG_ROTATION-$logFiles0Hash")) {
+    ): Job = scope.launch(context = CoroutineName(LOG.tag + "-$LOG_ROTATION")) {
         logD { "$LOG_ROTATION Started >> ${currentCoroutineContext().job}" }
 
 //        val startSize = moves.size
