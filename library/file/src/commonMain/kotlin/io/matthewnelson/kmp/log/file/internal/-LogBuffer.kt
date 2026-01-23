@@ -47,7 +47,7 @@ internal typealias LogAction = suspend (
     // The current size of the log file being written to. This
     // is utilized to trigger a log rotation + retry, in the
     // event that writing a log entry would cause it to exceed
-    // the configured maxLogSize.
+    // the configured maxLogFileSize.
     //
     // NOTE: This should be reflective of stream.size(), but is
     // a local value tracked by the log loop and updated with

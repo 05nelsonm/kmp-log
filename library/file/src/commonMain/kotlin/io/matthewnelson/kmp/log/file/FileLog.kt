@@ -1403,6 +1403,8 @@ public class FileLog: Log {
 
         // The main loop
         while (true) {
+            yield()
+
             var logAction: LogAction? = try {
 
                 // Priority 1 LogAction to process immediately.
@@ -1586,13 +1588,23 @@ public class FileLog: Log {
                         size >= maxLogFileSize -> null
                         // Yield to another process (potentially)
                         processed >= maxLogYield -> null
+
                         // Job cancellation
                         !logLoopJob.isActive -> null
 
                         // Dequeue next LogAction (if available)
-                        else -> rotateActionQueue.dequeueOrNull()
-                            ?: retryAction.valueGetAndSet(newValue = null)
-                            ?: channel.tryReceive().getOrNull()
+                        else -> try {
+                            // Share the thread.
+                            yield()
+
+                            rotateActionQueue.dequeueOrNull()
+                                ?: retryAction.valueGetAndSet(newValue = null)
+                                ?: channel.tryReceive().getOrNull()
+                        } catch (_: CancellationException) {
+                            // Shouldn't happen b/c just checked isActive, but if so
+                            // we want to ensure we pop out for logStream.sync
+                            null
+                        }
                     }
                 }
             }
@@ -2222,6 +2234,8 @@ public class FileLog: Log {
         // executed, so its existence indicates that a log rotation
         // was interrupted, either by process termination or error.
         if (dotRotateFile.exists2Robustly()) return EXECUTE_ROTATE_LOGS
+
+        logD { "$LOG_ROTATION not needed" }
 
         // Good to go; do nothing.
         return 0L
