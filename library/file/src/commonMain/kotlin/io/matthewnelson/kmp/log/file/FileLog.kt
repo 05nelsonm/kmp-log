@@ -57,6 +57,7 @@ import io.matthewnelson.kmp.log.file.internal.LogScope
 import io.matthewnelson.kmp.log.file.internal.LogSend
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
 import io.matthewnelson.kmp.log.file.internal.LogWait
+import io.matthewnelson.kmp.log.file.internal.RotateActionQueue
 import io.matthewnelson.kmp.log.file.internal.async
 import io.matthewnelson.kmp.log.file.internal.atomicLong
 import io.matthewnelson.kmp.log.file.internal.atomicRef
@@ -1243,7 +1244,7 @@ public class FileLog: Log {
                         //   one points to a different location. This would invalidate the Log.uid,
                         //   allowing multiple FileLog instances to be installed simultaneously for
                         //   the same log file leading to data corruption.
-                        throw IOException("Symbolic link hijacking detected >> [$canonical] != [$directory]")
+                        throw IllegalStateException("Symbolic link hijacking detected >> [$canonical] != [$directory]")
                     }
                 }
 
@@ -1253,7 +1254,7 @@ public class FileLog: Log {
                     // the lock file to be a regular file.
                     val canonical = dotLockFile.canonicalFile2()
                     if (canonical != dotLockFile) {
-                        LOG.w { "Symbolic link detected >> [$dotLockFile] != [$canonical]" }
+                        LOG.w { "Symbolic link detected >> [$canonical] != [$dotLockFile]" }
                         dotLockFile.delete2(ignoreReadOnly = true)
                         delay(10.milliseconds)
                     }
@@ -1269,7 +1270,7 @@ public class FileLog: Log {
                 try {
                     val canonical = files[0].canonicalFile2()
                     if (canonical != files[0]) {
-                        LOG.w { "Symbolic link detected >> [${files[0]}] != [$canonical]" }
+                        LOG.w { "Symbolic link detected >> [$canonical] != [${files[0]}]" }
                         files[0].delete2(ignoreReadOnly = true)
                         delay(10.milliseconds)
                     }
@@ -1351,19 +1352,18 @@ public class FileLog: Log {
         // 1 actions" for scheduling retries and coordinating lockFile/logStream
         // closure/re-open behavior.
         //
-        // Another LogBuffer (Channel.UNLIMITED) is used instead of ArrayDequeue
+        // Channel(Channel.UNLIMITED) is used under the hood instead of ArrayDequeue
         // to protect against potential ConcurrentModificationException if a
         // LogAction needs to be sent from the completion handle of the child
         // job created by executeLogRotationMoves, which has no guarantees
         // on its execution context.
-        val rotateActionQueue = LogBuffer()
-        logLoopJob.invokeOnCompletion { rotateActionQueue.channel.cancel() }
+        val rotateActionQueue = RotateActionQueue(scope = this)
 
         // By queueing up an action for immediate execution, the loop will be
         // able to check for an interrupted log rotation. If the program previously
         // terminated in the midst of moving files, that needs to be finished off
         // firstly.
-        rotateActionQueue.channel.trySend(::checkIfLogRotationIsNeeded)
+        rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
 
         // If a write operation for a log entry would end up causing the
         // log file to exceed the configured maxLogFileSize, it is cached
@@ -1406,7 +1406,7 @@ public class FileLog: Log {
             var logAction: LogAction? = try {
 
                 // Priority 1 LogAction to process immediately.
-                rotateActionQueue.channel.tryReceive().getOrNull()
+                rotateActionQueue.dequeueOrNull()
 
                     // Priority 2 LogAction that came from FileLog.log()
                     // and was cached in order to perform a log rotation
@@ -1590,7 +1590,7 @@ public class FileLog: Log {
                         !logLoopJob.isActive -> null
 
                         // Dequeue next LogAction (if available)
-                        else -> rotateActionQueue.channel.tryReceive().getOrNull()
+                        else -> rotateActionQueue.dequeueOrNull()
                             ?: retryAction.valueGetAndSet(newValue = null)
                             ?: channel.tryReceive().getOrNull()
                     }
@@ -1635,7 +1635,7 @@ public class FileLog: Log {
                     }
                 } else {
                     // We lost lockLog. Trigger an immediate retry.
-                    rotateActionQueue.channel.trySend(::checkIfLogRotationIsNeeded)
+                    rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
                 }
             }
 
@@ -1674,7 +1674,7 @@ public class FileLog: Log {
     * NOTE: lockLog is required to be held when calling this function.
     * */
     private suspend fun LogLoopScope.rotateLogs(
-        rotateActionQueue: LogBuffer,
+        rotateActionQueue: RotateActionQueue,
         logStream: FileStream.ReadWrite,
         lockFile: LockFile,
         buf: ByteArray,
@@ -1707,11 +1707,7 @@ public class FileLog: Log {
             // Either way, the queue should be exhausted here and contain
             // NO actions before continuing.
             while (true) {
-                val action = rotateActionQueue
-                    .channel
-                    .tryReceive()
-                    .getOrNull()
-                    ?: break
+                val action = rotateActionQueue.dequeueOrNull() ?: break
                 action.consumeAndIgnore(buf)
             }
         }
@@ -1740,7 +1736,7 @@ public class FileLog: Log {
             LOG.w(t) { "Failed to acquire a rotation lock on ${dotLockFile.name}. Retrying $LOG_ROTATION." }
 
             // Trigger an immediate retry.
-            rotateActionQueue.channel.trySend(::checkIfLogRotationIsNeeded)
+            rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
 
             return
         }
@@ -1795,7 +1791,7 @@ public class FileLog: Log {
                 // The retryAction is currently null, so trigger an immediate
                 // retry with a freshly opened logStream. If another process is also
                 // logging, it may finish off the log rotation for us, so.
-                rotateActionQueue.channel.trySend(::checkIfLogRotationIsNeeded)
+                rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
 
                 // Release lockRotate below and return early.
                 0L
@@ -1846,7 +1842,7 @@ public class FileLog: Log {
 
             // Trigger an immediate retry. If another process is also
             // logging, it may finish off the log rotation for us, so.
-            rotateActionQueue.channel.trySend(::checkIfLogRotationIsNeeded)
+            rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
 
             return
         }
@@ -1864,7 +1860,7 @@ public class FileLog: Log {
                 // and invalidate all locks currently held, otherwise the
                 // next log rotation may deadlock when attempting to acquire
                 // lockRotate.
-                rotateActionQueue.channel.trySend { stream, _, _, processed ->
+                rotateActionQueue.enqueue { stream, _, _, processed ->
                     // This is done lazily here as a priority action in order
                     // to not inadvertently invalidate a lockLog in the midst
                     // of a write action. If the lockFile is already closed for
@@ -2163,7 +2159,7 @@ public class FileLog: Log {
     * via completion handler.
     * */
     private fun LogLoopScope.executeLogRotationMoves(
-        rotateActionQueue: LogBuffer,
+        rotateActionQueue: RotateActionQueue,
         moves: ArrayDeque<Pair<File, File>>,
     ): Job = scope.launch(context = CoroutineName("$LOG_ROTATION-$logFiles0Hash")) {
         logD { "$LOG_ROTATION Started >> ${currentCoroutineContext().job}" }
@@ -2196,7 +2192,7 @@ public class FileLog: Log {
 
                 // Trigger an immediate retry. If another process is also
                 // logging, it may finish off the log rotation for us, so.
-                rotateActionQueue.channel.trySend(::checkIfLogRotationIsNeeded)
+                rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
                 break
             }
         }
