@@ -1381,7 +1381,7 @@ public class FileLog: Log {
                 ?: return@invokeOnCompletion
 
             @OptIn(DelicateCoroutinesApi::class)
-            logScope.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
+            logScope.launch(Dispatchers.Unconfined, start = CoroutineStart.ATOMIC) {
                 action.consumeAndIgnore(buf)
             }
 

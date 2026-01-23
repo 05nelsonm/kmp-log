@@ -24,7 +24,6 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -87,7 +86,7 @@ internal value class LogBuffer private constructor(internal val channel: Channel
         onBufferOverflow = BufferOverflow.SUSPEND,
         onUndeliveredElement = { logAction ->
             @OptIn(DelicateCoroutinesApi::class)
-            GlobalScope.launch(context = Dispatchers.IO, start = CoroutineStart.ATOMIC) {
+            GlobalScope.launch(context = Dispatchers.Unconfined, start = CoroutineStart.ATOMIC) {
                 logAction.consumeAndIgnore(EMPTY_BUF)
             }
         }
