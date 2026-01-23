@@ -1599,8 +1599,10 @@ public class FileLog: Log {
 
                         // Dequeue next LogAction (if available)
                         else -> try {
-                            // Share the thread.
-                            yield()
+                            // Share the thread if we have not processed any LogAction
+                            // that have written to logStream yet. We want to make it
+                            // to logStream.sync ASAP to commit the data to disk.
+                            if (processedWrites == 0) yield()
 
                             rotateActionQueue.dequeueOrNull()
                                 ?: retryAction.valueGetAndSet(newValue = null)
