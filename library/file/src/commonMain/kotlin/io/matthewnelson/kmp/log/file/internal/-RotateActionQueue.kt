@@ -23,7 +23,7 @@ import kotlin.jvm.JvmInline
 @JvmInline
 internal value class RotateActionQueue private constructor(private val channel: Channel<LogAction>) {
 
-    internal constructor(scope: LogLoopScope): this(LogBuffer(capacity = Channel.UNLIMITED).channel) {
+    internal constructor(scope: ScopeLogLoop): this(LogBuffer(capacity = Channel.UNLIMITED).channel) {
         scope.logLoopJob.invokeOnCompletion { channel.cancel(cause = null) }
     }
 

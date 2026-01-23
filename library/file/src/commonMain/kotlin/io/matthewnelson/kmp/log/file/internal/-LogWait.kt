@@ -25,7 +25,7 @@ import kotlin.jvm.JvmInline
 @JvmInline
 internal value class LogWait private constructor(private val job: CompletableJob) {
 
-    internal constructor(logScope: LogScope): this(Job(parent = logScope.supervisorJob))
+    internal constructor(scope: ScopeLogHandle): this(Job(parent = scope.supervisorJob))
 
     internal inline val isActive: Boolean get() = job.isActive
 

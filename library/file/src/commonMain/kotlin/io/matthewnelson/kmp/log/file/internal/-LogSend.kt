@@ -15,7 +15,6 @@
  **/
 package io.matthewnelson.kmp.log.file.internal
 
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -29,11 +28,10 @@ internal value class LogSend private constructor(private val job: Deferred<Byte>
 
     @OptIn(DelicateCoroutinesApi::class)
     internal constructor(
-        logScope: LogScope,
-        dispatcher: CoroutineDispatcher,
+        scope: ScopeLogHandle,
         logBuffer: LogBuffer,
         logAction: LogAction,
-    ): this(job = logScope.async(dispatcher, start = CoroutineStart.ATOMIC) {
+    ): this(job = scope.async(start = CoroutineStart.ATOMIC) {
         try {
             withContext(NonCancellable) { logBuffer.channel.send(logAction) }
             RESULT_TRUE

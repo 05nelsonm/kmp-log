@@ -23,17 +23,18 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlin.jvm.JvmInline
 
 @JvmInline
-internal value class LogScope private constructor(
-    @Deprecated("Use LogScope.{launch/async/supervisorJob}", level = DeprecationLevel.ERROR)
+internal value class ScopeLog private constructor(
+    @Deprecated(
+        message = "Use ScopeLog.{async/launch/coroutineName/handler/supervisorJob}",
+        level = DeprecationLevel.ERROR,
+    )
     internal val scope: CoroutineScope
 ) {
 
@@ -46,7 +47,19 @@ internal value class LogScope private constructor(
         + handler
         // A CoroutineDispatcher is intentionally NOT specified
         // because FileLog allocates one via onInstall.
+        //
+        // See ScopeLogHandle
     ))
+
+    internal inline val coroutineName: CoroutineName get() {
+        @Suppress("DEPRECATION_ERROR")
+        return scope.coroutineContext[CoroutineName]!!
+    }
+
+    internal inline val handler: CoroutineExceptionHandler get() {
+        @Suppress("DEPRECATION_ERROR")
+        return scope.coroutineContext[CoroutineExceptionHandler]!!
+    }
 
     internal inline val supervisorJob: CompletableJob get() {
         @Suppress("DEPRECATION_ERROR")
@@ -54,22 +67,22 @@ internal value class LogScope private constructor(
     }
 }
 
+//// Intentionally does not define defaults to force declarations
+//internal inline fun <T> ScopeLog.async(
+//    dispatcher: CoroutineDispatcher,
+//    start: CoroutineStart,
+//    noinline block: suspend CoroutineScope.() -> T,
+//): Deferred<T> {
+//    @Suppress("DEPRECATION_ERROR")
+//    return scope.async(context = dispatcher, start, block)
+//}
+
 // Intentionally does not define defaults to force declarations
-internal inline fun LogScope.launch(
+internal inline fun ScopeLog.launch(
     dispatcher: CoroutineDispatcher,
     start: CoroutineStart,
     noinline block: suspend CoroutineScope.() -> Unit,
 ): Job {
     @Suppress("DEPRECATION_ERROR")
     return scope.launch(context = dispatcher, start, block)
-}
-
-// Intentionally does not define defaults to force declarations
-internal inline fun <T> LogScope.async(
-    dispatcher: CoroutineDispatcher,
-    start: CoroutineStart,
-    noinline block: suspend CoroutineScope.() -> T,
-): Deferred<T> {
-    @Suppress("DEPRECATION_ERROR")
-    return scope.async(context = dispatcher, start, block)
 }

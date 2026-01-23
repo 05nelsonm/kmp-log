@@ -51,9 +51,10 @@ import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE
 import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE_LOGS_AND_RETRY
 import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.MAX_RETRIES
 import io.matthewnelson.kmp.log.file.internal.LogAction
-import io.matthewnelson.kmp.log.file.internal.LogLoopScope
-import io.matthewnelson.kmp.log.file.internal.LogLoopScope.Companion.logLoopScope
-import io.matthewnelson.kmp.log.file.internal.LogScope
+import io.matthewnelson.kmp.log.file.internal.ScopeLogHandle
+import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop
+import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop.Companion.scopeLogLoop
+import io.matthewnelson.kmp.log.file.internal.ScopeLog
 import io.matthewnelson.kmp.log.file.internal.LogSend
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
 import io.matthewnelson.kmp.log.file.internal.LogWait
@@ -81,7 +82,6 @@ import io.matthewnelson.kmp.log.file.internal.valueDecrement
 import io.matthewnelson.kmp.log.file.internal.valueGet
 import io.matthewnelson.kmp.log.file.internal.valueGetAndSet
 import io.matthewnelson.kmp.log.file.internal.valueIncrement
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineStart
@@ -303,7 +303,7 @@ public class FileLog: Log {
     public fun uninstallAndAwaitSync(): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
         val job = (instance as FileLog)._logJob ?: return false
-        val context = instance.handler + Dispatchers.IO
+        val context = instance.scopeLog.handler + Dispatchers.IO
         while (job.isActive) {
             try {
                 CurrentThread.uninterruptedRunBlocking(context) {
@@ -869,13 +869,12 @@ public class FileLog: Log {
 
     private val LOG: Logger
 
-    private val handler: CoroutineExceptionHandler
-    private val logScope: LogScope
+    private val scopeLog: ScopeLog
 
     @Volatile
     private var _onInstallInvocations: Long = 0L
     @Volatile
-    private var _logHandle: Pair<LogBuffer, CoroutineDispatcher>? = null
+    private var _logHandle: Pair<LogBuffer, ScopeLogHandle>? = null
     @Volatile
     private var _logJob: Job? = null
     private val _pendingLogCount = atomicLong(0L)
@@ -940,11 +939,10 @@ public class FileLog: Log {
         this._whitelistTag = whitelistTag.toTypedArray()
         this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
 
-        this.handler = CoroutineExceptionHandler handler@ { context, t ->
+        this.scopeLog = ScopeLog(uidSuffix, handler = CoroutineExceptionHandler handler@ { context, t ->
             if (t is CancellationException) return@handler // Ignore...
             logE(t) { context }
-        }
-        this.logScope = LogScope(uidSuffix, this.handler)
+        })
 
         this.logDirectory = directory.path
         this.logFiles = files.map { it.path }.toImmutableList()
@@ -981,7 +979,7 @@ public class FileLog: Log {
     }
 
     override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        val (logBuffer, dispatcher) = _logHandle ?: return false
+        val (logBuffer, scope) = _logHandle ?: return false
         val tid = CurrentThread.id()
 
         // The formatted text to write, and its pre-calculated UTF-8 byte-size.
@@ -991,7 +989,7 @@ public class FileLog: Log {
             // LAZY start as to not do unnecessary work until we are
             // certain that the LogAction was committed to LogBuffer
             // successfully, which may be closed for sending.
-            logScope.async(dispatcher, start = CoroutineStart.LAZY) {
+            scope.async(start = CoroutineStart.LAZY) {
                 val formatted = format(time, pid(), tid, level, domain, tag, msg, t)
                 if (formatted.isNullOrEmpty()) return@async null
 
@@ -1010,12 +1008,12 @@ public class FileLog: Log {
         }
 
         val logWait = if (level < minWaitOn) null else when (domain) {
-            null -> LogWait(logScope)
+            null -> LogWait(scope)
             // Do not block for FileLog or Log.Root logs. They should NEVER
             // be Level.Fatal, but it is checked for regardless, just in case
             // someone is attempting to bypass it.
-            DOMAIN, ROOT_DOMAIN -> if (level == Level.Fatal) LogWait(logScope) else null
-            else -> LogWait(logScope)
+            DOMAIN, ROOT_DOMAIN -> if (level == Level.Fatal) LogWait(scope) else null
+            else -> LogWait(scope)
         }
 
         var retries = 0
@@ -1147,7 +1145,7 @@ public class FileLog: Log {
             //
             // Additionally, there needs to exist a way to selectively block for the result
             // based on domain; this provides us that optionality.
-            LogSend(logScope, dispatcher, logBuffer, logAction)
+            LogSend(scope, logBuffer, logAction)
         }
 
         _pendingLogCount.valueIncrement()
@@ -1168,7 +1166,7 @@ public class FileLog: Log {
             var result = LogSend.RESULT_UNKNOWN
             while (result == LogSend.RESULT_UNKNOWN) {
                 try {
-                    result = CurrentThread.uninterruptedRunBlocking(handler + dispatcher) {
+                    result = CurrentThread.uninterruptedRunBlocking(scopeLog.handler + scope.dispatcher) {
                         // This will NOT throw CancellationException, as
                         // CoroutineStart.ATOMIC + withContext(NonCancellable)
                         // were used.
@@ -1187,7 +1185,7 @@ public class FileLog: Log {
         while (logWait.isActive) {
             logD { "Block[blocked=1, threadId=$tid] >> $logWait" }
             try {
-                CurrentThread.uninterruptedRunBlocking(handler + dispatcher) {
+                CurrentThread.uninterruptedRunBlocking(scopeLog.handler + scope.dispatcher) {
                     // If logSendResult was false (closed channel) then
                     // LogBuffer.channel's onUndeliveredElement will clean
                     // everything up for us and cancel logWait (eventually).
@@ -1214,12 +1212,12 @@ public class FileLog: Log {
         //  a single dispatcher for all of them? Would need to use non-blocking FileLock
         //  acquisition, but it IS possible...
         //  Maybe make it configurable??? >> Builder.logThread(dedicated = true)
-        val dispatcher = newSingleThreadContext(LOG.tag + "-[" + (++_onInstallInvocations) + ']')
+        val dispatcher = newSingleThreadContext(LOG.tag + "-{" + (++_onInstallInvocations) + '}')
 
         val logBuffer = LogBuffer(capacity = maxLogBuffered)
         val previousLogJob = _logJob
 
-        logScope.launch(dispatcher, start = CoroutineStart.ATOMIC) {
+        scopeLog.launch(dispatcher, start = CoroutineStart.ATOMIC) {
             logBuffer.use(LOG) { buf ->
                 val thisJob = currentCoroutineContext().job
 
@@ -1291,7 +1289,7 @@ public class FileLog: Log {
                     logStreamCompletion,
                 )
             }
-        }.let { job ->
+        }.let { logJob ->
 
             // Paranoia.
             //
@@ -1299,26 +1297,34 @@ public class FileLog: Log {
             // undelivered LogAction, but this will guarantee that
             // LogBuffer.channel's onUndeliveredElement callback is
             // invoked for any stragglers.
-            job.invokeOnCompletion { logBuffer.channel.cancel() }
+            logJob.invokeOnCompletion { logBuffer.channel.cancel() }
 
-            job.invokeOnCompletion {
-                logD { "Closing > $dispatcher" }
+            val scope = ScopeLogHandle(
+                logJob,
+                scopeLog,
+                _onInstallInvocations,
+                dispatcher,
+                dispatcherCloseLazily = {
+                    logD { "Closing > $dispatcher" }
 
-                // Must close lazily from a different thread
-                logScope.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
-                    withContext(NonCancellable) { delay(250.milliseconds) }
-                    dispatcher.close()
-                    // Only 1 carrot because Closeable tests search for 2 (i.e. Closed >> $closeable)
-                    logD { "Closed > $dispatcher" }
-                }
-            }
+                    // Must close lazily from a different thread
+                    scopeLog.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
+                        withContext(NonCancellable) { delay(250.milliseconds) }
+                        dispatcher.close()
+                        // Only 1 carrot because Closeable tests search for 2 (i.e. Closed >> $closeable)
+                        logD { "Closed > $dispatcher" }
+                    }
+                },
+            )
 
-            job.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $job" } }
-            _logJob = job
+            logJob.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $logJob" } }
+
+            _logJob = logJob
+            _logHandle = logBuffer to scope
         }
 
-        _logHandle = logBuffer to dispatcher
         log(Level.Info, LOG.domain, LOG.tag, "Log file opened at ${files[0].name}", t = null)
+        // TODO: If Debug, log FileLog configuration.
     }
 
     override fun onUninstall() {
@@ -1339,7 +1345,7 @@ public class FileLog: Log {
         _lockFileCompletion: DisposableHandle,
         _logStream: FileStream.ReadWrite,
         _logStreamCompletion: DisposableHandle,
-    ): Unit = logLoopScope {
+    ): Unit = scopeLogLoop {
         var lockFile = _lockFile
         var lockFileCompletion = _lockFileCompletion
         var logStream = _logStream
@@ -1381,14 +1387,14 @@ public class FileLog: Log {
                 ?: return@invokeOnCompletion
 
             @OptIn(DelicateCoroutinesApi::class)
-            logScope.launch(Dispatchers.Unconfined, start = CoroutineStart.ATOMIC) {
+            scopeLog.launch(Dispatchers.Unconfined, start = CoroutineStart.ATOMIC) {
                 action.consumeAndIgnore(buf)
             }
 
             LOG.w { "A cached LogAction awaiting retry after log rotation was dropped." }
         }
 
-        // Migrate completion handles to LogLoopScope (take ownership over them)
+        // Migrate completion handles to ScopeLogLoop (take ownership over them)
         lockFileCompletion.dispose()
         lockFileCompletion = logLoopJob.closeOnCompletion(lockFile, logOpen = false)
         logStreamCompletion.dispose()
@@ -1689,12 +1695,12 @@ public class FileLog: Log {
     * the previously interrupted log rotation will be finished off. Otherwise, this
     * function atomically copies logStream to a tmp file (dotRotateFile), truncates
     * logStream, then performs a full log file rotation. The actual file moves that
-    * happen are executed in a child coroutine of LogLoopScope, allowing for a prompt
+    * happen are executed in a child coroutine of ScopeLogLoop, allowing for a prompt
     * return to processing LogAction while it completes.
     *
     * NOTE: lockLog is required to be held when calling this function.
     * */
-    private suspend fun LogLoopScope.rotateLogs(
+    private suspend fun ScopeLogLoop.rotateLogs(
         rotateActionQueue: RotateActionQueue,
         logStream: FileStream.ReadWrite,
         lockFile: LockFile,
@@ -2180,7 +2186,7 @@ public class FileLog: Log {
     * Additionally, lockRotate.release MUST be attached to the returned Job
     * via completion handler.
     * */
-    private fun LogLoopScope.executeLogRotationMoves(
+    private fun ScopeLogLoop.executeLogRotationMoves(
         rotateActionQueue: RotateActionQueue,
         moves: ArrayDeque<Pair<File, File>>,
     ): Job = scope.launch(context = CoroutineName("$LOG_ROTATION-$logFiles0Hash")) {
@@ -2252,7 +2258,7 @@ public class FileLog: Log {
     }
 
     @Throws(CancellationException::class)
-    private suspend fun LogLoopScope.awaitLogRotation() {
+    private suspend fun ScopeLogLoop.awaitLogRotation() {
         logLoopJob.children.forEach { child ->
             logD {
                 if (!child.isActive) null
