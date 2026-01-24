@@ -41,6 +41,9 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
     final var debug // io.matthewnelson.kmp.log.file/FileLog.debug|{}debug[0]
         final fun <get-debug>(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.debug.<get-debug>|<get-debug>(){}[0]
         final fun <set-debug>(kotlin/Boolean) // io.matthewnelson.kmp.log.file/FileLog.debug.<set-debug>|<set-debug>(kotlin.Boolean){}[0]
+    final var warn // io.matthewnelson.kmp.log.file/FileLog.warn|{}warn[0]
+        final fun <get-warn>(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.warn.<get-warn>|<get-warn>(){}[0]
+        final fun <set-warn>(kotlin/Boolean) // io.matthewnelson.kmp.log.file/FileLog.warn.<set-warn>|<set-warn>(kotlin.Boolean){}[0]
 
     final fun uninstallAndAwaitSync(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.uninstallAndAwaitSync|uninstallAndAwaitSync(){}[0]
     final suspend fun uninstallAndAwaitAsync(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.uninstallAndAwaitAsync|uninstallAndAwaitAsync(){}[0]
@@ -74,6 +77,7 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         final fun maxLogYield(kotlin/Byte): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.maxLogYield|maxLogYield(kotlin.Byte){}[0]
         final fun min(io.matthewnelson.kmp.log/Log.Level): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.min|min(io.matthewnelson.kmp.log.Log.Level){}[0]
         final fun minWaitOn(io.matthewnelson.kmp.log/Log.Level): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.minWaitOn|minWaitOn(io.matthewnelson.kmp.log.Log.Level){}[0]
+        final fun warn(kotlin/Boolean): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.warn|warn(kotlin.Boolean){}[0]
         final fun whitelistDomain(kotlin.collections/Collection<kotlin/String>): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistDomain|whitelistDomain(kotlin.collections.Collection<kotlin.String>){}[0]
         final fun whitelistDomain(kotlin/Array<out kotlin/String>...): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistDomain|whitelistDomain(kotlin.Array<out|kotlin.String>...){}[0]
         final fun whitelistDomain(kotlin/String): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistDomain|whitelistDomain(kotlin.String){}[0]

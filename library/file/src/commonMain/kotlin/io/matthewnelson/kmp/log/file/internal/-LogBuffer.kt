@@ -19,7 +19,6 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.encoding.core.EncoderDecoder.Companion.DEFAULT_BUFFER_SIZE
 import io.matthewnelson.kmp.file.FileStream
-import io.matthewnelson.kmp.log.Log
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -116,8 +115,14 @@ internal value class LogBuffer private constructor(internal val channel: Channel
 }
 
 @OptIn(ExperimentalContracts::class)
-internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: LogBuffer.(buf: ByteArray) -> Unit) {
-    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+internal suspend inline fun LogBuffer.use(
+    logW: (t: Throwable?, lazyMsg: () -> Any?) -> Int,
+    block: LogBuffer.(buf: ByteArray) -> Unit
+) {
+    contract {
+        callsInPlace(block, InvocationKind.EXACTLY_ONCE)
+        callsInPlace(logW, InvocationKind.AT_MOST_ONCE)
+    }
 
     val buf = ByteArray(DEFAULT_BUFFER_SIZE)
     var threw: Throwable? = null
@@ -135,7 +140,7 @@ internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: LogBuffer.(bu
             logAction.consumeAndIgnore(buf)
         }
         buf.fill(0)
-        if (count > 0L) LOG?.w(threw) { "$count LogAction awaiting processing were dropped." }
+        if (count > 0L) logW(threw) { "$count LogAction awaiting processing were dropped." }
     }
 
     threw?.let { throw it }

@@ -272,6 +272,13 @@ public class FileLog: Log {
     /**
      * TODO
      * */
+    @JvmField
+    @Volatile
+    public var warn: Boolean
+
+    /**
+     * TODO
+     * */
     @get:JvmName("isActive")
     public val isActive: Boolean get() = _logJob?.isActive ?: false
 
@@ -359,6 +366,7 @@ public class FileLog: Log {
         private var _whitelistDomainNull = true
         private val _whitelistTag = mutableSetOf<String>()
         private var _debug = false
+        private var _warn = true
 
         /**
          * DEFAULT: [Level.Info]
@@ -775,10 +783,14 @@ public class FileLog: Log {
          * */
         public fun debug(enable: Boolean): Builder = apply { _debug = enable }
 
-        // TODO: Add ability to enable/disable LOG.w logs that FileLog
-        //  produces (just like with debug). DEFAULT: `true` (i.e. enabled)
-        //  .
-        //  warn(enable: Boolean): Builder = apply { _warn = enable }
+        /**
+         * DEFAULT: `true`
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun warn(enable: Boolean): Builder = apply { _warn = enable }
 
         /**
          * TODO
@@ -841,6 +853,7 @@ public class FileLog: Log {
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
                 whitelistTag = whitelistTag,
                 debug = _debug,
+                warn = _warn,
                 uidSuffix = "FileLog-$files0Hash",
             )
         }
@@ -891,6 +904,7 @@ public class FileLog: Log {
         whitelistDomainNull: Boolean,
         whitelistTag: Set<String>,
         debug: Boolean,
+        warn: Boolean,
         uidSuffix: String,
     ): super(uid = "io.matthewnelson.kmp.log.file.$uidSuffix", min = min, max = max) {
         this.directory = directory
@@ -953,6 +967,7 @@ public class FileLog: Log {
         this.whitelistDomainNull = whitelistDomainNull
         this.whitelistTag = whitelistTag
         this.debug = debug
+        this.warn = warn
     }
 
     override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
@@ -1213,7 +1228,7 @@ public class FileLog: Log {
         val previousLogJob = _logJob
 
         scopeLog.launch(dispatcher, start = CoroutineStart.ATOMIC) {
-            logBuffer.use(LOG) { buf ->
+            logBuffer.use(::logW) { buf ->
                 val thisJob = currentCoroutineContext().job
 
                 logD { "$LOG_JOB Started >> $thisJob" }
@@ -1247,7 +1262,7 @@ public class FileLog: Log {
                     // the lock file to be a regular file.
                     val canonical = dotLockFile.canonicalFile2()
                     if (canonical != dotLockFile) {
-                        LOG.w { "Symbolic link detected >> [$canonical] != [$dotLockFile]" }
+                        logW { "Symbolic link detected >> [$canonical] != [$dotLockFile]" }
                         dotLockFile.delete2(ignoreReadOnly = true)
                         delay(10.milliseconds)
                     }
@@ -1263,7 +1278,7 @@ public class FileLog: Log {
                 try {
                     val canonical = files[0].canonicalFile2()
                     if (canonical != files[0]) {
-                        LOG.w { "Symbolic link detected >> [$canonical] != [${files[0]}]" }
+                        logW { "Symbolic link detected >> [$canonical] != [${files[0]}]" }
                         files[0].delete2(ignoreReadOnly = true)
                         delay(10.milliseconds)
                     }
@@ -1386,7 +1401,7 @@ public class FileLog: Log {
                 action.consumeAndIgnore(buf)
             }
 
-            LOG.w { "A cached LogAction awaiting retry after log rotation was dropped." }
+            logW { "A cached LogAction awaiting retry after log rotation was dropped." }
         }
 
         // Migrate completion handles to ScopeLogLoop (take ownership over them)
@@ -1636,7 +1651,7 @@ public class FileLog: Log {
                         } catch (ee: IOException) {
                             e.addSuppressed(ee)
                         }
-                        LOG.w(e) { "Sync failure >> $logStream" }
+                        logW(e) { "Sync failure >> $logStream" }
                     }
                 }
 
@@ -1680,7 +1695,7 @@ public class FileLog: Log {
                 } catch (ee: IOException) {
                     e.addSuppressed(ee)
                 }
-                LOG.w(e) { "Lock release failure >> $lockLog" }
+                logW(e) { "Lock release failure >> $lockLog" }
             }
         }
     }
@@ -1753,7 +1768,7 @@ public class FileLog: Log {
             } catch (e: IOException) {
                 t.addSuppressed(e)
             }
-            LOG.w(t) { "Failed to acquire a rotation lock on ${dotLockFile.name}. Retrying $LOG_ROTATION." }
+            logW(t) { "Failed to acquire a rotation lock on ${dotLockFile.name}. Retrying $LOG_ROTATION." }
 
             // Trigger an immediate retry.
             rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
@@ -1806,7 +1821,7 @@ public class FileLog: Log {
                     e.addSuppressed(ee)
                 }
 
-                LOG.w(e) { "Failed to obtain size of ${files[0].name}. Retrying $LOG_ROTATION." }
+                logW(e) { "Failed to obtain size of ${files[0].name}. Retrying $LOG_ROTATION." }
 
                 // The retryAction is currently null, so trigger an immediate
                 // retry with a freshly opened logStream. If another process is also
@@ -1831,7 +1846,7 @@ public class FileLog: Log {
                         e.addSuppressed(ee)
                     }
 
-                    LOG.w(e) { "Lock release failure >> $lockRotate" }
+                    logW(e) { "Lock release failure >> $lockRotate" }
                 }
 
                 // No further action is needed. Return early.
@@ -1857,7 +1872,7 @@ public class FileLog: Log {
                     e.addSuppressed(ee)
                 }
 
-                LOG.w(e) { "Lock release failure >> $lockRotate" }
+                logW(e) { "Lock release failure >> $lockRotate" }
             }
 
             // Trigger an immediate retry. If another process is also
@@ -1874,7 +1889,7 @@ public class FileLog: Log {
                 lockRotate.release()
                 logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
             } catch (e: IOException) {
-                LOG.w(e) { "Lock release failure >> $lockRotate" }
+                logW(e) { "Lock release failure >> $lockRotate" }
 
                 // No other recovery mechanism but to close the lock file
                 // and invalidate all locks currently held, otherwise the
@@ -1909,7 +1924,7 @@ public class FileLog: Log {
                             } catch (ee: IOException) {
                                 e.addSuppressed(ee)
                             }
-                            LOG.w(e) { "Sync failure >> $stream" }
+                            logW(e) { "Sync failure >> $stream" }
                         }
                     }
 
@@ -1989,7 +2004,7 @@ public class FileLog: Log {
                 e.addSuppressed(ee)
             }
 
-            LOG.w(e) { "Failed to atomically copy ${files[0].name} >> ${dotRotateFile.name}. Retrying $LOG_ROTATION." }
+            logW(e) { "Failed to atomically copy ${files[0].name} >> ${dotRotateFile.name}. Retrying $LOG_ROTATION." }
             return
         }
 
@@ -2087,7 +2102,7 @@ public class FileLog: Log {
                 e.addSuppressed(ee)
             }
 
-            LOG.w(e) { "Failed to obtain size of ${files[0].name}. Retrying $LOG_ROTATION." }
+            logW(e) { "Failed to obtain size of ${files[0].name}. Retrying $LOG_ROTATION." }
 
             // Will signal an error in calling function (i.e. rotateLogs) which will
             // release lockRotate and enqueue an immediate retry with a newly opened
@@ -2210,7 +2225,7 @@ public class FileLog: Log {
 
         if (threw == null) return
 
-        LOG.w(threw) { "Failed to compare ${files[0].name} with ${dotRotateFile.name}. Retrying $LOG_ROTATION." }
+        logW(threw) { "Failed to compare ${files[0].name} with ${dotRotateFile.name}. Retrying $LOG_ROTATION." }
 
         // Will signal an error in calling function (i.e. rotateLogs) which will
         // release lockRotate and enqueue an immediate retry with a newly opened
@@ -2234,7 +2249,7 @@ public class FileLog: Log {
             try {
                 logStream.sync(meta = true)
             } catch (e: IOException) {
-                LOG.w(e) { "Sync failure >> $this" }
+                logW(e) { "Sync failure >> $this" }
                 // Will be closed in catch block below which will
                 // hopefully force it to the filesystem, in addition
                 // to trying an alternative truncation method.
@@ -2264,7 +2279,7 @@ public class FileLog: Log {
                     // go with it at this point and hope for the best.
                     // The finally block will close this FileStream.Write,
                     // so hopefully that forces it to the filesystem.
-                    LOG.w(ee) { "Sync failure >> $s" }
+                    logW(ee) { "Sync failure >> $s" }
                 }
 
                 logD { "Truncated ${file.name} to 0" }
@@ -2335,7 +2350,7 @@ public class FileLog: Log {
                 //  too many. If someone swapped out a log file for a non-empty
                 //  directory or something, we could end up retrying forever.
 
-                LOG.w(e) { "$LOG_ROTATION failure. TODO..." }
+                logW(e) { "$LOG_ROTATION failure. TODO..." }
 
                 // Trigger an immediate retry. If another process is also
                 // logging, it may finish off the log rotation for us, so.
@@ -2413,6 +2428,19 @@ public class FileLog: Log {
         contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
         if (!debug) return 0
         return LOG.d(t, lazyMsg)
+    }
+
+    @OptIn(ExperimentalContracts::class)
+    private inline fun logW(lazyMsg: () -> Any?): Int {
+        contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
+        return logW(t = null, lazyMsg)
+    }
+
+    @OptIn(ExperimentalContracts::class)
+    private inline fun logW(t: Throwable?, lazyMsg: () -> Any?): Int {
+        contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
+        if (!warn) return 0
+        return LOG.w(t, lazyMsg)
     }
 
     @OptIn(ExperimentalContracts::class)
