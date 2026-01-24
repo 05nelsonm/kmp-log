@@ -353,7 +353,7 @@ public class FileLog: Log {
         private var _maxLogFileSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
         private var _maxLogFiles: Byte = if (isDesktop()) 5 else 3
         private var _maxLogYield: Byte = 2
-        private var _minWaitOn = Level.Fatal
+        private var _minWaitOn = Level.Verbose
         private val _blacklistDomain = mutableSetOf<String>()
         private val _whitelistDomain = mutableSetOf<String>()
         private var _whitelistDomainNull = true
@@ -370,7 +370,7 @@ public class FileLog: Log {
         public fun min(level: Level): Builder = apply { _min = level }
 
         /**
-         * DEFAULT: [Level.Fatal]
+         * DEFAULT: [Level.Verbose]
          *
          * TODO
          *

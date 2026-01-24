@@ -34,6 +34,11 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
+    fun givenMinWaitOn_whenBuild_thenDefaultIsLevelVerbose() {
+        assertEquals(Log.Level.Verbose, newBuilder().build().minWaitOn)
+    }
+
+    @Test
     fun givenMax_whenBuild_thenDefaultIsLevelFatal() {
         assertEquals(Log.Level.Fatal, newBuilder().build().max)
     }
