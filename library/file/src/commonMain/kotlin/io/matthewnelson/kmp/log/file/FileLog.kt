@@ -1309,7 +1309,7 @@ public class FileLog: Log {
                     logD { "Closing > $dispatcher" }
 
                     // Must close lazily
-                    scopeLog.launch(Dispatchers.Unconfined, start = CoroutineStart.ATOMIC) {
+                    scopeLog.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
                         withContext(NonCancellable) { delay(250.milliseconds) }
                         dispatcher.close()
                         // Only 1 carrot because Closeable tests search for 2 (i.e. Closed >> $closeable)

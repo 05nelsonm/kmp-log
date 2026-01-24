@@ -50,10 +50,19 @@ internal value class ScopeLogHandle private constructor(
         dispatcherCloseLazily: CompletionHandler,
     ): this(scope = CoroutineScope(context =
         CoroutineName(scopeLog.coroutineName.name + "-Handle{$onInstallInvocations}")
+
         // Using ScopeLog's SupervisorJob as parent to ensure
         // that the only relation to logJob is via its completion
-        // handler where this SupervisorJob will be canceled.
+        // handler where THIS SupervisorJob will then be canceled.
+        //
+        // If we were to utilize logJob as the parent, then it
+        // would not complete until THIS job is canceled. Instead,
+        // what we want is for logJob completion to be based on
+        // LogBuffer.channel's closure and subsequent exhaustion
+        // of all its remaining LogAction, and THEN cancellation
+        // of this job and all its children.
         + SupervisorJob(parent = scopeLog.supervisorJob)
+
         + scopeLog.handler
         + dispatcher
     )) {
