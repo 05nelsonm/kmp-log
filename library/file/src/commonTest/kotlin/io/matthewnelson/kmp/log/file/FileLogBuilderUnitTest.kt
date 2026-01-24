@@ -208,16 +208,6 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenFileExtension_whenIsTmp_thenBuildThrowsIllegalArgumentException() {
-        try {
-            newBuilder().fileExtension("tmp")
-            fail()
-        } catch (e: IllegalArgumentException) {
-            assertEquals("fileExtension cannot be 'tmp'", e.message)
-        }
-    }
-
-    @Test
     fun givenMaxLogBuffered_whenLessThan0_thenUses0() {
         assertEquals(0, newBuilder().maxLogBuffered(-1).build().maxLogBuffered)
     }

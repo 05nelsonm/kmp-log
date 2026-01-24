@@ -507,7 +507,6 @@ public class FileLog: Log {
          *  - [name] contains character `/`
          *  - [name] contains character `\`
          *  - [name] contains null character `\u0000`
-         *  - [name] is `tmp`
          * */
         public fun fileExtension(name: String): Builder {
             require(name.length <= 8) { "fileExtension cannot exceed 8 characters" }
@@ -518,7 +517,6 @@ public class FileLog: Log {
                 require(c != '\\') { "fileExtension cannot contain '\\'" }
                 require(c != '\u0000') { "fileExtension cannot contain null character '\\u0000'" }
             }
-            require(name != "tmp") { "fileExtension cannot be 'tmp'" }
             _fileExtension = name
             return this
         }
