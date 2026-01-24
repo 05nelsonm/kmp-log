@@ -1226,7 +1226,7 @@ public class FileLog: Log {
         // a logging dispatcher. If we were to use Dispatchers.IO for everything, then
         // it could result in a deadlock if caller is also using Dispatchers.IO whereby
         // thread starvation occurs and the LogLoop is unable to continue.
-        val (dispatcher, dispatcherDeRefHandle) = allocator.getOrAllocate()
+        val (dispatcher, dispatcherDeRef) = allocator.getOrAllocate()
 
         val logBuffer = LogBuffer(capacity = maxLogBuffered)
         val previousLogJob = _logJob
@@ -1318,7 +1318,7 @@ public class FileLog: Log {
                 scopeLog,
                 _onInstallInvocations,
                 dispatcher,
-                dispatcherDeRef = { dispatcherDeRefHandle.invoke() },
+                dispatcherDeRef,
             )
 
             logJob.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $logJob" } }
