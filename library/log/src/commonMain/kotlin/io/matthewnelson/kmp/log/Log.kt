@@ -1272,7 +1272,10 @@ public abstract class Log {
      *  - [msg] will be `null` or a non-empty value, never empty.
      *  - [isLoggable] will have returned `true` immediately prior to this function being called by [Root].
      *
-     * @return `true` if a log was generated, `false` otherwise.
+     * **NOTE:** It is left to the implementation to decide but, in general, this function should
+     * **never** throw exception; it should instead return `false`.
+     *
+     * @return `true` if the log was logged, `false` otherwise.
      * */
     protected abstract fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean
 
@@ -1291,14 +1294,26 @@ public abstract class Log {
     /**
      * Helper for implementations to delay initialization of things to time of [Root.install]. This
      * is called just prior to making the [Log] available to logging functions, and is done so while
-     * holding a lock. Implementations should be fast, non-blocking, and not throw exception.
+     * holding a lock. Implementations should be thread-safe, fast, non-blocking, and not throw
+     * exception.
      * */
     protected open fun onInstall() {}
 
     /**
      * Helper for implementations to clean up any resources at time of [Root.uninstall]. This is
      * called after the [Log] has been removed from the list of available [Log], and is done so while
-     * holding a lock. Implementations should be fast, non-blocking, and not throw exception.
+     * holding a lock. Implementations should be thread-safe, fast, non-blocking, and not throw
+     * exception.
+     *
+     * **NOTE:** [log] and [isLoggable] may still be called for a brief period *after* this function
+     * has been invoked by a [Log.Root] uninstall function. There exists a potential scenario, especially
+     * with multithreaded programs, that a [Logger] may be mid-dispatch of its log when this [Log]
+     * instance was subsequently uninstalled. The **only** guarantees that can be made at the point
+     * in time when this function is invoked, are:
+     *   - The list returned by [Log.Root.installed] will not contain this [Log] instance.
+     *   - Any invocations of [Logger] logging functions going forward will **not** have this [Log]
+     *     instance available.
+     *   - [onInstall] will **not** be called until *after* this function returns.
      * */
     protected open fun onUninstall() {}
 
