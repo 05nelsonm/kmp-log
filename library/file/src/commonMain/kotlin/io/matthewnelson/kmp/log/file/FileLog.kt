@@ -349,7 +349,7 @@ public class FileLog: Log {
         private var _modeFile = ModeBuilder.of(isDirectory = false)
         private var _fileName = "log"
         private var _fileExtension = ""
-        private var _maxLogBuffered: Int = Channel.UNLIMITED
+        private var _maxLogBuffered: Int = Channel.RENDEZVOUS
         private var _maxLogFileSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
         private var _maxLogFiles: Byte = if (isDesktop()) 5 else 3
         private var _maxLogYield: Byte = 2
@@ -524,7 +524,7 @@ public class FileLog: Log {
         }
 
         /**
-         * DEFAULT: [Channel.UNLIMITED] (i.e. [Int.MAX_VALUE])
+         * DEFAULT: [Channel.RENDEZVOUS] (i.e. `0`)
          *
          * TODO
          *
@@ -533,9 +533,7 @@ public class FileLog: Log {
         public fun maxLogBuffered(capacity: Int): Builder = apply { _maxLogBuffered = capacity }
 
         /**
-         * DEFAULT:
-         *  - `5 Mb` on `Android`, `AndroidNative`, `iOS`, `tvOS`, `watchOS`
-         *  - `10 Mb` otherwise
+         * DEFAULT: `5 Mb` on `Android`/`AndroidNative`/`iOS`/`tvOS`/`watchOS`, otherwise `10 Mb`.
          *
          * TODO
          *
@@ -544,9 +542,7 @@ public class FileLog: Log {
         public fun maxLogFileSize(bytes: Long): Builder = apply { _maxLogFileSize = bytes }
 
         /**
-         * DEFAULT:
-         *  - `3` on `Android`, `AndroidNative`, `iOS`, `tvOS`, `watchOS`
-         *  - `5` otherwise
+         * DEFAULT: `3` on `Android`/`AndroidNative`/`iOS`/`tvOS`/`watchOS`, otherwise `5`.
          *
          * TODO
          *

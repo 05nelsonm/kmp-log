@@ -19,6 +19,7 @@ import io.matthewnelson.kmp.file.SysDirSep
 import io.matthewnelson.kmp.file.SysTempDir
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.log.Log
+import kotlinx.coroutines.channels.Channel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -41,6 +42,11 @@ class FileLogBuilderUnitTest {
     @Test
     fun givenMax_whenBuild_thenDefaultIsLevelFatal() {
         assertEquals(Log.Level.Fatal, newBuilder().build().max)
+    }
+
+    @Test
+    fun givenMaxLogBuffered_whenBuild_thenDefaultIsChannelRENDEZVOUS() {
+        assertEquals(Channel.RENDEZVOUS, newBuilder().build().maxLogBuffered)
     }
 
     @Test
