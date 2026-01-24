@@ -2076,6 +2076,12 @@ public class FileLog: Log {
             return
         }
 
+        // We could not confirm above that we were previously interrupted in
+        // the file moves step of the log rotation process which executes AFTER
+        // the logStream truncation step. All we can confirm at this point is
+        // that logStream was atomically copied to dotRotateFile. As such, we
+        // need to check if it is also necessary to perform the logStream
+        // truncation step of the log rotation process.
         logD { "Hole in archived logs was not found. Checking if ${files[0].name} needs to be truncated to 0." }
 
         val sizeLog = try {
@@ -2138,7 +2144,9 @@ public class FileLog: Log {
             // Compare first and last 8192 bytes of each file. Because we're dealing with
             // a file that contains timestamp + pid + tid, we should know pretty early
             // on if they are the same or not.
-            val reads = arrayOf(0L, sizeDot - bufLog.size).map { pos ->
+            //
+            // NOTE: If adding/removing positions to the array, update logD below!
+            val readSizes = arrayOf(0L, sizeDot - bufLog.size).map { pos ->
                 val readLog = logStream.read(bufLog, position = pos)
                 val readDot = dotStream.read(bufDot, position = pos)
 
@@ -2184,7 +2192,7 @@ public class FileLog: Log {
 
             logD {
                 "Truncation of ${files[0].name} to 0 needed. " +
-                "First ${reads[0]} and last ${reads[1]} bytes " +
+                "First ${readSizes[0]} and last ${readSizes[1]} bytes " +
                 "of ${files[0].name} matched ${dotRotateFile.name}, and " +
                 "both have a size of $sizeLog bytes."
             }
