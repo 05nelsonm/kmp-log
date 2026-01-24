@@ -352,7 +352,7 @@ public class FileLog: Log {
         private var _maxLogBuffered: Int = Channel.UNLIMITED
         private var _maxLogFileSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
         private var _maxLogFiles: Byte = if (isDesktop()) 5 else 3
-        private var _maxLogYield: Byte = 10
+        private var _maxLogYield: Byte = 2
         private var _minWaitOn = Level.Fatal
         private val _blacklistDomain = mutableSetOf<String>()
         private val _whitelistDomain = mutableSetOf<String>()
@@ -555,7 +555,7 @@ public class FileLog: Log {
         public fun maxLogFiles(max: Byte): Builder = apply { _maxLogFiles = max }
 
         /**
-         * DEFAULT: `10`
+         * DEFAULT: `2`
          *
          * TODO
          *
@@ -841,7 +841,7 @@ public class FileLog: Log {
                 modeFile = _modeFile.build(),
                 maxLogBuffered = _maxLogBuffered.coerceAtLeast(Channel.RENDEZVOUS /* 0 */),
                 maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L), // 50kb
-                maxLogYield = _maxLogYield.coerceAtLeast(1),
+                maxLogYield = _maxLogYield.coerceIn(1, 10),
                 blacklistDomain = blacklistDomain,
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
