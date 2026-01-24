@@ -349,11 +349,11 @@ public class FileLog: Log {
         private var _modeFile = ModeBuilder.of(isDirectory = false)
         private var _fileName = "log"
         private var _fileExtension = ""
-        private var _maxLogBuffered: Int = Channel.UNLIMITED
+        private var _maxLogBuffered: Int = Channel.RENDEZVOUS
         private var _maxLogFileSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
         private var _maxLogFiles: Byte = if (isDesktop()) 5 else 3
-        private var _maxLogYield: Byte = 10
-        private var _minWaitOn = Level.Fatal
+        private var _maxLogYield: Byte = 2
+        private var _minWaitOn = Level.Verbose
         private val _blacklistDomain = mutableSetOf<String>()
         private val _whitelistDomain = mutableSetOf<String>()
         private var _whitelistDomainNull = true
@@ -370,7 +370,7 @@ public class FileLog: Log {
         public fun min(level: Level): Builder = apply { _min = level }
 
         /**
-         * DEFAULT: [Level.Fatal]
+         * DEFAULT: [Level.Verbose]
          *
          * TODO
          *
@@ -507,7 +507,6 @@ public class FileLog: Log {
          *  - [name] contains character `/`
          *  - [name] contains character `\`
          *  - [name] contains null character `\u0000`
-         *  - [name] is `tmp`
          * */
         public fun fileExtension(name: String): Builder {
             require(name.length <= 8) { "fileExtension cannot exceed 8 characters" }
@@ -518,13 +517,12 @@ public class FileLog: Log {
                 require(c != '\\') { "fileExtension cannot contain '\\'" }
                 require(c != '\u0000') { "fileExtension cannot contain null character '\\u0000'" }
             }
-            require(name != "tmp") { "fileExtension cannot be 'tmp'" }
             _fileExtension = name
             return this
         }
 
         /**
-         * DEFAULT: [Channel.UNLIMITED] (i.e. [Int.MAX_VALUE])
+         * DEFAULT: [Channel.RENDEZVOUS] (i.e. `0`)
          *
          * TODO
          *
@@ -533,9 +531,7 @@ public class FileLog: Log {
         public fun maxLogBuffered(capacity: Int): Builder = apply { _maxLogBuffered = capacity }
 
         /**
-         * DEFAULT:
-         *  - `5 Mb` on `Android`, `AndroidNative`, `iOS`, `tvOS`, `watchOS`
-         *  - `10 Mb` otherwise
+         * DEFAULT: `5 Mb` on `Android`/`AndroidNative`/`iOS`/`tvOS`/`watchOS`, otherwise `10 Mb`.
          *
          * TODO
          *
@@ -544,9 +540,7 @@ public class FileLog: Log {
         public fun maxLogFileSize(bytes: Long): Builder = apply { _maxLogFileSize = bytes }
 
         /**
-         * DEFAULT:
-         *  - `3` on `Android`, `AndroidNative`, `iOS`, `tvOS`, `watchOS`
-         *  - `5` otherwise
+         * DEFAULT: `3` on `Android`/`AndroidNative`/`iOS`/`tvOS`/`watchOS`, otherwise `5`.
          *
          * TODO
          *
@@ -555,7 +549,7 @@ public class FileLog: Log {
         public fun maxLogFiles(max: Byte): Builder = apply { _maxLogFiles = max }
 
         /**
-         * DEFAULT: `10`
+         * DEFAULT: `2`
          *
          * TODO
          *
@@ -841,7 +835,7 @@ public class FileLog: Log {
                 modeFile = _modeFile.build(),
                 maxLogBuffered = _maxLogBuffered.coerceAtLeast(Channel.RENDEZVOUS /* 0 */),
                 maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L), // 50kb
-                maxLogYield = _maxLogYield.coerceAtLeast(1),
+                maxLogYield = _maxLogYield.coerceIn(1, 10),
                 blacklistDomain = blacklistDomain,
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,

@@ -19,6 +19,7 @@ import io.matthewnelson.kmp.file.SysDirSep
 import io.matthewnelson.kmp.file.SysTempDir
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.log.Log
+import kotlinx.coroutines.channels.Channel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -34,8 +35,18 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
+    fun givenMinWaitOn_whenBuild_thenDefaultIsLevelVerbose() {
+        assertEquals(Log.Level.Verbose, newBuilder().build().minWaitOn)
+    }
+
+    @Test
     fun givenMax_whenBuild_thenDefaultIsLevelFatal() {
         assertEquals(Log.Level.Fatal, newBuilder().build().max)
+    }
+
+    @Test
+    fun givenMaxLogBuffered_whenBuild_thenDefaultIsChannelRENDEZVOUS() {
+        assertEquals(Channel.RENDEZVOUS, newBuilder().build().maxLogBuffered)
     }
 
     @Test
@@ -197,16 +208,6 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenFileExtension_whenIsTmp_thenBuildThrowsIllegalArgumentException() {
-        try {
-            newBuilder().fileExtension("tmp")
-            fail()
-        } catch (e: IllegalArgumentException) {
-            assertEquals("fileExtension cannot be 'tmp'", e.message)
-        }
-    }
-
-    @Test
     fun givenMaxLogBuffered_whenLessThan0_thenUses0() {
         assertEquals(0, newBuilder().maxLogBuffered(-1).build().maxLogBuffered)
     }
@@ -230,6 +231,11 @@ class FileLogBuilderUnitTest {
     @Test
     fun givenMaxLogYield_whenLessThan1_thenUses1() {
         assertEquals(1, newBuilder().maxLogYield(0).build().maxLogYield)
+    }
+
+    @Test
+    fun givenMaxLogYield_whenGreaterThan10_thenUses10() {
+        assertEquals(10, newBuilder().maxLogYield(11).build().maxLogYield)
     }
 
     @Test
