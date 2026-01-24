@@ -35,31 +35,34 @@ internal abstract class SharedResourceAllocator<Resource: Any> protected constru
     private val deallocationDispatcher: CoroutineDispatcher,
 ) {
 
+    internal fun interface DeRefHandle { operator fun invoke() }
+
     @Volatile
     private var _resource: Resource? = null
     @Volatile
-    private var _count = 0L
+    private var _refCount = 0L
     @Volatile
     private var _deallocationJob: Job? = null
 
     private val lock = SynchronizedLock()
 
     /**
-     * Increments the counter and, if necessary, allocates the resource via
-     * [doAllocation]. If a deallocation of the resource is pending, it is
-     * subsequently canceled.
+     * Increments the reference counter and, if necessary, allocates the resource
+     * via [doAllocation]. Returned [DeRefHandle] **MUST** be invoked when done
+     * to ensure reference count is decremented and, if necessary, deallocation
+     * via [doDeallocation].
      * */
-    internal fun allocate(): Resource {
+    internal fun getOrAllocate(): Pair<Resource, DeRefHandle> {
         var wasAllocated = false
         val resource = synchronized(lock) {
             var r = _resource
             if (r == null) {
-                check(_count == 0L) { "count[$_count] != 0" }
+                check(_refCount == 0L) { "refCount[$_refCount] != 0" }
                 wasAllocated = true
                 r = doAllocation()
                 _resource = r
             }
-            _count++
+            _refCount++
             _deallocationJob?.cancel()
             r
         }
@@ -67,45 +70,50 @@ internal abstract class SharedResourceAllocator<Resource: Any> protected constru
         // Do not invoke Logger from within synchronized lambda
         if (wasAllocated && debug()) LOG?.d { "Allocated >> $resource" }
 
-        return resource
-    }
+        return resource to object : DeRefHandle {
 
-    /**
-     * Decrements the counter and, if `0`, will [doDeallocation] after the specified [deallocationDelay] within the context of
-     * the provided [deallocationDispatcher].
-     *
-     * @throws [IllegalStateException] If deallocation count is less than 1.
-     * */
-    internal fun deallocate() {
-        synchronized(lock) {
-            check(_count > 0L) { "count[$_count] <= 0" }
-            if (--_count != 0L) return
+            @Volatile
+            private var _wasInvoked = false
 
-            _deallocationJob?.cancel()
+            override fun invoke() {
+                if (_wasInvoked) return
+                synchronized(lock) {
+                    if (_wasInvoked) return
+                    _wasInvoked = true
 
-            @OptIn(DelicateCoroutinesApi::class)
-            _deallocationJob = GlobalScope.launch(context = deallocationDispatcher, start = CoroutineStart.ATOMIC) {
-                delay(deallocationDelay)
+                    check(_refCount > 0L) { "refCount[$_refCount] <= 0" }
+                    if (--_refCount != 0L) return
 
-                val resource = synchronized(lock) {
-                    // If we were canceled by allocate while waiting for the lock.
-                    ensureActive()
+                    _deallocationJob?.cancel()
 
-                    // No going back beyond this point
-                    val r = _resource
-                    _resource = null
-                    r
-                } ?: return@launch
+                    @OptIn(DelicateCoroutinesApi::class)
+                    _deallocationJob = GlobalScope.launch(
+                        context = deallocationDispatcher,
+                        start = CoroutineStart.ATOMIC,
+                    ) {
+                        delay(deallocationDelay)
 
-                var threw: Throwable? = null
-                try {
-                    // Do not invoke deallocate from within synchronized lambda.
-                    resource.doDeallocation()
-                } catch (t: Throwable) {
-                    threw = t
-                } finally {
-                    // Do not invoke Logger from within synchronized lambda.
-                    if (debug()) LOG?.d(threw) { "Deallocated >> $resource" }
+                        val resource = synchronized(lock) {
+                            // If we were canceled by allocate while waiting for the lock.
+                            ensureActive()
+
+                            // No going back beyond this point
+                            val r = _resource
+                            _resource = null
+                            r
+                        } ?: return@launch
+
+                        var threw: Throwable? = null
+                        try {
+                            // Do not invoke deallocate from within synchronized lambda.
+                            resource.doDeallocation()
+                        } catch (t: Throwable) {
+                            threw = t
+                        } finally {
+                            // Do not invoke Logger from within synchronized lambda.
+                            if (debug()) LOG?.d(threw) { "Deallocated >> $resource" }
+                        }
+                    }
                 }
             }
         }
