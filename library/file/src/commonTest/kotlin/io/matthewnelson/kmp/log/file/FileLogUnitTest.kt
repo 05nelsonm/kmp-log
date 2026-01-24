@@ -128,11 +128,11 @@ class FileLogUnitTest {
                 override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
                     if (msg == null) return false
                     if (msg.startsWith("Allocated >> ")) {
-                        allocated.add(msg.substringAfter("Allocated >>"))
+                        allocated.add(msg.substringAfter("Allocated >> "))
                         return true
                     }
                     if (msg.startsWith("Deallocated >> ")) {
-                        deallocated.add(msg.substringAfter("Deallocated >>"))
+                        deallocated.add(msg.substringAfter("Deallocated >> "))
                         return true
                     }
                     if (msg.startsWith("Opened >> ")) {
@@ -169,7 +169,7 @@ class FileLogUnitTest {
                 Log.uninstall(closeChecker)
             }
 
-            println("ALLOCATED$allocated")
+            println("ALLOCATED  $allocated")
             println("DEALLOCATED$deallocated")
             println("OPENED$opened")
             println("CLOSED$closed")
