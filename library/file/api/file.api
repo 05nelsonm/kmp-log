@@ -12,10 +12,11 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 	public final field minWaitOn Lio/matthewnelson/kmp/log/Log$Level;
 	public final field modeDirectory Ljava/lang/String;
 	public final field modeFile Ljava/lang/String;
+	public field warn Z
 	public final field whitelistDomain Ljava/util/Set;
 	public final field whitelistDomainNull Z
 	public final field whitelistTag Ljava/util/Set;
-	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IJBLjava/util/Set;Ljava/util/Set;ZLjava/util/Set;ZLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IJBLjava/util/Set;Ljava/util/Set;ZLjava/util/Set;ZZLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun isActive ()Z
 	public final fun pendingLogCount ()J
 	public final fun uninstallAndAwaitAsync (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -48,6 +49,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 	public final fun maxLogYield (B)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun min (Lio/matthewnelson/kmp/log/Log$Level;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun minWaitOn (Lio/matthewnelson/kmp/log/Log$Level;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
+	public final fun warn (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomain (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomain (Ljava/util/Collection;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun whitelistDomain ([Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;

@@ -51,7 +51,7 @@ class LogBufferUnitTest {
         }
 
         try {
-            logBuffer.use(null) {
+            logBuffer.use(logW = { _, _ -> 0 }) {
                 throw UnsupportedOperationException()
             }
         } catch (_: UnsupportedOperationException) {
