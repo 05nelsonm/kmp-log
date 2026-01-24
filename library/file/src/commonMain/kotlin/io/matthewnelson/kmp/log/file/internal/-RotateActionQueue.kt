@@ -13,16 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
+@file:Suppress("NOTHING_TO_INLINE")
 
 package io.matthewnelson.kmp.log.file.internal
 
-import io.matthewnelson.kmp.log.file.FileLog
+import kotlinx.coroutines.channels.Channel
+import kotlin.jvm.JvmInline
 
-internal expect class AtomicLong
+@JvmInline
+internal value class RotateActionQueue private constructor(private val channel: Channel<LogAction>) {
 
-internal expect inline fun FileLog.Companion.atomicLong(initialValue: Long): AtomicLong
+    internal constructor(scope: ScopeLogLoop): this(LogBuffer(capacity = Channel.UNLIMITED).channel) {
+        scope.logLoopJob.invokeOnCompletion { channel.cancel(cause = null) }
+    }
 
-internal expect inline fun AtomicLong.valueGet(): Long
-internal expect inline fun AtomicLong.valueIncrement()
-internal expect inline fun AtomicLong.valueDecrement()
+    internal inline fun enqueue(noinline action: LogAction) {
+        // Will never fail because Channel.UNLIMITED
+        channel.trySend(action)
+    }
+
+    internal inline fun dequeueOrNull(): LogAction? = channel.tryReceive().getOrNull()
+}

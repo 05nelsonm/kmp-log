@@ -24,7 +24,6 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -47,7 +46,7 @@ internal typealias LogAction = suspend (
     // The current size of the log file being written to. This
     // is utilized to trigger a log rotation + retry, in the
     // event that writing a log entry would cause it to exceed
-    // the configured maxLogSize.
+    // the configured maxLogFileSize.
     //
     // NOTE: This should be reflective of stream.size(), but is
     // a local value tracked by the log loop and updated with
@@ -87,7 +86,7 @@ internal value class LogBuffer private constructor(internal val channel: Channel
         onBufferOverflow = BufferOverflow.SUSPEND,
         onUndeliveredElement = { logAction ->
             @OptIn(DelicateCoroutinesApi::class)
-            GlobalScope.launch(context = Dispatchers.IO, start = CoroutineStart.ATOMIC) {
+            GlobalScope.launch(context = Dispatchers.Unconfined, start = CoroutineStart.ATOMIC) {
                 logAction.consumeAndIgnore(EMPTY_BUF)
             }
         }
@@ -135,10 +134,8 @@ internal suspend inline fun LogBuffer.use(LOG: Log.Logger?, block: LogBuffer.(bu
             count++
             logAction.consumeAndIgnore(buf)
         }
-        if (LOG != null && count > 0L) {
-            LOG.w { "Skipped $count logs" }
-        }
         buf.fill(0)
+        if (count > 0L) LOG?.w(threw) { "$count LogAction awaiting processing were dropped." }
     }
 
     threw?.let { throw it }

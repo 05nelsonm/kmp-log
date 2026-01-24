@@ -25,15 +25,15 @@ import kotlin.contracts.contract
 import kotlin.jvm.JvmInline
 
 @JvmInline
-internal value class LogLoopScope private constructor(internal val scope: CoroutineScope) {
+internal value class ScopeLogLoop private constructor(internal val scope: CoroutineScope) {
 
     internal companion object {
         @OptIn(ExperimentalContracts::class)
-        internal suspend inline fun <R> logLoopScope(
-            crossinline block: suspend LogLoopScope.() -> R,
+        internal suspend inline fun <R> scopeLogLoop(
+            crossinline block: suspend ScopeLogLoop.() -> R,
         ): R {
             contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
-            return coroutineScope { block(LogLoopScope(this)) }
+            return coroutineScope { block(ScopeLogLoop(this)) }
         }
     }
 
