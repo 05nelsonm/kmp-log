@@ -1222,6 +1222,8 @@ public class FileLog: Log {
 
     @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
     override fun onInstall() {
+        _onInstallInvocations++
+
         // Because runBlocking is being utilized by FileLog.log, we must always specify
         // a logging dispatcher. If we were to use Dispatchers.IO for everything, then
         // it could result in a deadlock if caller is also using Dispatchers.IO whereby
