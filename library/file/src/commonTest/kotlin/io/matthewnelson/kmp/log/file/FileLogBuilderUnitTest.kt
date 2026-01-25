@@ -35,8 +35,21 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenMinWaitOn_whenBuild_thenDefaultIsLevelVerbose() {
-        assertEquals(Log.Level.Verbose, newBuilder().build().minWaitOn)
+    fun givenMinWaitOn_whenLessThanOrEqualToMin_thenDefaultIsMin() {
+        val log = newBuilder()
+            .min(Log.Level.Error)
+            .minWaitOn(Log.Level.Info)
+            .build()
+        assertEquals(Log.Level.Error, log.minWaitOn)
+    }
+
+    @Test
+    fun givenMinWaitOn_whenGreaterThanMin_thenIsValue() {
+        val log = newBuilder()
+            .min(Log.Level.Warn)
+            .minWaitOn(Log.Level.Error)
+            .build()
+        assertEquals(Log.Level.Error, log.minWaitOn)
     }
 
     @Test
@@ -45,8 +58,26 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenMaxLogBuffered_whenBuild_thenDefaultIsChannelRENDEZVOUS() {
-        assertEquals(Channel.RENDEZVOUS, newBuilder().build().maxLogBuffered)
+    fun givenBufferCapacity_whenMinWaitOnEqualsMin_thenIsChannelUNLIMITED() {
+        assertEquals(Channel.UNLIMITED, newBuilder().build().bufferCapacity)
+    }
+
+    @Test
+    fun givenBufferCapacity_whenMinWaitOnGreaterThanMin_thenIsCapacity() {
+        val log = newBuilder()
+            .minWaitOn(Log.Level.Fatal)
+            .bufferCapacity(2)
+            .build()
+        assertEquals(2, log.bufferCapacity)
+    }
+
+    @Test
+    fun givenBufferCapacity_whenMinWaitOnGreaterThanMinButCapacityLessThanChannelRENDEZVOUS_thenIsChannelRENDEZVOUS() {
+        val log = newBuilder()
+            .minWaitOn(Log.Level.Fatal)
+            .bufferCapacity(-1)
+            .build()
+        assertEquals(Channel.RENDEZVOUS, log.bufferCapacity)
     }
 
     @Test
@@ -208,11 +239,6 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenMaxLogBuffered_whenLessThan0_thenUses0() {
-        assertEquals(0, newBuilder().maxLogBuffered(-1).build().maxLogBuffered)
-    }
-
-    @Test
     fun givenMaxLogFiles_whenLessThan2_thenUses2() {
         assertEquals(2, newBuilder().maxLogFiles(0).build().logFiles.size)
     }
@@ -229,13 +255,13 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenMaxLogYield_whenLessThan1_thenUses1() {
-        assertEquals(1, newBuilder().maxLogYield(0).build().maxLogYield)
+    fun givenYieldOn_whenLessThan1_thenUses1() {
+        assertEquals(1, newBuilder().yieldOn(0).build().yieldOn)
     }
 
     @Test
-    fun givenMaxLogYield_whenGreaterThan10_thenUses10() {
-        assertEquals(10, newBuilder().maxLogYield(11).build().maxLogYield)
+    fun givenYieldOn_whenGreaterThan10_thenUses10() {
+        assertEquals(10, newBuilder().yieldOn(11).build().yieldOn)
     }
 
     @Test
