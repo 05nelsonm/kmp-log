@@ -47,7 +47,7 @@ internal value class ScopeLogHandle private constructor(
         scopeLog: ScopeLog,
         onInstallInvocations: Long,
         dispatcher: CoroutineDispatcher,
-        dispatcherCloseLazily: CompletionHandler,
+        dispatcherDeRef: SharedResourceAllocator.DeRefHandle,
     ): this(scope = CoroutineScope(context =
         CoroutineName(scopeLog.coroutineName.name + "-Handle{$onInstallInvocations}")
 
@@ -71,7 +71,7 @@ internal value class ScopeLogHandle private constructor(
                 ?: CancellationException("LogJob completed", t)
             supervisorJob.cancel(cause)
         }
-        supervisorJob.invokeOnCompletion(dispatcherCloseLazily)
+        supervisorJob.invokeOnCompletion { dispatcherDeRef.invoke() }
     }
 
     internal inline val dispatcher: CoroutineDispatcher get() {

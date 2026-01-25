@@ -110,18 +110,31 @@ class FileLogUnitTest {
     }
 
     @Test
-    fun givenOpenedFiles_whenUninstalled_thenAreAllClosedProperly() = runTest {
+    fun givenOpenedCloseables_whenUninstalled_thenAreAllClosedProperly() = runTest {
         withTmpFile { tmp ->
             val log = FileLog.Builder(tmp.path)
                 .debug(enable = true)
                 .build()
 
+            // CloseableCoroutineDispatcher allocations
+            val allocated = mutableListOf<String>()
+            val deallocated = mutableListOf<String>()
+
+            // Closeable files
             val opened = mutableListOf<String>()
             val closed = mutableListOf<String>()
 
             val closeChecker = object : Log(uid = "CloseChecker", min = Level.Debug) {
                 override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
                     if (msg == null) return false
+                    if (msg.startsWith("Allocated >> ")) {
+                        allocated.add(msg.substringAfter("Allocated >> "))
+                        return true
+                    }
+                    if (msg.startsWith("Deallocated >> ")) {
+                        deallocated.add(msg.substringAfter("Deallocated >> "))
+                        return true
+                    }
                     if (msg.startsWith("Opened >> ")) {
                         opened.add(msg.substringAfter("Opened >> "))
                         return true
@@ -143,23 +156,37 @@ class FileLogUnitTest {
                 log.installAndTest {
                     val LOG = Log.Logger.of("CloseChecker")
                     LOG.i("Testing1...")
+                    // Should re-acquire CoroutineDispatcher reference and
+                    // not deallocate it, but re-use it.
                     Log.uninstallOrThrow(log)
                     Log.installOrThrow(log)
                     withContext(Dispatchers.IO) { delay(25.milliseconds) }
                     LOG.w("Testing2...")
                 }
             } finally {
+                // Wait for lazy closure of allocated CloseableCoroutineDispatcher
+                withContext(Dispatchers.IO) { delay(500.milliseconds) }
                 Log.uninstall(closeChecker)
             }
 
-//            println("OPENED$opened")
-//            println("CLOSED$closed")
+            println("ALLOCATED  $allocated")
+            println("DEALLOCATED$deallocated")
+            println("OPENED$opened")
+            println("CLOSED$closed")
+            assertNotEquals(0, allocated.size)
             assertNotEquals(0, opened.size)
+            assertEquals(allocated.size, deallocated.size)
             assertEquals(opened.size, closed.size)
 
+            allocated.forEach { resource ->
+                assertTrue(deallocated.contains(resource))
+            }
             opened.forEach { closeable ->
                 assertTrue(closed.contains(closeable))
             }
+
+            // 2 installs, 1 allocation/de-allocation (close was canceled and it was reused)
+            assertEquals(1, allocated.size)
         }
     }
 }

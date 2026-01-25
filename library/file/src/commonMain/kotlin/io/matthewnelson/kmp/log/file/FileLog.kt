@@ -46,6 +46,7 @@ import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.file.internal.CurrentThread
 import io.matthewnelson.kmp.log.file.internal.FileLock
 import io.matthewnelson.kmp.log.file.internal.InvalidFileLock
+import io.matthewnelson.kmp.log.file.internal.SharedResourceAllocator
 import io.matthewnelson.kmp.log.file.internal.LockFile
 import io.matthewnelson.kmp.log.file.internal.LogBuffer
 import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE_LOGS
@@ -83,6 +84,8 @@ import io.matthewnelson.kmp.log.file.internal.valueDecrement
 import io.matthewnelson.kmp.log.file.internal.valueGet
 import io.matthewnelson.kmp.log.file.internal.valueGetAndSet
 import io.matthewnelson.kmp.log.file.internal.valueIncrement
+import kotlinx.coroutines.CloseableCoroutineDispatcher
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineStart
@@ -93,7 +96,6 @@ import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.currentCoroutineContext
@@ -102,7 +104,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.kotlincrypto.hash.blake2.BLAKE2s
 import kotlin.concurrent.Volatile
@@ -878,6 +879,7 @@ public class FileLog: Log {
     private val LOG: Logger
 
     private val scopeLog: ScopeLog
+    private val allocator: DispatcherAllocator
 
     @Volatile
     private var _onInstallInvocations: Long = 0L
@@ -946,12 +948,20 @@ public class FileLog: Log {
         this._whitelistDomain = whitelistDomain.toTypedArray()
 
         this._whitelistTag = whitelistTag.toTypedArray()
+
+        this.debug = debug
+        this.warn = warn
         this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
 
         this.scopeLog = ScopeLog(uidSuffix, handler = CoroutineExceptionHandler handler@ { context, t ->
             if (t is CancellationException) return@handler // Ignore...
             logE(t) { context }
         })
+        this.allocator = object : DispatcherAllocator(LOG) {
+            @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+            override fun doAllocation(): CloseableCoroutineDispatcher = newSingleThreadContext(name = LOG.tag)
+            override fun debug(): Boolean = this@FileLog.debug
+        }
 
         this.logDirectory = directory.path
         this.logFiles = files.map { it.path }.toImmutableList()
@@ -966,8 +976,6 @@ public class FileLog: Log {
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull
         this.whitelistTag = whitelistTag
-        this.debug = debug
-        this.warn = warn
     }
 
     override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
@@ -1214,15 +1222,13 @@ public class FileLog: Log {
 
     @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
     override fun onInstall() {
+        _onInstallInvocations++
+
         // Because runBlocking is being utilized by FileLog.log, we must always specify
         // a logging dispatcher. If we were to use Dispatchers.IO for everything, then
         // it could result in a deadlock if caller is also using Dispatchers.IO whereby
         // thread starvation occurs and the LogLoop is unable to continue.
-        // TODO: Does each FileLog need its own dispatcher, or can this be done with
-        //  a single dispatcher for all of them? Would need to use non-blocking FileLock
-        //  acquisition, but it IS possible...
-        //  Maybe make it configurable??? >> Builder.logThread(dedicated = true)
-        val dispatcher = newSingleThreadContext(LOG.tag + "-{" + (++_onInstallInvocations) + '}')
+        val (dispatcher, dispatcherDeRef) = allocator.getOrAllocate()
 
         val logBuffer = LogBuffer(capacity = maxLogBuffered)
         val previousLogJob = _logJob
@@ -1314,17 +1320,7 @@ public class FileLog: Log {
                 scopeLog,
                 _onInstallInvocations,
                 dispatcher,
-                dispatcherCloseLazily = {
-                    logD { "Closing > $dispatcher" }
-
-                    // Must close lazily
-                    scopeLog.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
-                        withContext(NonCancellable) { delay(250.milliseconds) }
-                        dispatcher.close()
-                        // Only 1 carrot because Closeable tests search for 2 (i.e. Closed >> $closeable)
-                        logD { "Closed > $dispatcher" }
-                    }
-                },
+                dispatcherDeRef,
             )
 
             logJob.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $logJob" } }
@@ -2451,5 +2447,43 @@ public class FileLog: Log {
             // accepted Level.Error for this Log.Logger.
             t?.printStackTrace()
         }
+    }
+
+    @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+    private abstract class DispatcherAllocator(
+        LOG: Logger?,
+    ): SharedResourceAllocator<CoroutineDispatcher>(
+        LOG,
+        deallocationDelay = 250.milliseconds,
+        deallocationDispatcher = Dispatchers.IO,
+    ) {
+
+        abstract override fun doAllocation(): CloseableCoroutineDispatcher
+        final override fun CoroutineDispatcher.doDeallocation() { (this as CloseableCoroutineDispatcher).close() }
+
+//        companion object Global {
+//
+//            private const val TAG_BLOCKING_MONITOR = "BlockingMonitor"
+//            private const val TAG_SHARED_POOL = "SharedPool"
+//
+//            private const val NAME_BLOCKING_MONITOR = "FileLog.$TAG_BLOCKING_MONITOR"
+//            private const val NAME_SHARED_POOL = "FileLog.$TAG_SHARED_POOL"
+//
+              // TODO: Use within logLoop of all FileLog to monitor FileLock acquisitions
+//            val BlockingMonitor = object : DispatcherAllocator(Logger.of(tag = TAG_BLOCKING_MONITOR, domain = DOMAIN)) {
+//                override fun doAllocation(): CloseableCoroutineDispatcher {
+//                    return newSingleThreadContext(name = NAME_BLOCKING_MONITOR)
+//                }
+//            }
+//
+              // TODO: Add ability to configure via FileLog.Builder to use instead of a dedicated allocator
+              //  Need to think about how best to do this, if at all.
+//            val SharedPool = object : DispatcherAllocator(Logger.of(tag = TAG_SHARED_POOL, domain = DOMAIN)) {
+//                override fun doAllocation(): CloseableCoroutineDispatcher {
+//                    // TODO: Make configurable via environment variables/properties?
+//                    return newFixedThreadPoolContext(nThreads = 3, name = NAME_SHARED_POOL)
+//                }
+//            }
+//        }
     }
 }
