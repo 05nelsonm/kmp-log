@@ -207,7 +207,7 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
-    public val minWaitOn: Level
+    public val maxLogFileSize: Long
 
     /**
      * TODO
@@ -225,19 +225,19 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
-    public val maxLogBuffered: Int
+    public val minWaitOn: Level
 
     /**
      * TODO
      * */
     @JvmField
-    public val maxLogFileSize: Long
+    public val bufferCapacity: Int
 
     /**
      * TODO
      * */
     @JvmField
-    public val maxLogYield: Byte
+    public val yieldOn: Byte
 
     /**
      * TODO
@@ -357,11 +357,11 @@ public class FileLog: Log {
         private var _modeFile = ModeBuilder.of(isDirectory = false)
         private var _fileName = "log"
         private var _fileExtension = ""
-        private var _maxLogBuffered: Int = Channel.RENDEZVOUS
         private var _maxLogFileSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
         private var _maxLogFiles: Byte = if (isDesktop()) 5 else 3
-        private var _maxLogYield: Byte = 2
+        private var _yieldOn: Byte = 2
         private var _minWaitOn = Level.Verbose
+        private var _bufferCapacity: Int = -1
         private val _blacklistDomain = mutableSetOf<String>()
         private val _whitelistDomain = mutableSetOf<String>()
         private var _whitelistDomainNull = true
@@ -375,6 +375,8 @@ public class FileLog: Log {
          * @param [level] The minimum [Log.Level] to allow.
          *
          * @return The [Builder]
+         *
+         * @see [Log.min]
          * */
         public fun min(level: Level): Builder = apply { _min = level }
 
@@ -393,6 +395,8 @@ public class FileLog: Log {
          * @param [level] The maximum [Log.Level] to allow.
          *
          * @return The [Builder]
+         *
+         * @see [Log.max]
          * */
         public fun max(level: Level): Builder = apply { _max = level }
 
@@ -531,13 +535,13 @@ public class FileLog: Log {
         }
 
         /**
-         * DEFAULT: [Channel.RENDEZVOUS] (i.e. `0`)
+         * DEFAULT: `-1` (i.e. TODO)
          *
          * TODO
          *
          * @return The [Builder]
          * */
-        public fun maxLogBuffered(capacity: Int): Builder = apply { _maxLogBuffered = capacity }
+        public fun bufferCapacity(nLogs: Int): Builder = apply { _bufferCapacity = nLogs }
 
         /**
          * DEFAULT: `5 Mb` on `Android`/`AndroidNative`/`iOS`/`tvOS`/`watchOS`, otherwise `10 Mb`.
@@ -546,7 +550,7 @@ public class FileLog: Log {
          *
          * @return The [Builder]
          * */
-        public fun maxLogFileSize(bytes: Long): Builder = apply { _maxLogFileSize = bytes }
+        public fun maxLogFileSize(nBytes: Long): Builder = apply { _maxLogFileSize = nBytes }
 
         /**
          * DEFAULT: `3` on `Android`/`AndroidNative`/`iOS`/`tvOS`/`watchOS`, otherwise `5`.
@@ -555,7 +559,7 @@ public class FileLog: Log {
          *
          * @return The [Builder]
          * */
-        public fun maxLogFiles(max: Byte): Builder = apply { _maxLogFiles = max }
+        public fun maxLogFiles(nFiles: Byte): Builder = apply { _maxLogFiles = nFiles }
 
         /**
          * DEFAULT: `2`
@@ -564,7 +568,7 @@ public class FileLog: Log {
          *
          * @return The [Builder]
          * */
-        public fun maxLogYield(num: Byte): Builder = apply { _maxLogYield = num }
+        public fun yieldOn(nLogs: Byte): Builder = apply { _yieldOn = nLogs }
 
         /**
          * DEFAULT: empty (i.e. Do not reject any [Logger.domain])
@@ -837,18 +841,31 @@ public class FileLog: Log {
                 digest.encodeToString(Base16)
             }
 
+            val min = _min
+            val minWaitOn = _minWaitOn.coerceAtLeast(min)
+            val bufferCapacity = if (minWaitOn == min) {
+                // If minWaitOn is configured such that FileLog.log blocks for all
+                // Log.Level, then LogBuffer's Channel capacity has an inherent
+                // constraint of n threads. To mitigate unnecessary work and object
+                // creation, we want LogBuffer's Channel to always succeed on trySend
+                // (if not closed).
+                Channel.UNLIMITED
+            } else {
+                _bufferCapacity.coerceAtLeast(Channel.RENDEZVOUS /* 0 */)
+            }
+
             return FileLog(
-                min = _min,
-                minWaitOn = _minWaitOn,
+                min = min,
                 max = _max,
                 directory = directory,
                 files = files.toImmutableList(),
                 files0Hash = files0Hash,
+                maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L), // 50kb
                 modeDirectory = _modeDirectory.build(),
                 modeFile = _modeFile.build(),
-                maxLogBuffered = _maxLogBuffered.coerceAtLeast(Channel.RENDEZVOUS /* 0 */),
-                maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L), // 50kb
-                maxLogYield = _maxLogYield.coerceIn(1, 10),
+                minWaitOn = minWaitOn,
+                bufferCapacity = bufferCapacity,
+                yieldOn = _yieldOn.coerceIn(1, 10),
                 blacklistDomain = blacklistDomain,
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
@@ -891,16 +908,16 @@ public class FileLog: Log {
 
     private constructor(
         min: Level,
-        minWaitOn: Level,
         max: Level,
         directory: File,
         files: List<File>,
         files0Hash: String,
+        maxLogFileSize: Long,
         modeDirectory: String,
         modeFile: String,
-        maxLogBuffered: Int,
-        maxLogFileSize: Long,
-        maxLogYield: Byte,
+        minWaitOn: Level,
+        bufferCapacity: Int,
+        yieldOn: Byte,
         blacklistDomain: Set<String>,
         whitelistDomain: Set<String>,
         whitelistDomainNull: Boolean,
@@ -966,12 +983,12 @@ public class FileLog: Log {
         this.logDirectory = directory.path
         this.logFiles = files.map { it.path }.toImmutableList()
         this.logFiles0Hash = files0Hash
-        this.minWaitOn = minWaitOn
+        this.maxLogFileSize = maxLogFileSize
         this.modeDirectory = modeDirectory
         this.modeFile = modeFile
-        this.maxLogBuffered = maxLogBuffered
-        this.maxLogFileSize = maxLogFileSize
-        this.maxLogYield = maxLogYield
+        this.minWaitOn = minWaitOn
+        this.bufferCapacity = bufferCapacity
+        this.yieldOn = yieldOn
         this.blacklistDomain = blacklistDomain
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull
@@ -1153,7 +1170,7 @@ public class FileLog: Log {
                 return false
             }
 
-            // This will only ever be the case when Builder.maxLogBuffered was specified
+            // This will only ever be the case when Builder.bufferCapacity was specified
             // and the LogBuffer.channel has reached capacity. The kotlinx.coroutines
             // Channel.trySendBlocking extension function cannot be used here because
             // it throws InterruptedException on Jvm/Android, and we must guarantee LogAction
@@ -1235,7 +1252,7 @@ public class FileLog: Log {
         // thread starvation occurs and the LogLoop is unable to continue.
         val (dispatcher, dispatcherDeRef) = allocator.getOrAllocate()
 
-        val logBuffer = LogBuffer(capacity = maxLogBuffered)
+        val logBuffer = LogBuffer(capacity = bufferCapacity)
         val previousLogJob = _logJob
 
         scopeLog.launch(dispatcher, start = CoroutineStart.ATOMIC) {
@@ -1603,7 +1620,7 @@ public class FileLog: Log {
                         // Log rotation is needed
                         size >= maxLogFileSize -> null
                         // Yield to another process (potentially)
-                        processedWrites >= maxLogYield -> null
+                        processedWrites >= yieldOn -> null
                         // Job cancellation
                         !logLoopJob.isActive -> null
 
