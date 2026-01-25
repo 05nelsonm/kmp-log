@@ -163,9 +163,9 @@ class FileLogUnitTest {
                     withContext(Dispatchers.IO) { delay(25.milliseconds) }
                     LOG.w("Testing2...")
                 }
-            } finally {
                 // Wait for lazy closure of allocated CloseableCoroutineDispatcher
-                withContext(Dispatchers.IO) { delay(500.milliseconds) }
+                withContext(Dispatchers.IO) { delay(750.milliseconds) }
+            } finally {
                 Log.uninstall(closeChecker)
             }
 
