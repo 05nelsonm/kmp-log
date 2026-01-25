@@ -46,21 +46,23 @@ import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.file.internal.CurrentThread
 import io.matthewnelson.kmp.log.file.internal.FileLock
 import io.matthewnelson.kmp.log.file.internal.InvalidFileLock
-import io.matthewnelson.kmp.log.file.internal.SharedResourceAllocator
 import io.matthewnelson.kmp.log.file.internal.LockFile
+import io.matthewnelson.kmp.log.file.internal.LogAction
 import io.matthewnelson.kmp.log.file.internal.LogBuffer
 import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE_LOGS
 import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE_LOGS_AND_RETRY
 import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.MAX_RETRIES
-import io.matthewnelson.kmp.log.file.internal.LogAction
+import io.matthewnelson.kmp.log.file.internal.LogSend
+import io.matthewnelson.kmp.log.file.internal.LogWait
+import io.matthewnelson.kmp.log.file.internal.ModeBuilder
+import io.matthewnelson.kmp.log.file.internal.RotateActionQueue
+import io.matthewnelson.kmp.log.file.internal.ScopeFileLog
+import io.matthewnelson.kmp.log.file.internal.ScopeLog
+import io.matthewnelson.kmp.log.file.internal.ScopeLog.Companion.scopeLog
 import io.matthewnelson.kmp.log.file.internal.ScopeLogHandle
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop.Companion.scopeLogLoop
-import io.matthewnelson.kmp.log.file.internal.ScopeLog
-import io.matthewnelson.kmp.log.file.internal.LogSend
-import io.matthewnelson.kmp.log.file.internal.ModeBuilder
-import io.matthewnelson.kmp.log.file.internal.LogWait
-import io.matthewnelson.kmp.log.file.internal.RotateActionQueue
+import io.matthewnelson.kmp.log.file.internal.SharedResourceAllocator
 import io.matthewnelson.kmp.log.file.internal.async
 import io.matthewnelson.kmp.log.file.internal.atomicLong
 import io.matthewnelson.kmp.log.file.internal.atomicRef
@@ -312,7 +314,7 @@ public class FileLog: Log {
     public fun uninstallAndAwaitSync(): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
         val job = (instance as FileLog)._logJob ?: return false
-        val context = instance.scopeLog.handler + Dispatchers.IO
+        val context = instance.scopeFileLog.handler + Dispatchers.IO
         while (job.isActive) {
             try {
                 CurrentThread.uninterruptedRunBlocking(context) {
@@ -895,7 +897,7 @@ public class FileLog: Log {
 
     private val LOG: Logger
 
-    private val scopeLog: ScopeLog
+    private val scopeFileLog: ScopeFileLog
     private val allocator: DispatcherAllocator
 
     @Volatile
@@ -970,7 +972,7 @@ public class FileLog: Log {
         this.warn = warn
         this.LOG = Logger.of(tag = uidSuffix, DOMAIN)
 
-        this.scopeLog = ScopeLog(uidSuffix, handler = CoroutineExceptionHandler handler@ { context, t ->
+        this.scopeFileLog = ScopeFileLog(uidSuffix, handler = CoroutineExceptionHandler handler@ { context, t ->
             if (t is CancellationException) return@handler // Ignore...
             logE(t) { context }
         })
@@ -1208,7 +1210,7 @@ public class FileLog: Log {
             var result = LogSend.RESULT_UNKNOWN
             while (result == LogSend.RESULT_UNKNOWN) {
                 try {
-                    result = CurrentThread.uninterruptedRunBlocking(scopeLog.handler + scope.dispatcher) {
+                    result = CurrentThread.uninterruptedRunBlocking(scope.dispatcher) {
                         // This will NOT throw CancellationException, as
                         // CoroutineStart.ATOMIC + withContext(NonCancellable)
                         // were used.
@@ -1225,7 +1227,7 @@ public class FileLog: Log {
         while (logWait.isActive) {
             logD { "Block[blocked=1, threadId=$tid] >> $logWait" }
             try {
-                CurrentThread.uninterruptedRunBlocking(scopeLog.handler + scope.dispatcher) {
+                CurrentThread.uninterruptedRunBlocking(scope.dispatcher) {
                     // If logSendResult was false (closed channel) then
                     // LogBuffer.channel's onUndeliveredElement will clean
                     // everything up for us and cancel logWait (eventually).
@@ -1255,89 +1257,91 @@ public class FileLog: Log {
         val logBuffer = LogBuffer(capacity = bufferCapacity)
         val previousLogJob = _logJob
 
-        scopeLog.launch(dispatcher, start = CoroutineStart.ATOMIC) {
+        scopeFileLog.launch(dispatcher, start = CoroutineStart.ATOMIC) {
             logBuffer.use(::logW) { buf ->
-                val thisJob = currentCoroutineContext().job
+                scopeLog {
 
-                // Paranoia. LogBuffer.use {} will close the channel and consume all undelivered
-                // LogAction, but this will guarantee that LogBuffer.channel's onUndeliveredElement
-                // callback is invoked for any stragglers.
-                thisJob.invokeOnCompletion { logBuffer.channel.cancel() }
+                    // Paranoia. LogBuffer.use {} will close the channel and consume all undelivered
+                    // LogAction, but this will guarantee that LogBuffer.channel's onUndeliveredElement
+                    // callback is invoked for any stragglers.
+                    jobLog.invokeOnCompletion { logBuffer.channel.cancel() }
 
-                thisJob.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $thisJob" } }
-                logD { "$LOG_JOB Started >> $thisJob" }
+                    jobLog.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $jobLog" } }
+                    logD { "$LOG_JOB Started >> $jobLog" }
 
-                if (previousLogJob != null) {
-                    logD {
-                        if (!previousLogJob.isActive) null
-                        else "Waiting for previous $LOG_JOB to complete >> $previousLogJob"
+                    if (previousLogJob != null) {
+                        logD {
+                            if (!previousLogJob.isActive) null
+                            else "Waiting for previous $LOG_JOB to complete >> $previousLogJob"
+                        }
+                        previousLogJob.join()
                     }
-                    previousLogJob.join()
-                }
 
-                directory.mkdirs2(mode = modeDirectory, mustCreate = false)
+                    directory.mkdirs2(mode = modeDirectory, mustCreate = false)
 
-                run {
-                    val canonical = directory.canonicalFile2()
-                    if (canonical != directory) {
-                        // FAIL:
-                        //   Between time of Builder.build() and Log.Root.install(), the specified
-                        //   directory was modified to contain symbolic links such that the current
-                        //   one points to a different location. This would invalidate the Log.uid,
-                        //   allowing multiple FileLog instances to be installed simultaneously for
-                        //   the same log file leading to data corruption.
-                        throw IllegalStateException("Symbolic link hijacking detected >> [$canonical] != [$directory]")
+                    run {
+                        val canonical = directory.canonicalFile2()
+                        if (canonical != directory) {
+                            // FAIL:
+                            //   Between time of Builder.build() and Log.Root.install(), the specified
+                            //   directory was modified to contain symbolic links such that the current
+                            //   one points to a different location. This would invalidate the Log.uid,
+                            //   allowing multiple FileLog instances to be installed simultaneously for
+                            //   the same log file leading to data corruption.
+                            throw IllegalStateException("Symbolic link hijacking detected >> [$canonical] != [$directory]")
+                        }
                     }
-                }
 
-                try {
-                    // Some systems, such as macOS, have highly unreliable fcntl byte-range file lock
-                    // behavior when the target is a symbolic link. We want no part in that and require
-                    // the lock file to be a regular file.
-                    val canonical = dotLockFile.canonicalFile2()
-                    if (canonical != dotLockFile) {
-                        logW { "Symbolic link detected >> [$canonical] != [$dotLockFile]" }
-                        dotLockFile.delete2(ignoreReadOnly = true)
-                        delay(10.milliseconds)
+                    try {
+                        // Some systems, such as macOS, have highly unreliable fcntl byte-range file lock
+                        // behavior when the target is a symbolic link. We want no part in that and require
+                        // the lock file to be a regular file.
+                        val canonical = dotLockFile.canonicalFile2()
+                        if (canonical != dotLockFile) {
+                            logW { "Symbolic link detected >> [$canonical] != [$dotLockFile]" }
+                            dotLockFile.delete2(ignoreReadOnly = true)
+                            delay(10.milliseconds)
+                        }
+                    } catch (t: Throwable) {
+                        if (t is CancellationException) throw t
+                        // ignore
                     }
-                } catch (t: Throwable) {
-                    if (t is CancellationException) throw t
-                    // ignore
-                }
 
-                thisJob.ensureActive()
-                val lockFile = dotLockFile.openLockFileRobustly()
-                val lockFileCompletion = thisJob.closeOnCompletion(lockFile)
+                    jobLog.ensureActive()
+                    val lockFile = dotLockFile.openLockFileRobustly()
+                    val lockFileCompletion = jobLog.closeOnCompletion(lockFile)
 
-                try {
-                    val canonical = files[0].canonicalFile2()
-                    if (canonical != files[0]) {
-                        logW { "Symbolic link detected >> [$canonical] != [${files[0]}]" }
-                        files[0].delete2(ignoreReadOnly = true)
-                        delay(10.milliseconds)
+                    try {
+                        val canonical = files[0].canonicalFile2()
+                        if (canonical != files[0]) {
+                            logW { "Symbolic link detected >> [$canonical] != [${files[0]}]" }
+                            files[0].delete2(ignoreReadOnly = true)
+                            delay(10.milliseconds)
+                        }
+                    } catch (t: Throwable) {
+                        if (t is CancellationException) throw t
+                        // ignore
                     }
-                } catch (t: Throwable) {
-                    if (t is CancellationException) throw t
-                    // ignore
+
+                    jobLog.ensureActive()
+                    val logStream = files[0].openLogFileRobustly(modeFile)
+                    val logStreamCompletion = jobLog.closeOnCompletion(logStream)
+
+                    logLoop(
+                        logBuffer = this@use,
+                        buf = buf,
+                        _lockFile = lockFile,
+                        _lockFileCompletion = lockFileCompletion,
+                        _logStream = logStream,
+                        _logStreamCompletion = logStreamCompletion,
+                    )
                 }
-
-                thisJob.ensureActive()
-                val logStream = files[0].openLogFileRobustly(modeFile)
-                val logStreamCompletion = thisJob.closeOnCompletion(logStream)
-
-                logLoop(
-                    buf,
-                    lockFile,
-                    lockFileCompletion,
-                    logStream,
-                    logStreamCompletion,
-                )
             }
         }.let { logJob ->
             _logJob = logJob
             _logHandle = logBuffer to ScopeLogHandle(
                 logJob,
-                scopeLog,
+                scopeFileLog,
                 _onInstallInvocations,
                 dispatcher,
                 dispatcherDeRef,
@@ -1360,7 +1364,8 @@ public class FileLog: Log {
     * Loops until LogBuffer is closed via onUninstall and is "drained" of all its
     * remaining LogAction.
     * */
-    private suspend fun LogBuffer.logLoop(
+    private suspend fun ScopeLog.logLoop(
+        logBuffer: LogBuffer,
         buf: ByteArray,
         _lockFile: LockFile,
         _lockFileCompletion: DisposableHandle,
@@ -1372,7 +1377,7 @@ public class FileLog: Log {
         var logStream = _logStream
         var logStreamCompletion = _logStreamCompletion
 
-        logLoopJob.invokeOnCompletion { logD { "$LOG_LOOP Stopped >> $logLoopJob" } }
+        jobLogLoop.invokeOnCompletion { logD { "$LOG_LOOP Stopped >> $jobLogLoop" } }
 
         // Utilized for log rotation things. These LogAction contain no actual
         // write functionality, but are to be woven into the loop as "priority
@@ -1397,7 +1402,7 @@ public class FileLog: Log {
         // a log rotation is performed. This allows us to not drop lockLog and perform
         // an immediate retry of the LogAction after returning from rotateLogs.
         val retryAction = atomicRef<LogAction?>(initialValue = null)
-        logLoopJob.invokeOnCompletion {
+        jobLogLoop.invokeOnCompletion {
             // This should never really be the case because the main loop would have
             // dequeued this for processing over ever calling logBuffer.channel.receive.
             //
@@ -1408,7 +1413,7 @@ public class FileLog: Log {
                 ?: return@invokeOnCompletion
 
             @OptIn(DelicateCoroutinesApi::class)
-            scopeLog.launch(Dispatchers.Unconfined, start = CoroutineStart.ATOMIC) {
+            scopeFileLog.launch(Dispatchers.Unconfined, start = CoroutineStart.ATOMIC) {
                 action.consumeAndIgnore(buf)
             }
 
@@ -1417,11 +1422,11 @@ public class FileLog: Log {
 
         // Migrate completion handles to ScopeLogLoop (take ownership over them)
         lockFileCompletion.dispose()
-        lockFileCompletion = logLoopJob.closeOnCompletion(lockFile, logOpen = false)
+        lockFileCompletion = jobLogLoop.closeOnCompletion(lockFile, logOpen = false)
         logStreamCompletion.dispose()
-        logStreamCompletion = logLoopJob.closeOnCompletion(logStream, logOpen = false)
+        logStreamCompletion = jobLogLoop.closeOnCompletion(logStream, logOpen = false)
 
-        logD { "$LOG_LOOP Started >> $logLoopJob" }
+        logD { "$LOG_LOOP Started >> $jobLogLoop" }
 
         var lockLog: FileLock = InvalidFileLock
 
@@ -1440,7 +1445,7 @@ public class FileLog: Log {
                     ?: retryAction.valueGetAndSet(newValue = null)
 
                     // Lastly, LogAction sent from FileLog.log
-                    ?: channel.receive()
+                    ?: logBuffer.channel.receive()
             } catch (_: ClosedReceiveChannelException) {
                 // FileLog was uninstalled via Log.Root.uninstall, and there are no
                 // remaining LogAction within the LogBuffer to process.
@@ -1502,9 +1507,9 @@ public class FileLog: Log {
 
                     try {
                         logD(ee) { "Closed >> $lockFile" }
-                        logLoopJob.ensureActive()
+                        jobLogLoop.ensureActive()
                         lockFile = dotLockFile.openLockFileRobustly()
-                        lockFileCompletion = logLoopJob.closeOnCompletion(lockFile)
+                        lockFileCompletion = jobLogLoop.closeOnCompletion(lockFile)
                         // TODO: Blocking timeout monitor
                         lockFile.lockLog()
                     } catch (tt: Throwable) {
@@ -1545,9 +1550,9 @@ public class FileLog: Log {
 
                     try {
                         logD(ee) { "Closed >> $logStream" }
-                        logLoopJob.ensureActive()
+                        jobLogLoop.ensureActive()
                         logStream = files[0].openLogFileRobustly(modeFile)
-                        logStreamCompletion = logLoopJob.closeOnCompletion(logStream)
+                        logStreamCompletion = jobLogLoop.closeOnCompletion(logStream)
                         size = logStream.size()
                         logStream.position(new = size)
                     } catch (t: Throwable) {
@@ -1622,7 +1627,7 @@ public class FileLog: Log {
                         // Yield to another process (potentially)
                         processedWrites >= yieldOn -> null
                         // Job cancellation
-                        !logLoopJob.isActive -> null
+                        !jobLogLoop.isActive -> null
 
                         // Dequeue next LogAction (if available)
                         else -> try {
@@ -1633,7 +1638,7 @@ public class FileLog: Log {
 
                             rotateActionQueue.dequeueOrNull()
                                 ?: retryAction.valueGetAndSet(newValue = null)
-                                ?: channel.tryReceive().getOrNull()
+                                ?: logBuffer.channel.tryReceive().getOrNull()
                         } catch (_: CancellationException) {
                             // Shouldn't happen b/c just checked isActive, but if so
                             // we want to ensure we pop out for logStream.sync. The
@@ -1669,7 +1674,7 @@ public class FileLog: Log {
                 logD { "Processed $processedWrites log(s)" }
             }
 
-            if (logLoopJob.isActive && size >= maxLogFileSize) {
+            if (jobLogLoop.isActive && size >= maxLogFileSize) {
                 if (lockLog.isValid()) {
                     CurrentThread.uninterrupted {
                         rotateLogs(
@@ -2334,7 +2339,7 @@ public class FileLog: Log {
     private fun ScopeLogLoop.executeLogRotationMoves(
         rotateActionQueue: RotateActionQueue,
         moves: ArrayDeque<Pair<File, File>>,
-    ): Job = scope.launch(context = CoroutineName(LOG.tag + "-$LOG_ROTATION")) {
+    ): Job = scopeLogLoop.launch(context = CoroutineName(LOG.tag + "-$LOG_ROTATION")) {
         logD { "$LOG_ROTATION Started >> ${currentCoroutineContext().job}" }
 
 //        val startSize = moves.size
@@ -2404,7 +2409,7 @@ public class FileLog: Log {
 
     @Throws(CancellationException::class)
     private suspend fun ScopeLogLoop.awaitLogRotation() {
-        logLoopJob.children.forEach { child ->
+        jobLogLoop.children.forEach { child ->
             logD {
                 if (!child.isActive) null
                 else "Waiting for $LOG_ROTATION to complete >> $child"
