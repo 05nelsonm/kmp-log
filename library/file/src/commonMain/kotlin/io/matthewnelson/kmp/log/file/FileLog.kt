@@ -1169,11 +1169,18 @@ public class FileLog: Log {
         _pendingLogCount.valueIncrement()
         preprocessing.start()
 
-        val logSendResult: Boolean = run {
+        // If logWait is non-null, we do not care about logSend result because it will either
+        // succeed in sending LogAction, or fail due to channel closure in which case the
+        // LogBuffer.channel.onUndeliveredElement callback will be invoked and LogAction
+        // consumption ends up cancelling logWait for us.
+        //
+        // This skips an unnecessary runBlocking call and limits it to at MOST one, instead of
+        // potentially two.
+        if (logWait == null) return run {
             if (logSend == null) return@run true
 
-            // Do not block for FileLog or Log.Root logs.
             when (domain) {
+                // Do not block for FileLog or Log.Root logs.
                 DOMAIN, ROOT_DOMAIN -> {
                     logD { "Non-Blocking[domain=$domain] >> $logSend" }
                     return@run true
@@ -1197,8 +1204,6 @@ public class FileLog: Log {
             logD { "Block[blocked=0, threadId=$tid] >> $logSend" }
             result == LogSend.RESULT_TRUE
         }
-
-        if (logWait == null) return logSendResult
 
         while (logWait.isActive) {
             logD { "Block[blocked=1, threadId=$tid] >> $logWait" }
@@ -1237,6 +1242,12 @@ public class FileLog: Log {
             logBuffer.use(::logW) { buf ->
                 val thisJob = currentCoroutineContext().job
 
+                // Paranoia. LogBuffer.use {} will close the channel and consume all undelivered
+                // LogAction, but this will guarantee that LogBuffer.channel's onUndeliveredElement
+                // callback is invoked for any stragglers.
+                thisJob.invokeOnCompletion { logBuffer.channel.cancel() }
+
+                thisJob.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $thisJob" } }
                 logD { "$LOG_JOB Started >> $thisJob" }
 
                 if (previousLogJob != null) {
@@ -1306,27 +1317,14 @@ public class FileLog: Log {
                 )
             }
         }.let { logJob ->
-
-            // Paranoia.
-            //
-            // LogBuffer.use {} will close the channel and consume all
-            // undelivered LogAction, but this will guarantee that
-            // LogBuffer.channel's onUndeliveredElement callback is
-            // invoked for any stragglers.
-            logJob.invokeOnCompletion { logBuffer.channel.cancel() }
-
-            val scope = ScopeLogHandle(
+            _logJob = logJob
+            _logHandle = logBuffer to ScopeLogHandle(
                 logJob,
                 scopeLog,
                 _onInstallInvocations,
                 dispatcher,
                 dispatcherDeRef,
             )
-
-            logJob.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $logJob" } }
-
-            _logJob = logJob
-            _logHandle = logBuffer to scope
         }
 
         log(Level.Info, LOG.domain, LOG.tag, "Log file opened at ${files[0].name}", t = null)
