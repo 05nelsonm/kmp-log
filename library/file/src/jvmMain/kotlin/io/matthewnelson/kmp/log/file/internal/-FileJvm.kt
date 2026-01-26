@@ -19,6 +19,7 @@ import io.matthewnelson.kmp.file.AccessDeniedException
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.IOException
+import io.matthewnelson.kmp.file.delete2
 import io.matthewnelson.kmp.file.exists2
 import io.matthewnelson.kmp.file.wrapIOException
 
@@ -32,10 +33,19 @@ internal actual fun File.moveTo(dest: File) {
             e.addSuppressed(t)
             throw e
         }
-        // TODO: If failure is because of destination already existing???
         throw t.wrapIOException { "Failed to move $this >> $dest" }
     }
 
-    if (!exists2()) throw FileNotFoundException("$this")
-    throw IOException("Failed to move $this >> $dest")
+    if (!exists2()) throw FileNotFoundException(toString())
+
+    // Windows
+    val t = try {
+        dest.delete2(ignoreReadOnly = true, mustExist = true)
+        if (renameTo(dest)) return
+        null
+    } catch (t: Throwable) {
+        t
+    }
+
+    throw IOException("Failed to move $this >> $dest", t)
 }
