@@ -16,10 +16,15 @@
 package io.matthewnelson.kmp.log.file
 
 import io.matthewnelson.kmp.file.path
+import io.matthewnelson.kmp.file.readUtf8
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.Log.Level
+import io.matthewnelson.kmp.log.file.internal.SynchronizedLock
+import io.matthewnelson.kmp.log.file.internal.synchronized
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -28,6 +33,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 class FileLogUnitTest {
@@ -110,6 +116,40 @@ class FileLogUnitTest {
     }
 
     @Test
+    fun givenPendingLogCount_whenUninstalled_thenEquals0() = runTest {
+        withTmpFile { tmp ->
+            val log = FileLog.Builder(tmp.path).build()
+            log.installAndTest {
+                assertTrue(log.uninstallAndAwaitAsync())
+
+                // Confirms that a log was ingested and pendingLogCount had been incremented.
+                assertTrue(log.files[0].readUtf8().isNotBlank())
+            }
+            assertEquals(0, log.pendingLogCount)
+        }
+    }
+
+    @Test
+    fun givenPendingLogCount_whenPreProcessingFormatNull_thenWasDecremented() = runTest {
+        withTmpFile { tmp ->
+            val log = FileLog.Builder(tmp.path).build()
+            log.installAndTest {
+                val logger = Log.Logger.of("PendingLogCount.Error")
+
+                // Should not have been logged b/c empty lines, so preprocessing
+                // would have returned null.
+                assertEquals(0, logger.w("\n\n"))
+
+                assertTrue(log.uninstallAndAwaitAsync())
+
+                // Confirms that a log was ingested and pendingLogCount had been incremented.
+                assertTrue(log.files[0].readUtf8().isNotBlank())
+            }
+            assertEquals(0, log.pendingLogCount)
+        }
+    }
+
+    @Test
     fun givenOpenedCloseables_whenUninstalled_thenAreAllClosedProperly() = runTest {
         withTmpFile { tmp ->
             val log = FileLog.Builder(tmp.path)
@@ -124,46 +164,62 @@ class FileLogUnitTest {
             val opened = mutableListOf<String>()
             val closed = mutableListOf<String>()
 
-            val closeChecker = object : Log(uid = "CloseChecker", min = Level.Debug) {
+            val closeChecker = object : AbstractTestLog(uid = "CloseChecker") {
+
+                private val lock = SynchronizedLock()
+
                 override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
+                    super.log(level, domain, tag, msg, t)
+
                     if (msg == null) return false
                     if (msg.startsWith("Allocated >> ")) {
-                        allocated.add(msg.substringAfter("Allocated >> "))
+                        synchronized(lock) {
+                            allocated.add(msg.substringAfter("Allocated >> "))
+                        }
                         return true
                     }
                     if (msg.startsWith("Deallocated >> ")) {
-                        deallocated.add(msg.substringAfter("Deallocated >> "))
+                        synchronized(lock) {
+                            deallocated.add(msg.substringAfter("Deallocated >> "))
+                        }
                         return true
                     }
                     if (msg.startsWith("Opened >> ")) {
-                        opened.add(msg.substringAfter("Opened >> "))
+                        synchronized(lock) {
+                            opened.add(msg.substringAfter("Opened >> "))
+                        }
                         return true
                     }
                     if (msg.startsWith("Closed >> ")) {
-                        closed.add(msg.substringAfter("Closed >> "))
+                        synchronized(lock) {
+                            closed.add(msg.substringAfter("Closed >> "))
+                        }
                         return true
                     }
                     return false
                 }
+
                 override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
-                    if (domain != FileLog.DOMAIN) return false
+                    if (!super.isLoggable(level, domain, tag)) return false
                     return log.uid.endsWith(tag)
                 }
             }
 
             Log.installOrThrow(closeChecker)
             try {
-                log.installAndTest {
-                    val LOG = Log.Logger.of("CloseChecker")
-                    LOG.i("Testing1...")
-                    // Should re-acquire CoroutineDispatcher reference and
-                    // not deallocate it, but re-use it.
-                    Log.uninstallOrThrow(log)
+                log.installAndTest(deallocateDispatcherDelay = Duration.ZERO) {
+                    val logger = Log.Logger.of("CloseChecker")
+                    logger.i("Testing1...")
+                    assertTrue(log.uninstallAndAwaitAsync())
+
+                    // Should re-acquire CloseableCoroutineDispatcher reference, cancelling
+                    // its scheduled deallocation, and re-use it.
                     Log.installOrThrow(log)
-                    withContext(Dispatchers.IO) { delay(25.milliseconds) }
-                    LOG.w("Testing2...")
+                    logger.w("Testing2...")
                 }
+
                 // Wait for lazy closure of allocated CloseableCoroutineDispatcher
+                // to be reported via debug log.
                 withContext(Dispatchers.IO) { delay(750.milliseconds) }
             } finally {
                 Log.uninstall(closeChecker)
@@ -173,6 +229,7 @@ class FileLogUnitTest {
             println("DEALLOCATED$deallocated")
             println("OPENED$opened")
             println("CLOSED$closed")
+
             assertNotEquals(0, allocated.size)
             assertNotEquals(0, opened.size)
             assertEquals(allocated.size, deallocated.size)
@@ -185,8 +242,75 @@ class FileLogUnitTest {
                 assertTrue(closed.contains(closeable))
             }
 
-            // 2 installs, 1 allocation/de-allocation (close was canceled and it was reused)
+            // 2 installs, 1 allocation/de-allocation (i.e. CloseableCoroutineDispatcher
+            // closure was canceled, and it was reused by second Log.install of FileLog).
             assertEquals(1, allocated.size)
+        }
+    }
+
+    /*
+    * This test is simply to check that when all Dispatchers.IO threads are locked
+    * up (are blocking), FileLog's allocated CloseableCoroutineDispatcher remains
+    * unaffected by Thread starvation and works through its load.
+    * */
+    @Test
+    fun givenBlockingConfiguration_whenHeavyLoad_thenWorksThroughAllLogs() = runTest {
+        withTmpFile { tmp ->
+            val log = FileLog.Builder(tmp.path)
+                .maxLogFiles(nFiles = 5)
+                .maxLogFileSize(nBytes = 50 * 1024)
+                .yieldOn(nLogs = 10)
+                .debug(enable = true)
+                .build()
+
+            val printer = object : AbstractTestLog("FileLog.Print") {
+
+                override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
+                    if (msg == null) return false
+                    val print = when {
+//                        msg.startsWith("Block[") -> true
+                        msg.startsWith("LogRotation") -> true
+                        msg.contains("log(s)") -> true
+                        else -> false
+                    }
+                    return if (print) super.log(level, domain, tag, msg, t) else false
+                }
+            }
+
+            Log.install(printer)
+            try {
+                log.installAndTest {
+                    val logger = Log.Logger.of(tag = "InsaneLoad")
+
+                    val size = 1024
+                    val sb = StringBuilder(size)
+                    while (sb.length < size) {
+                        repeat(127) { sb.append('a') }
+                        sb.appendLine()
+                    }
+                    val s = sb.toString()
+
+                    // Should be enough to lock up ALL Dispatchers.IO threads
+                    // while logs are processed.
+                    Array(250) {
+                        async(Dispatchers.IO) {
+                            assertNotEquals(0, logger.w(s))
+                        }
+                    }.toList().awaitAll()
+
+                    // installAndTest deletes all files, so must check before lambda closure
+                    assertTrue(log.uninstallAndAwaitAsync())
+
+                    // log file, including all rotation files should exist
+                    log.files.forEach { file ->
+                        assertTrue(file.readUtf8().contains(logger.tag), file.toString())
+                    }
+                }
+            } finally {
+                Log.uninstall(printer)
+            }
+
+            assertEquals(0, log.pendingLogCount)
         }
     }
 }
