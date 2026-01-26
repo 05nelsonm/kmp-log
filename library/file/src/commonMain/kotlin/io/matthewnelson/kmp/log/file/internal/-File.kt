@@ -16,9 +16,13 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.AccessDeniedException
+import io.matthewnelson.kmp.file.DirectoryNotEmptyException
 import io.matthewnelson.kmp.file.File
+import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.FileStream
+import io.matthewnelson.kmp.file.FileSystemException
 import io.matthewnelson.kmp.file.IOException
+import io.matthewnelson.kmp.file.NotDirectoryException
 import io.matthewnelson.kmp.file.OpenExcl
 import io.matthewnelson.kmp.file.chmod2
 import io.matthewnelson.kmp.file.exists2
@@ -64,6 +68,18 @@ internal fun File.exists2Robustly(): Boolean {
     return false
 }
 
-// TODO: Promote to kmp-file >> https://github.com/05nelsonm/kmp-file/issues/209
+/**
+ * Move a log file, taking the place of [dest]
+ *
+ * TODO: Promote to kmp-file >> https://github.com/05nelsonm/kmp-file/issues/209
+ *
+ * @param [dest] The destination to move the file to.
+ *
+ * @throws [FileNotFoundException] If source [File] does not exist.
+ * @throws [DirectoryNotEmptyException] If [dest] is an existing non-empty directory.
+ * @throws [NotDirectoryException] If source [File] is an existing directory, but
+ *   [dest] exists and is not a directory.
+ * @throws [FileSystemException] Otherwise.
+ * */
 @Throws(IOException::class)
-internal expect fun File.moveTo(dest: File)
+internal expect fun File.moveLogTo(dest: File)

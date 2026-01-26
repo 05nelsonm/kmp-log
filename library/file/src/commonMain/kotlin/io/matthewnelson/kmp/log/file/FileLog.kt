@@ -74,7 +74,7 @@ import io.matthewnelson.kmp.log.file.internal.isDesktop
 import io.matthewnelson.kmp.log.file.internal.launch
 import io.matthewnelson.kmp.log.file.internal.lockLog
 import io.matthewnelson.kmp.log.file.internal.lockRotate
-import io.matthewnelson.kmp.log.file.internal.moveTo
+import io.matthewnelson.kmp.log.file.internal.moveLogTo
 import io.matthewnelson.kmp.log.file.internal.now
 import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
 import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
@@ -1999,7 +1999,7 @@ public class FileLog: Log {
             }
 
             // Move into its final location.
-            dotRotateTmpFile.moveTo(dotRotateFile)
+            dotRotateTmpFile.moveLogTo(dotRotateFile)
 
             // TODO: fsync directory???
 
@@ -2346,7 +2346,7 @@ public class FileLog: Log {
             val (source, dest) = moves.removeFirst()
 
             try {
-                source.moveTo(dest)
+                source.moveLogTo(dest)
                 logD { "Moved ${source.name} >> ${dest.name}" }
 
                 // yield only after we have our first move such that
