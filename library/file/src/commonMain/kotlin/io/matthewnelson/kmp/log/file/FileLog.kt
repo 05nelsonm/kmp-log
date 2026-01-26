@@ -1349,7 +1349,6 @@ public class FileLog: Log {
         }
 
         log(Level.Info, LOG.domain, LOG.tag, "Log file opened at ${files[0].name}", t = null)
-        // TODO: If Debug, log FileLog configuration.
     }
 
     override fun onUninstall() {
@@ -2489,15 +2488,15 @@ public class FileLog: Log {
 //            private const val NAME_BLOCKING_MONITOR = "FileLog.$TAG_BLOCKING_MONITOR"
 //            private const val NAME_SHARED_POOL = "FileLog.$TAG_SHARED_POOL"
 //
-              // TODO: Use within logLoop of all FileLog to monitor FileLock acquisitions
+//            // TODO: Use within logLoop of all FileLog to monitor FileLock acquisitions
 //            val BlockingMonitor = object : DispatcherAllocator(Logger.of(tag = TAG_BLOCKING_MONITOR, domain = DOMAIN)) {
 //                override fun doAllocation(): CloseableCoroutineDispatcher {
 //                    return newSingleThreadContext(name = NAME_BLOCKING_MONITOR)
 //                }
 //            }
 //
-              // TODO: Add ability to configure via FileLog.Builder to use instead of a dedicated allocator
-              //  Need to think about how best to do this, if at all.
+//            // TODO: Add ability to configure via FileLog.Builder to use instead of a dedicated allocator
+//            //  Need to think about how best to do this, if at all.
 //            val SharedPool = object : DispatcherAllocator(Logger.of(tag = TAG_SHARED_POOL, domain = DOMAIN)) {
 //                override fun doAllocation(): CloseableCoroutineDispatcher {
 //                    // TODO: Make configurable via environment variables/properties?
