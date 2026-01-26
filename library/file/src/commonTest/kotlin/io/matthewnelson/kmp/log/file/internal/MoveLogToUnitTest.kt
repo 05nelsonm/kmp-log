@@ -25,6 +25,7 @@ import io.matthewnelson.kmp.file.name
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.file.readUtf8
 import io.matthewnelson.kmp.file.resolve
+import io.matthewnelson.kmp.file.toFile
 import io.matthewnelson.kmp.file.writeUtf8
 import io.matthewnelson.kmp.log.file.withTmpFile
 import kotlin.test.Test
@@ -50,7 +51,7 @@ class MoveLogToUnitTest {
     }
 
     @Test
-    fun givenExistingFile_whenDestinationDoesNotExist_thenSucceeds() = withTmpFile { source ->
+    fun givenExistingFile_whenDestinationDoesNotExist_thenIsSuccessful() = withTmpFile { source ->
         withTmpFile { dest ->
             val text = "Test Source"
             source.writeUtf8(null, text)
@@ -62,7 +63,7 @@ class MoveLogToUnitTest {
     }
 
     @Test
-    fun givenExistingDirectory_whenEmptyAndDestinationDoesNotExist_thenSucceeds() = withTmpFile { source ->
+    fun givenExistingDirectory_whenEmptyAndDestinationDoesNotExist_thenIsSuccessful() = withTmpFile { source ->
         withTmpFile { dest ->
             source.mkdirs2(mode = null).moveLogTo(dest)
             assertFalse(source.exists2(), "source.exists2")
@@ -71,7 +72,7 @@ class MoveLogToUnitTest {
     }
 
     @Test
-    fun givenExistingDirectory_whenNonEmptyAndDestinationDoesNotExist_thenSucceeds() = withTmpFile { source ->
+    fun givenExistingDirectory_whenNonEmptyAndDestinationDoesNotExist_thenIsSuccessful() = withTmpFile { source ->
         withTmpFile { dest ->
             val fileSource = source.resolve("file.txt")
             val fileDest = dest.resolve(fileSource.name)
@@ -91,7 +92,7 @@ class MoveLogToUnitTest {
     }
 
     @Test
-    fun givenExistingFile_whenDestinationIsEmptyDirectory_thenSucceeds() = withTmpFile { source ->
+    fun givenExistingFile_whenDestinationIsEmptyDirectory_thenIsSuccessful() = withTmpFile { source ->
         withTmpFile { dest ->
             val text = "Test Source"
             source.writeUtf8(null, text)
@@ -107,7 +108,7 @@ class MoveLogToUnitTest {
     fun givenExistingFile_whenDestinationIsNonEmptyDirectory_thenThrowsDirectoryNotEmptyException() = withTmpFile { source ->
         withTmpFile { dest ->
             source.writeUtf8(null, "Hello World!")
-            val subDirectory = dest.resolve("sub_directory").mkdirs2(mode = null)
+            val subDirDest = dest.resolve("sub_directory").mkdirs2(mode = null)
             try {
                 try {
                     source.moveLogTo(dest)
@@ -117,7 +118,7 @@ class MoveLogToUnitTest {
                     assertNull(e.other, "other != null")
                 }
             } finally {
-                subDirectory.delete2()
+                subDirDest.delete2()
             }
         }
     }
@@ -133,6 +134,54 @@ class MoveLogToUnitTest {
             } catch (e: NotDirectoryException) {
                 assertEquals(dest, e.file)
                 assertNull(e.other, "other != null")
+            }
+        }
+    }
+
+    @Test
+    fun givenExistingDirectory_whenEmptyAndDestinationIsEmptyDirectory_thenIsSuccessful() = withTmpFile { source ->
+        withTmpFile { dest ->
+            source.mkdirs2(mode = null)
+            dest.mkdirs2(mode = null)
+            source.moveLogTo(dest)
+        }
+    }
+
+    @Test
+    fun givenExistingDirectory_whenNonEmptyAndDestinationIsEmptyDirectory_thenIsSuccessful() = withTmpFile { source ->
+        withTmpFile { dest ->
+            val subDirSource = source.resolve("sub_directory").mkdirs2(mode = null)
+            val subDirDest = dest.resolve(subDirSource.name)
+            try {
+                dest.mkdirs2(mode = null)
+                source.moveLogTo(dest)
+                assertFalse(source.exists2(), "source.exists2")
+                assertTrue(subDirDest.exists2(), "destSubDir.exists2")
+            } finally {
+                subDirSource.delete2()
+                subDirDest.delete2()
+            }
+        }
+    }
+
+    @Test
+    fun givenExistingDirectory_whenNonEmptyAndDestinationIsNonEmptyDirectory_thenThrowsDirectoryNotEmptyException() = withTmpFile { source ->
+        withTmpFile { dest ->
+            val subDirSource = source.resolve("sub_directory").mkdirs2(mode = null)
+            val subDirDest = dest.resolve(subDirSource.name)
+            val subDirDest2 = (subDirDest.path + '2').toFile()
+
+            try {
+                subDirDest2.mkdirs2(mode = null)
+                source.moveLogTo(dest)
+                fail("moveLogTo succeeded >> $source to $dest")
+            } catch (e: DirectoryNotEmptyException) {
+                assertEquals(dest, e.file)
+                assertNull(e.other, "other != null")
+            } finally {
+                subDirSource.delete2()
+                subDirDest.delete2()
+                subDirDest2.delete2()
             }
         }
     }

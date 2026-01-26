@@ -62,7 +62,9 @@ internal actual fun File.moveLogTo(dest: File) {
     // At this point, source File is a regular file and exists, otherwise
     // a FileNotFoundException would have already been thrown. Destination
     // must be a directory, or we're on Windows and it exists. Either way,
-    // try to delete it and retry File.renameTo.
+    // try to delete it and retry File.renameTo. Alternatively, both source
+    // and dest are directories and dest is non-empty in which case, this
+    // will fail with DirectoryNotEmptyException as intended.
     val t = try {
         dest.delete2(ignoreReadOnly = true, mustExist = false)
         if (renameTo(dest)) return

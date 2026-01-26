@@ -18,6 +18,8 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.File
+import io.matthewnelson.kmp.file.FileNotFoundException
+import io.matthewnelson.kmp.file.FileSystemException
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.NotDirectoryException
 import io.matthewnelson.kmp.file.delete2
@@ -42,49 +44,58 @@ import platform.windows.MoveFileExA
 @Throws(IOException::class)
 @OptIn(ExperimentalForeignApi::class)
 internal actual fun File.moveLogTo(dest: File) {
+    // As much as I'd prefer calling MoveFileExA and reacting to the
+    // failure, we must check if the source File is a directory.
+    // MoveFileExA can overwrite a regular file with a directory
+    // which we do NOT want to do.
+    //
+    // This non-atomic implementation should be OK here though, as
+    // moveLogTo is only utilized for log file rotation and is always
+    // called while holding a FileLock (other processes using FileLog
+    // will not be executing a rotation at the same time).
+    val sourceIsDirectory = memScoped { isDirectory(file = this@moveLogTo) }
+
+    if (sourceIsDirectory) memScoped {
+        try {
+            if (!isDirectory(file = dest)) throw NotDirectoryException(dest)
+        } catch (e: IOException) {
+            if (e is FileNotFoundException) return@memScoped
+            throw e
+        }
+        // dest is either also a directory, or does not exist.
+    }
+
     if (doMove(dest) != 0) return
 
     val error = GetLastError()
-    if (error.toInt() == ERROR_ACCESS_DENIED) memScoped {
+    if (error.toInt() == ERROR_ACCESS_DENIED) {
         // Source exists and:
         //  - Is a directory, while Dest exists and is NOT a directory.
         //  - Is not a directory, while Dest exists and IS a directory.
-        val sourceIsDir = try {
-            isDirectory(this@moveLogTo)
-        } catch (e: IOException) {
-            val ee = lastErrorToIOException(this@moveLogTo, dest, error)
-            e.addSuppressed(ee)
-            throw e
-        }
-        val destIsDir = try {
-            isDirectory(dest)
-        } catch (e: IOException) {
-            val ee = lastErrorToIOException(this@moveLogTo, dest, error)
-            e.addSuppressed(ee)
-            throw e
+
+        if (sourceIsDirectory) {
+            // Dest was checked above. If it did NOT exist, this error is
+            // related to permissions or something. If it DID exist, then
+            // it was also a directory and this error is related to
+            // something else like moving the file to a different filesystem.
+            throw lastErrorToIOException(this, dest, error)
         }
 
-        // EISDIR
-        if (!sourceIsDir && destIsDir) try {
-            // Potential malicious behavior. Should be a regular file from
-            // a prior move; try deleting. DirectoryNotEmptyException will
-            // be thrown for us if unable to delete.
-            dest.delete2(ignoreReadOnly = true)
-            if (doMove(dest) != 0) return // Success
+        // Source was NOT a directory. Dest was NOT checked above.
+        try {
+            if (memScoped { isDirectory(file = dest) }) {
+                // Potential malicious behavior. Should be a regular file from
+                // a prior move; try deleting. DirectoryNotEmptyException will
+                // be thrown for us if unable to delete.
+                dest.delete2(ignoreReadOnly = true)
+                if (doMove(dest) != 0) return // Success
 
-            // 2nd rename failed; throw so we can add original as suppressed
-            throw lastErrorToIOException(this@moveLogTo, dest)
+                // 2nd rename failed; throw so we can add original as suppressed.
+                throw lastErrorToIOException(this, dest)
+            }
         } catch (e: IOException) {
-            val original = lastErrorToIOException(this@moveLogTo, dest, error)
+            val original = lastErrorToIOException(this, dest, error)
             e.addSuppressed(original)
-            throw e
-        }
-
-        // ENOTDIR
-        if (sourceIsDir && !destIsDir) {
-            val e = NotDirectoryException(dest)
-            val ee = lastErrorToIOException(this@moveLogTo, dest, error)
-            e.addSuppressed(ee)
             throw e
         }
         // Fall through
@@ -99,14 +110,14 @@ private inline fun File.doMove(dest: File): Int = MoveFileExA(
     dwFlags = MOVEFILE_REPLACE_EXISTING.toUInt(),
 )
 
-@Throws(IOException::class)
 @OptIn(ExperimentalForeignApi::class)
+@Throws(FileNotFoundException::class, FileSystemException::class)
 private inline fun MemScope.isDirectory(file: File): Boolean {
     val stat = alloc<_stat64>()
     var ret: Int
     do {
         ret = _stat64(file.path, stat.ptr)
-    } while (ret == -1 && errno != EINTR)
+    } while (ret == -1 && errno == EINTR)
     if (ret == -1) throw errnoToIOException(errno, file)
     return (stat.st_mode.toInt() and S_IFMT) == S_IFDIR
 }

@@ -78,7 +78,7 @@ internal fun File.exists2Robustly(): Boolean {
  * @throws [FileNotFoundException] If source [File] does not exist.
  * @throws [DirectoryNotEmptyException] If [dest] is an existing non-empty directory.
  * @throws [NotDirectoryException] If source [File] is an existing directory, but
- *   [dest] exists and is not a directory.
+ *   [dest] exists and is **NOT** a directory.
  * @throws [FileSystemException] Otherwise.
  * */
 @Throws(IOException::class)
