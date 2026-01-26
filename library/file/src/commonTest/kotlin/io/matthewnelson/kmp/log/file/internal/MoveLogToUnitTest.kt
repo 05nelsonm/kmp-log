@@ -71,7 +71,7 @@ class MoveLogToUnitTest {
     }
 
     @Test
-    fun givenExistingDirectory_whenNotEmptyAndDestinationDoesNotExist_thenSucceeds() = withTmpFile { source ->
+    fun givenExistingDirectory_whenNonEmptyAndDestinationDoesNotExist_thenSucceeds() = withTmpFile { source ->
         withTmpFile { dest ->
             val fileSource = source.resolve("file.txt")
             val fileDest = dest.resolve(fileSource.name)
@@ -104,7 +104,7 @@ class MoveLogToUnitTest {
     }
 
     @Test
-    fun givenExistingFile_whenDestinationIsNotEmptyDirectory_thenThrowsDirectoryNotEmptyException() = withTmpFile { source ->
+    fun givenExistingFile_whenDestinationIsNonEmptyDirectory_thenThrowsDirectoryNotEmptyException() = withTmpFile { source ->
         withTmpFile { dest ->
             source.writeUtf8(null, "Hello World!")
             val subDirectory = dest.resolve("sub_directory").mkdirs2(mode = null)

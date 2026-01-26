@@ -33,8 +33,8 @@ import platform.posix.ENOTEMPTY
 import platform.posix.errno
 import platform.posix.rename
 
-@OptIn(ExperimentalForeignApi::class)
 @Throws(IOException::class)
+@OptIn(ExperimentalForeignApi::class)
 internal actual fun File.moveLogTo(dest: File) {
     if (doRename(dest) == 0) return
 
