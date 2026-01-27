@@ -27,6 +27,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlin.concurrent.Volatile
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 
 internal abstract class SharedResourceAllocator<Resource: Any> protected constructor(
@@ -90,14 +91,14 @@ internal abstract class SharedResourceAllocator<Resource: Any> protected constru
                 _deallocationJob?.cancel()
 
                 @OptIn(DelicateCoroutinesApi::class)
-                _deallocationJob = GlobalScope.launch(
+                val deallocationJob = GlobalScope.launch(
                     context = deallocationDispatcher,
                     start = CoroutineStart.ATOMIC,
                 ) {
                     delay(deallocationDelay)
 
                     val resource = synchronized(lock) {
-                        // If we were canceled by allocate while waiting for the lock.
+                        // If we were canceled by getOrAllocate while waiting for the lock.
                         ensureActive()
 
                         // No going back beyond this point
@@ -106,17 +107,23 @@ internal abstract class SharedResourceAllocator<Resource: Any> protected constru
                         r
                     } ?: return@launch
 
+                    // Do not invoke things from within synchronized lambda.
                     var threw: Throwable? = null
                     try {
-                        // Do not invoke deallocate from within synchronized lambda.
                         resource.doDeallocation()
                     } catch (t: Throwable) {
                         threw = t
                     } finally {
-                        // Do not invoke Logger from within synchronized lambda.
-                        if (debug()) LOG?.d(threw) { "Deallocated >> $resource" }
+                        if (debug()) LOG?.d { "Deallocated >> $resource" }
                     }
+                    threw?.let { t -> LOG?.e(t) }
                 }
+                deallocationJob.invokeOnCompletion { t ->
+                    if (t !is CancellationException) return@invokeOnCompletion
+                    if (!debug()) return@invokeOnCompletion
+                    _resource?.let { LOG?.d { "Deallocation cancelled. Reference re-acquired >> $it" } }
+                }
+                _deallocationJob = deallocationJob
             }
         }
     }

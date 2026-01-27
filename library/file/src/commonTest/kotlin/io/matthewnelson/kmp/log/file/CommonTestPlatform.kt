@@ -23,10 +23,16 @@ import io.matthewnelson.kmp.file.canonicalFile2
 import io.matthewnelson.kmp.file.delete2
 import io.matthewnelson.kmp.file.resolve
 import io.matthewnelson.kmp.log.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 import kotlin.random.Random
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalContracts::class)
 internal inline fun withTmpFile(block: (tmp: File) -> Unit) {
@@ -52,7 +58,10 @@ internal inline fun withTmpFile(block: (tmp: File) -> Unit) {
 }
 
 @OptIn(ExperimentalContracts::class)
-internal suspend inline fun FileLog.installAndTest(testBody: () -> Unit) {
+internal suspend inline fun FileLog.installAndTest(
+    deallocateDispatcherDelay: Duration = 375.milliseconds,
+    testBody: () -> Unit,
+) {
     contract { callsInPlace(testBody, InvocationKind.AT_MOST_ONCE) }
 
     var threw: Throwable? = null
@@ -62,7 +71,9 @@ internal suspend inline fun FileLog.installAndTest(testBody: () -> Unit) {
     } catch (t: Throwable) {
         threw = t
     } finally {
-        uninstallAndAwaitAsync()
+        if (uninstallAndAwaitAsync() && deallocateDispatcherDelay.isPositive()) {
+            withContext(Dispatchers.IO) { delay(deallocateDispatcherDelay) }
+        }
         files.forEach { it.delete2() }
         dotLockFile.delete2()
         dotRotateFile.delete2()

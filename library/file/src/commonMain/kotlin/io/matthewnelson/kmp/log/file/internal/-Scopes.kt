@@ -132,7 +132,7 @@ internal value class ScopeLogHandle private constructor(
     ): this(scopeLogHandle = CoroutineScope(context =
         CoroutineName(scope.coroutineName.name + "-Handle{$onInstallInvocations}")
 
-        // Using ScopeLog's SupervisorJob as parent to ensure
+        // Using ScopeFileLog's SupervisorJob as parent to ensure
         // that the only relation to logJob is via its completion
         // handler where THIS SupervisorJob will then be canceled.
         //

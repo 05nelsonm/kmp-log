@@ -74,7 +74,7 @@ import io.matthewnelson.kmp.log.file.internal.isDesktop
 import io.matthewnelson.kmp.log.file.internal.launch
 import io.matthewnelson.kmp.log.file.internal.lockLog
 import io.matthewnelson.kmp.log.file.internal.lockRotate
-import io.matthewnelson.kmp.log.file.internal.moveTo
+import io.matthewnelson.kmp.log.file.internal.moveLogTo
 import io.matthewnelson.kmp.log.file.internal.now
 import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
 import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
@@ -1012,11 +1012,13 @@ public class FileLog: Log {
         if (_whitelistTag.isNotEmpty()) {
             if (!_whitelistTag.contains(tag)) return false
         }
+        // TODO: Check scope.supervisorJob.isActive
         return _logHandle != null
     }
 
     override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
         val (logBuffer, scope) = _logHandle ?: return false
+        // TODO: Check scope.supervisorJob.isActive
         val tid = CurrentThread.id()
 
         // The formatted text to write, and its pre-calculated UTF-8 byte-size.
@@ -1248,10 +1250,10 @@ public class FileLog: Log {
     override fun onInstall() {
         _onInstallInvocations++
 
-        // Because runBlocking is being utilized by FileLog.log, we must always specify
-        // a logging dispatcher. If we were to use Dispatchers.IO for everything, then
-        // it could result in a deadlock if caller is also using Dispatchers.IO whereby
-        // thread starvation occurs and the LogLoop is unable to continue.
+        // Because runBlocking is being utilized by FileLog.log, we must always specify a
+        // CoroutineDispatcher of our own. If we were to use Dispatchers.IO for everything,
+        // then it could result in a deadlock if caller is also using Dispatchers.IO whereby
+        // thread starvation could occur and LogLoop is unable to yield or launch LogRotation.
         val (dispatcher, dispatcherDeRef) = allocator.getOrAllocate()
 
         val logBuffer = LogBuffer(capacity = bufferCapacity)
@@ -1260,12 +1262,6 @@ public class FileLog: Log {
         scopeFileLog.launch(dispatcher, start = CoroutineStart.ATOMIC) {
             logBuffer.use(::logW) { buf ->
                 scopeLog {
-
-                    // Paranoia. LogBuffer.use {} will close the channel and consume all undelivered
-                    // LogAction, but this will guarantee that LogBuffer.channel's onUndeliveredElement
-                    // callback is invoked for any stragglers.
-                    jobLog.invokeOnCompletion { logBuffer.channel.cancel() }
-
                     jobLog.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $jobLog" } }
                     logD { "$LOG_JOB Started >> $jobLog" }
 
@@ -1283,7 +1279,7 @@ public class FileLog: Log {
                         val canonical = directory.canonicalFile2()
                         if (canonical != directory) {
                             // FAIL:
-                            //   Between time of Builder.build() and Log.Root.install(), the specified
+                            //   Between time of Builder.build and Log.Root.install, the specified
                             //   directory was modified to contain symbolic links such that the current
                             //   one points to a different location. This would invalidate the Log.uid,
                             //   allowing multiple FileLog instances to be installed simultaneously for
@@ -1338,18 +1334,29 @@ public class FileLog: Log {
                 }
             }
         }.let { logJob ->
-            _logJob = logJob
-            _logHandle = logBuffer to ScopeLogHandle(
+            val logHandle = logBuffer to ScopeLogHandle(
                 logJob,
                 scopeFileLog,
                 _onInstallInvocations,
                 dispatcher,
                 dispatcherDeRef,
             )
+
+            // Paranoia. LogBuffer.use {} will close the channel and consume all undelivered
+            // LogAction, but this will guarantee that LogBuffer.channel's onUndeliveredElement
+            // callback is invoked for any stragglers.
+            logJob.invokeOnCompletion { logBuffer.channel.cancel() }
+
+            // TODO: Use AtomicRef to compareAndSet _logHandle to
+            //  ensure it gets set to null (if it is our instance). If
+            //  logJob stops due to error, we want isLoggable to return false
+            //  to mitigate unnecessary work.
+
+            _logJob = logJob
+            _logHandle = logHandle
         }
 
         log(Level.Info, LOG.domain, LOG.tag, "Log file opened at ${files[0].name}", t = null)
-        // TODO: If Debug, log FileLog configuration.
     }
 
     override fun onUninstall() {
@@ -1631,10 +1638,8 @@ public class FileLog: Log {
 
                         // Dequeue next LogAction (if available)
                         else -> try {
-                            // Share the thread if we have not processed any LogAction
-                            // that have written to logStream yet. We want to make it
-                            // to logStream.sync ASAP to commit the data to disk.
-                            if (processedWrites == 0) yield()
+                            // Share the thread.
+                            yield()
 
                             rotateActionQueue.dequeueOrNull()
                                 ?: retryAction.valueGetAndSet(newValue = null)
@@ -1980,14 +1985,17 @@ public class FileLog: Log {
             // Not a show-stopper. Ignore.
         }
 
-        // TODO: move and then delete dotRotateTmpFile. If it exists, we
-        //  should attempt to expunge it from the filesystem entirely so
-        //  there is no question about our atomic copy of the log hitting
-        //  disk.
+        // TODO: delete dotRotateTmpFile
+        //  - If DirectoryNotEmptyException
+        //      - Move to random file name in current directory; someone is being malicious
+        //        because who TF names a directory .{fileName}{.fileExtension}.tmp and then
+        //        populates it? Must use current directory to eliminate failure attributed
+        //        to moving across filesystems.
+        //          - If failure to move, fail hard.
 
         try {
             // Shouldn't exist, but just in case using openWrite instead of
-            // openLogFileRobustly() to ensure it gets truncated if it does.
+            // openLogFileRobustly to ensure it gets truncated if it does.
             dotRotateTmpFile.openWrite(excl = OpenExcl.MaybeCreate.of(modeFile)).use { tmpStream ->
                 var position = 0L
                 while (true) {
@@ -1996,11 +2004,12 @@ public class FileLog: Log {
                     position += read
                     tmpStream.write(buf, 0, read)
                 }
+                // Ensure everything is synced to disk before closing.
                 tmpStream.sync(meta = true)
             }
 
             // Move into its final location.
-            dotRotateTmpFile.moveTo(dotRotateFile)
+            dotRotateTmpFile.moveLogTo(dotRotateFile)
 
             // TODO: fsync directory???
 
@@ -2347,7 +2356,7 @@ public class FileLog: Log {
             val (source, dest) = moves.removeFirst()
 
             try {
-                source.moveTo(dest)
+                source.moveLogTo(dest)
                 logD { "Moved ${source.name} >> ${dest.name}" }
 
                 // yield only after we have our first move such that
@@ -2489,15 +2498,15 @@ public class FileLog: Log {
 //            private const val NAME_BLOCKING_MONITOR = "FileLog.$TAG_BLOCKING_MONITOR"
 //            private const val NAME_SHARED_POOL = "FileLog.$TAG_SHARED_POOL"
 //
-              // TODO: Use within logLoop of all FileLog to monitor FileLock acquisitions
+//            // TODO: Use within logLoop of all FileLog to monitor FileLock acquisitions
 //            val BlockingMonitor = object : DispatcherAllocator(Logger.of(tag = TAG_BLOCKING_MONITOR, domain = DOMAIN)) {
 //                override fun doAllocation(): CloseableCoroutineDispatcher {
 //                    return newSingleThreadContext(name = NAME_BLOCKING_MONITOR)
 //                }
 //            }
 //
-              // TODO: Add ability to configure via FileLog.Builder to use instead of a dedicated allocator
-              //  Need to think about how best to do this, if at all.
+//            // TODO: Add ability to configure via FileLog.Builder to use instead of a dedicated allocator
+//            //  Need to think about how best to do this, if at all.
 //            val SharedPool = object : DispatcherAllocator(Logger.of(tag = TAG_SHARED_POOL, domain = DOMAIN)) {
 //                override fun doAllocation(): CloseableCoroutineDispatcher {
 //                    // TODO: Make configurable via environment variables/properties?
