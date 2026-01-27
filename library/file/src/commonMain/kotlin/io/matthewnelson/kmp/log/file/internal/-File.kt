@@ -15,6 +15,8 @@
  **/
 package io.matthewnelson.kmp.log.file.internal
 
+import io.matthewnelson.encoding.base16.Base16
+import io.matthewnelson.encoding.core.Encoder.Companion.encodeToString
 import io.matthewnelson.kmp.file.AccessDeniedException
 import io.matthewnelson.kmp.file.DirectoryNotEmptyException
 import io.matthewnelson.kmp.file.File
@@ -25,9 +27,14 @@ import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.NotDirectoryException
 import io.matthewnelson.kmp.file.OpenExcl
 import io.matthewnelson.kmp.file.chmod2
+import io.matthewnelson.kmp.file.delete2
 import io.matthewnelson.kmp.file.exists2
 import io.matthewnelson.kmp.file.openRead
 import io.matthewnelson.kmp.file.openReadWrite
+import io.matthewnelson.kmp.file.parentFile
+import io.matthewnelson.kmp.file.resolve
+import org.kotlincrypto.hash.blake2.BLAKE2s
+import kotlin.random.Random
 
 @Throws(IOException::class)
 internal fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite = try {
@@ -66,6 +73,76 @@ internal fun File.exists2Robustly(): Boolean {
         }
     }
     return false
+}
+
+/**
+ * Deletes the provided [File] via [File.delete2]. In the event it is unable to be
+ * deleted due to a [DirectoryNotEmptyException], a randomly generated name prefixed
+ * with `.` will be used to attempt to move it there.
+ *
+ * **NOTE:** This should **only** be utilized on files that should NOT exist on
+ * the filesystem.
+ *
+ * @param [buf] The array to use for creating a random name.
+ * @param [maxNewNameLen] The maximum length for a new file name.
+ *
+ * @return The [File] for the directory it was moved to, or `null` if [File.delete2]
+ *   was successful.
+ *
+ * @throws [IllegalArgumentException] when:
+ *   - [File.isAbsolute] is `false`
+ *   - [maxNewNameLen] is less than `7` characters in length
+ *   - [File.parentFile] is `null`
+ *   - [buf] size is less than `128`
+ * @throws [DirectoryNotEmptyException] If was unable to move to a randomly named [File].
+ * */
+@Suppress("LocalVariableName")
+@Throws(IllegalArgumentException::class, DirectoryNotEmptyException::class)
+internal fun File.deleteOrMoveToRandomIfNonEmptyDirectory(
+    buf: ByteArray,
+    maxNewNameLen: Int,
+): File? {
+    require(isAbsolute()) { "isAbsolute[false]" }
+    val _parent = parentFile
+    val minBufSize = 128
+    require(maxNewNameLen >= 7) { "maxNewNameLen[$maxNewNameLen] < 7" }
+    require(_parent != null) { "parent directory must not be null" }
+    require(buf.size >= minBufSize) { "buf.size[${buf.size}] < $minBufSize" }
+
+    val e: DirectoryNotEmptyException = try {
+        delete2(ignoreReadOnly = true, mustExist = false)
+        null
+    } catch (e: IOException) {
+        e as? DirectoryNotEmptyException
+    } ?: return null
+
+    val blake2 = run {
+        var bitStrength = maxNewNameLen
+        bitStrength--                               // . character prefix
+        bitStrength /= Base16.config.maxEncodeEmit  // 2 characters per byte
+        bitStrength *= Byte.SIZE_BITS               // convert to bits
+        BLAKE2s(bitStrength.coerceAtMost(256))
+    }
+
+    Random.nextBytes(buf, 0, minBufSize)
+    blake2.update(buf, 0, minBufSize)
+    val len = blake2.digestInto(buf, destOffset = 0)
+
+    // Base16 encoder will NOT insert its line break because maximum digest
+    // byte size of BLAKE2s is 32, so max 64 characters when Base16 encoded
+    // which is what Base16.config.lineBreakInterval is configured with (i.e.
+    // the 65th character gets prefixed with a new line).
+    val randomHidden = '.' + buf.encodeToString(Base16, 0, len)
+    val dest = _parent.resolve(randomHidden)
+
+    try {
+        moveLogTo(dest)
+        return dest
+    } catch (ee: IOException) {
+        if (ee is FileNotFoundException) return null
+        e.addSuppressed(ee)
+        throw e
+    }
 }
 
 /**
