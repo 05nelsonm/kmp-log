@@ -64,8 +64,8 @@ import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop.Companion.scopeLogLoop
 import io.matthewnelson.kmp.log.file.internal.SharedResourceAllocator
 import io.matthewnelson.kmp.log.file.internal.async
-import io.matthewnelson.kmp.log.file.internal.atomicLong
-import io.matthewnelson.kmp.log.file.internal.atomicRef
+import io.matthewnelson.kmp.log.file.internal._atomic
+import io.matthewnelson.kmp.log.file.internal._atomicRef
 import io.matthewnelson.kmp.log.file.internal.consumeAndIgnore
 import io.matthewnelson.kmp.log.file.internal.exists2Robustly
 import io.matthewnelson.kmp.log.file.internal.format
@@ -82,10 +82,10 @@ import io.matthewnelson.kmp.log.file.internal.pid
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
 import io.matthewnelson.kmp.log.file.internal.uninterruptedRunBlocking
 import io.matthewnelson.kmp.log.file.internal.use
-import io.matthewnelson.kmp.log.file.internal.valueDecrement
-import io.matthewnelson.kmp.log.file.internal.valueGet
-import io.matthewnelson.kmp.log.file.internal.valueGetAndSet
-import io.matthewnelson.kmp.log.file.internal.valueIncrement
+import io.matthewnelson.kmp.log.file.internal._decrement
+import io.matthewnelson.kmp.log.file.internal._get
+import io.matthewnelson.kmp.log.file.internal._getAndSet
+import io.matthewnelson.kmp.log.file.internal._increment
 import kotlinx.coroutines.CloseableCoroutineDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -289,7 +289,7 @@ public class FileLog: Log {
      * TODO
      * */
     @get:JvmName("pendingLogCount")
-    public val pendingLogCount: Long get() = _pendingLogCount.valueGet()
+    public val pendingLogCount: Long get() = _pendingLogCount._get()
 
     /**
      * TODO
@@ -906,7 +906,7 @@ public class FileLog: Log {
     private var _logHandle: Pair<LogBuffer, ScopeLogHandle>? = null
     @Volatile
     private var _logJob: Job? = null
-    private val _pendingLogCount = atomicLong(0L)
+    private val _pendingLogCount = _atomic(0L)
 
     private constructor(
         min: Level,
@@ -1063,7 +1063,7 @@ public class FileLog: Log {
             if (stream == null) {
                 preprocessing.cancel()
                 logWait?.fail()
-                _pendingLogCount.valueDecrement()
+                _pendingLogCount._decrement()
                 return@logAction 0L
             }
 
@@ -1091,7 +1091,7 @@ public class FileLog: Log {
                     }
                 }
 
-                _pendingLogCount.valueDecrement()
+                _pendingLogCount._decrement()
                 logWait?.fail()
 
                 // threw will only ever be non-null when result == null
@@ -1149,7 +1149,7 @@ public class FileLog: Log {
                 }
             }
 
-            _pendingLogCount.valueDecrement()
+            _pendingLogCount._decrement()
             threw?.let { t ->
                 logWait?.fail()
                 throw t
@@ -1187,7 +1187,7 @@ public class FileLog: Log {
             LogSend(scope, logBuffer, logAction)
         }
 
-        _pendingLogCount.valueIncrement()
+        _pendingLogCount._increment()
         preprocessing.start()
 
         // If logWait is non-null, we do not care about logSend result because it will either
@@ -1408,7 +1408,7 @@ public class FileLog: Log {
         // exceed the configured maxLogFileSize, it is cached here and retried after
         // a log rotation is performed. This allows us to not drop lockLog and perform
         // an immediate retry of the LogAction after returning from rotateLogs.
-        val retryAction = atomicRef<LogAction?>(initialValue = null)
+        val retryAction = _atomicRef<LogAction?>(initial = null)
         jobLogLoop.invokeOnCompletion {
             // This should never really be the case because the main loop would have
             // dequeued this for processing over ever calling logBuffer.channel.receive.
@@ -1416,7 +1416,7 @@ public class FileLog: Log {
             // Only in the event of an error within the loop (such as file re-open
             // failure) where a LogAction from rotateActionQueue was dequeued over one
             // from retryAction would there be unprocessed LogAction present.
-            val action = retryAction.valueGetAndSet(new = null)
+            val action = retryAction._getAndSet(new = null)
                 ?: return@invokeOnCompletion
 
             @OptIn(DelicateCoroutinesApi::class)
@@ -1449,7 +1449,7 @@ public class FileLog: Log {
 
                     // Priority 2 LogAction that came from FileLog.log and was cached
                     // in order to perform a log rotation to make room for its write.
-                    ?: retryAction.valueGetAndSet(new = null)
+                    ?: retryAction._getAndSet(new = null)
 
                     // Lastly, LogAction sent from FileLog.log
                     ?: logBuffer.channel.receive()
@@ -1573,7 +1573,7 @@ public class FileLog: Log {
             }
 
             logD {
-                val count = _pendingLogCount.valueGet()
+                val count = _pendingLogCount._get()
                 "Current ${files[0].name} file byte size is $size, with $count log(s) pending"
             }
 
@@ -1612,7 +1612,7 @@ public class FileLog: Log {
                         if (written == EXECUTE_ROTATE_LOGS_AND_RETRY) {
                             size = maxLogFileSize // Force a log rotation
 
-                            val previous = retryAction.valueGetAndSet(new = action)
+                            val previous = retryAction._getAndSet(new = action)
                             if (previous != null) {
                                 previous.consumeAndIgnore(buf)
                                 // HARD fail.... There should ONLY ever be 1 retryAction.
@@ -1642,7 +1642,7 @@ public class FileLog: Log {
                             yield()
 
                             rotateActionQueue.dequeueOrNull()
-                                ?: retryAction.valueGetAndSet(new = null)
+                                ?: retryAction._getAndSet(new = null)
                                 ?: logBuffer.channel.tryReceive().getOrNull()
                         } catch (_: CancellationException) {
                             // Shouldn't happen b/c just checked isActive, but if so
@@ -1687,7 +1687,7 @@ public class FileLog: Log {
                             logStream = logStream,
                             lockFile = lockFile,
                             buf = buf,
-                            retryActionIsNotNull = retryAction.valueGet() != null,
+                            retryActionIsNotNull = retryAction._get() != null,
                         )
                     }
                 } else {
@@ -1700,7 +1700,7 @@ public class FileLog: Log {
             // immediately dequeued and executed while still holding our lock
             // on writes to logStream (unless there are LogAction present in the
             // rotateActionQueue which come first).
-            if (retryAction.valueGet() == null && lockLog.isValid()) try {
+            if (retryAction._get() == null && lockLog.isValid()) try {
                 lockLog.release()
                 logD { "Released lock on ${dotLockFile.name} >> $lockLog" }
             } catch (e: IOException) {
