@@ -25,14 +25,15 @@ import java.util.Locale
 
 internal actual inline fun FileLog.Companion.isDesktop(): Boolean = ANDROID.SDK_INT == null
 
-internal actual fun FileLog.Companion.now(): CharSequence {
+internal actual fun FileLog.Companion.now(omitYear: Boolean): CharSequence {
     val now = Date(System.currentTimeMillis())
-    return LOG_TIME_FORMAT.format(now)
+    return (if (omitYear) LOG_TIME_FORMAT_YEAR_NO else LOG_TIME_FORMAT_YEAR_YES).format(now)
 }
 
 internal actual fun FileLog.Companion.pid(): Int = JVM_PID
 
-private val LOG_TIME_FORMAT = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
+private val LOG_TIME_FORMAT_YEAR_NO = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
+private val LOG_TIME_FORMAT_YEAR_YES = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
 
 // https://github.com/05nelsonm/kmp-process/blob/master/library/process/src/jvmMain/kotlin/io/matthewnelson/kmp/process/internal/-PID.kt
 private val JVM_PID: Int by lazy {

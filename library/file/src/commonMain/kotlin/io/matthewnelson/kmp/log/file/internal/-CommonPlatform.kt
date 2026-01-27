@@ -19,6 +19,6 @@ import io.matthewnelson.kmp.log.file.FileLog
 
 internal expect inline fun FileLog.Companion.isDesktop(): Boolean
 
-internal expect fun FileLog.Companion.now(): CharSequence
+internal expect fun FileLog.Companion.now(omitYear: Boolean): CharSequence
 
 internal expect fun FileLog.Companion.pid(): Int

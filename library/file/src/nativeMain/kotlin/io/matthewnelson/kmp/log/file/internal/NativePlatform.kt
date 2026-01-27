@@ -25,18 +25,19 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import platform.posix.getpid
 
-private const val ZERO_TIME = "00-00 00:00:00.000"
+private const val ZERO_TIME_YEAR_NO = "00-00 00:00:00.000"
+private const val ZERO_TIME_YEAR_YES = "0000-$ZERO_TIME_YEAR_NO"
 
-internal actual fun FileLog.Companion.now(): CharSequence {
+internal actual fun FileLog.Companion.now(omitYear: Boolean): CharSequence {
     @OptIn(ExperimentalForeignApi::class)
     val dateTime = IntArray(KMP_LOG_LOCAL_DATE_TIME_SIZE)
     @OptIn(ExperimentalForeignApi::class)
     val ret = dateTime.usePinned { pinned ->
         kmp_log_local_date_time(date_time = pinned.addressOf(0))
     }.toInt()
-    if (ret != 0) return ZERO_TIME
+    if (ret != 0) return if (omitYear) ZERO_TIME_YEAR_NO else ZERO_TIME_YEAR_YES
 
-//    val year    = dateTime[0]
+    val year    = dateTime[0]
     val month   = dateTime[1]
     val day     = dateTime[2]
     val hours   = dateTime[3]
@@ -44,7 +45,11 @@ internal actual fun FileLog.Companion.now(): CharSequence {
     val seconds = dateTime[5]
     val millis  = dateTime[6]
 
-    return StringBuilder(ZERO_TIME.length).apply {
+    return StringBuilder((if (omitYear) ZERO_TIME_YEAR_NO else ZERO_TIME_YEAR_YES).length).apply {
+        if (!omitYear) {
+            append(year)
+            append('-')
+        }
         if (month <= 9) append('0')
         append(month)
         append('-')

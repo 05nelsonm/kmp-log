@@ -25,7 +25,7 @@ import io.matthewnelson.kmp.log.file.internal.pid
 internal abstract class AbstractTestLog(uid: String): Log(uid, min = Level.Verbose) {
 
     override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        val time = FileLog.now()
+        val time = FileLog.now(omitYear = true)
         val pid = FileLog.pid()
         val tid = CurrentThread.id()
         val formatted = FileLog.format(time, pid, tid, level, domain, tag, msg, t) ?: return false

@@ -24,16 +24,27 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private const val TEST_TIME = "00-00 00:00:00.000"
+private const val TEST_TIME_YEAR_NO = "00-00 00:00:00.000"
+private const val TEST_TIME_YEAR_YES = "0000-$TEST_TIME_YEAR_NO"
 
 class FormatUnitTest {
 
     @Test
-    fun givenTime_whenNow_thenIsFormattedAsExpected() {
-        val actual = FileLog.now()
-        assertEquals(TEST_TIME.length, actual.length)
+    fun givenTime_whenNowAndOmitYearTrue_thenIsFormattedAsExpected() {
+        val actual = FileLog.now(omitYear = true)
+        assertEquals(TEST_TIME_YEAR_NO.length, actual.length)
         assertEquals(1, actual.count { c -> c.isWhitespace() })
         assertEquals(1, actual.count { c -> c == '-'})
+        assertEquals(2, actual.count { c -> c == ':'})
+        assertEquals(1, actual.count { c -> c == '.'})
+    }
+
+    @Test
+    fun givenTime_whenNowAndOmitYearFalse_thenIsFormattedAsExpected() {
+        val actual = FileLog.now(omitYear = false)
+        assertEquals(TEST_TIME_YEAR_YES.length, actual.length)
+        assertEquals(1, actual.count { c -> c.isWhitespace() })
+        assertEquals(2, actual.count { c -> c == '-'})
         assertEquals(2, actual.count { c -> c == ':'})
         assertEquals(1, actual.count { c -> c == '.'})
     }
@@ -43,7 +54,7 @@ class FormatUnitTest {
         var invocations = 0
 
         val actual = FileLog.format(
-            time = TEST_TIME,
+            time = TEST_TIME_YEAR_NO,
             pid = 2,
             tid = 2L,
             level = Level.Debug,
@@ -67,7 +78,7 @@ class FormatUnitTest {
     @Test
     fun givenFormat_whenCalculatedCapacityIsO_thenReturnsNull() {
         val actual = FileLog.format(
-            time = TEST_TIME,
+            time = TEST_TIME_YEAR_NO,
             pid = 2,
             tid = 2L,
             level = Level.Debug,
@@ -83,7 +94,7 @@ class FormatUnitTest {
     @Test
     fun givenFormatPrefix_whenPidLessThan1_thenIsUnknown() {
         val actual = FileLog.formatPrefix(
-            time = TEST_TIME,
+            time = TEST_TIME_YEAR_NO,
             pid = -1,
             tid = 2L,
             level = Level.Debug,
@@ -98,7 +109,7 @@ class FormatUnitTest {
     @Test
     fun givenFormatPrefix_whenTidLessThan0_thenIsUnknown() {
         val actual = FileLog.formatPrefix(
-            time = TEST_TIME,
+            time = TEST_TIME_YEAR_NO,
             pid = 5555,
             tid = -1L,
             level = Level.Debug,
@@ -113,7 +124,7 @@ class FormatUnitTest {
     @Test
     fun givenFormatPrefix_whenDomainPresent_thenIsFormattedAsExpected() {
         val actual = FileLog.formatPrefix(
-            time = TEST_TIME,
+            time = TEST_TIME_YEAR_NO,
             pid = 5555,
             tid = 1L,
             level = Level.Debug,

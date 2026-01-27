@@ -189,6 +189,8 @@ public class FileLog: Log {
         private const val LOG_JOB: String = "LogJob"
         private const val LOG_LOOP: String = "LogLoop"
         private const val LOG_ROTATION: String = "LogRotation"
+
+        private val DEFAULT_FORMATTER: Formatter = Formatter(::format)
     }
 
     /**
@@ -231,13 +233,13 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
-    public val minWaitOn: Level
+    public val bufferCapacity: Int
 
     /**
      * TODO
      * */
     @JvmField
-    public val bufferCapacity: Int
+    public val minWaitOn: Level
 
     /**
      * TODO
@@ -338,6 +340,26 @@ public class FileLog: Log {
 
     /**
      * TODO
+     * */
+    public fun interface Formatter {
+
+        /**
+         * TODO
+         * */
+        public fun format(
+            time: CharSequence,
+            pid: Int,
+            tid: Long,
+            level: Level,
+            domain: String?,
+            tag: String,
+            msg: String?,
+            t: Throwable?,
+        ): CharSequence?
+    }
+
+    /**
+     * TODO
      *
      * @throws [IllegalArgumentException] When:
      *  - [logDirectory] is empty
@@ -363,11 +385,13 @@ public class FileLog: Log {
         private var _modeFile = ModeBuilder.of(isDirectory = false)
         private var _fileName = "log"
         private var _fileExtension = ""
-        private var _maxLogFileSize: Long = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
+        private var _maxLogFileSize = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
         private var _maxLogFiles: Byte = if (isDesktop()) 5 else 3
-        private var _yieldOn: Byte = 2
+        private var _bufferCapacity = -1
         private var _minWaitOn = Level.Verbose
-        private var _bufferCapacity: Int = -1
+        private var _yieldOn: Byte = 2
+        private var _formatter = DEFAULT_FORMATTER
+        private var _formatterOmitYear = true
         private val _blacklistDomain = mutableSetOf<String>()
         private val _whitelistDomain = mutableSetOf<String>()
         private var _whitelistDomainNull = true
@@ -385,15 +409,6 @@ public class FileLog: Log {
          * @see [Log.min]
          * */
         public fun min(level: Level): Builder = apply { _min = level }
-
-        /**
-         * DEFAULT: [Level.Verbose]
-         *
-         * TODO
-         *
-         * @return The [Builder]
-         * */
-        public fun minWaitOn(level: Level): Builder = apply { _minWaitOn = level }
 
         /**
          * DEFAULT: [Level.Fatal]
@@ -541,15 +556,6 @@ public class FileLog: Log {
         }
 
         /**
-         * DEFAULT: `-1` (i.e. TODO)
-         *
-         * TODO
-         *
-         * @return The [Builder]
-         * */
-        public fun bufferCapacity(nLogs: Int): Builder = apply { _bufferCapacity = nLogs }
-
-        /**
          * DEFAULT: `5 Mb` on `Android`/`AndroidNative`/`iOS`/`tvOS`/`watchOS`, otherwise `10 Mb`.
          *
          * TODO
@@ -568,6 +574,24 @@ public class FileLog: Log {
         public fun maxLogFiles(nFiles: Byte): Builder = apply { _maxLogFiles = nFiles }
 
         /**
+         * DEFAULT: `-1` (i.e. TODO)
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun bufferCapacity(nLogs: Int): Builder = apply { _bufferCapacity = nLogs }
+
+        /**
+         * DEFAULT: [Level.Verbose]
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun minWaitOn(level: Level): Builder = apply { _minWaitOn = level }
+
+        /**
          * DEFAULT: `2`
          *
          * TODO
@@ -575,6 +599,24 @@ public class FileLog: Log {
          * @return The [Builder]
          * */
         public fun yieldOn(nLogs: Byte): Builder = apply { _yieldOn = nLogs }
+
+        /**
+         * DEFAULT: `null` (i.e. Use the default [Formatter])
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun format(formatter: Formatter?): Builder = apply { _formatter = formatter ?: DEFAULT_FORMATTER }
+
+        /**
+         * DEFAULT: `true` (i.e. Omit year from the time passed to [Formatter.format])
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun formatOmitYear(omit: Boolean): Builder = apply { _formatterOmitYear = omit }
 
         /**
          * DEFAULT: empty (i.e. Do not reject any [Logger.domain])
@@ -869,9 +911,11 @@ public class FileLog: Log {
                 maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L), // 50kb
                 modeDirectory = _modeDirectory.build(),
                 modeFile = _modeFile.build(),
-                minWaitOn = minWaitOn,
                 bufferCapacity = bufferCapacity,
+                minWaitOn = minWaitOn,
                 yieldOn = _yieldOn.coerceIn(1, 10),
+                formatter = _formatter,
+                formatterOmitYear = _formatterOmitYear,
                 blacklistDomain = blacklistDomain,
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
@@ -894,6 +938,9 @@ public class FileLog: Log {
     internal val dotRotateFile: File
     @get:JvmSynthetic
     internal val dotRotateTmpFile: File
+
+    private val formatter: Formatter
+    private val formatterOmitYear: Boolean
 
     private val _blacklistDomain: Array<String?>
     private val _whitelistDomain: Array<String>
@@ -921,9 +968,11 @@ public class FileLog: Log {
         maxLogFileSize: Long,
         modeDirectory: String,
         modeFile: String,
-        minWaitOn: Level,
         bufferCapacity: Int,
+        minWaitOn: Level,
         yieldOn: Byte,
+        formatter: Formatter,
+        formatterOmitYear: Boolean,
         blacklistDomain: Set<String>,
         whitelistDomain: Set<String>,
         whitelistDomainNull: Boolean,
@@ -967,6 +1016,9 @@ public class FileLog: Log {
             this.dotRotateTmpFile = directory.resolve("$dotName0.tmp")
         }
 
+        this.formatter = formatter
+        this.formatterOmitYear = formatterOmitYear
+
         this._blacklistDomain = blacklistDomain.toTypedArray()
         this._whitelistDomain = whitelistDomain.toTypedArray()
 
@@ -992,8 +1044,8 @@ public class FileLog: Log {
         this.maxLogFileSize = maxLogFileSize
         this.modeDirectory = modeDirectory
         this.modeFile = modeFile
-        this.minWaitOn = minWaitOn
         this.bufferCapacity = bufferCapacity
+        this.minWaitOn = minWaitOn
         this.yieldOn = yieldOn
         this.blacklistDomain = blacklistDomain
         this.whitelistDomain = whitelistDomain
@@ -1028,13 +1080,13 @@ public class FileLog: Log {
 
         // The formatted text to write, and its pre-calculated UTF-8 byte-size.
         val preprocessing: Deferred<Pair<CharSequence, Long>?> = run {
-            val time = now()
+            val time = now(omitYear = formatterOmitYear)
 
             // LAZY start as to not do unnecessary work until we are
             // certain that the LogAction was committed to LogBuffer
             // successfully, which may be closed for sending.
             scope.async(start = CoroutineStart.LAZY) {
-                val formatted = format(time, pid(), tid, level, domain, tag, msg, t)
+                val formatted = formatter.format(time, pid(), tid, level, domain, tag, msg, t)
                 if (formatted.isNullOrEmpty()) return@async null
 
                 // Highly unlikely, but if it is the case skip the work
@@ -1592,14 +1644,17 @@ public class FileLog: Log {
                         action.invoke(logStream, buf, size, processedWrites)
                     } catch (t: Throwable) {
                         if (t is CancellationException) {
-                            // preprocessing.await() threw. We're about to die. Nothing
-                            // was written, so no need to do anything here.
+                            // preprocessing.await() threw. We're about to die. Nothing was written,
+                            // so no need to do anything here. Alternatively, Formatter.format threw
+                            // a CancellationException attempting to F with the loop. In either case,
+                            // IGNORE; Will be handled in a moment when yield hits.
                         } else {
                             logE(t) { "Failed to write log entry to ${files[0].name}" }
                             // TODO:
                             //  - Check for InterruptedIOException.bytesTransferred???
                             //  - Truncate to size to wipe out any partially written logs???
                             //  - Increment processed to ensure a sync occurs???
+                            //  - Handle these errors in FileLog.log created LogAction???
                         }
                         0L
                     }
