@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING", "UNUSED")
+@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING", "FunctionName", "UNUSED")
 
 package io.matthewnelson.kmp.log.file.internal
 
@@ -22,12 +22,14 @@ import io.matthewnelson.kmp.log.file.FileLog
 internal expect class AtomicLong
 internal expect class AtomicRef<T>
 
-internal expect inline fun FileLog.Companion.atomicLong(initialValue: Long): AtomicLong
-internal expect inline fun <T> FileLog.Companion.atomicRef(initialValue: T): AtomicRef<T>
+internal expect inline fun FileLog.Companion._atomic(initial: Long): AtomicLong
+internal expect inline fun <T> FileLog.Companion._atomicRef(initial: T): AtomicRef<T>
 
-internal expect inline fun AtomicLong.valueGet(): Long
-internal expect inline fun AtomicLong.valueIncrement()
-internal expect inline fun AtomicLong.valueDecrement()
+internal expect inline fun AtomicLong._get(): Long
+internal expect inline fun AtomicLong._increment()
+internal expect inline fun AtomicLong._decrement()
 
-internal expect inline fun <T> AtomicRef<T>.valueGet(): T
-internal expect inline fun <T> AtomicRef<T>.valueGetAndSet(newValue: T): T
+internal expect inline fun <T> AtomicRef<T>._get(): T
+internal expect inline fun <T> AtomicRef<T>._set(new: T)
+internal expect inline fun <T> AtomicRef<T>._getAndSet(new: T): T
+internal expect inline fun <T> AtomicRef<T>._compareAndSet(expected: T, new: T): Boolean

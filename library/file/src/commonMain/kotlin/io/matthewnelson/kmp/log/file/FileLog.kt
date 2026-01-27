@@ -63,9 +63,15 @@ import io.matthewnelson.kmp.log.file.internal.ScopeLogHandle
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop.Companion.scopeLogLoop
 import io.matthewnelson.kmp.log.file.internal.SharedResourceAllocator
+import io.matthewnelson.kmp.log.file.internal._atomic
+import io.matthewnelson.kmp.log.file.internal._atomicRef
+import io.matthewnelson.kmp.log.file.internal._compareAndSet
+import io.matthewnelson.kmp.log.file.internal._decrement
+import io.matthewnelson.kmp.log.file.internal._get
+import io.matthewnelson.kmp.log.file.internal._getAndSet
+import io.matthewnelson.kmp.log.file.internal._increment
+import io.matthewnelson.kmp.log.file.internal._set
 import io.matthewnelson.kmp.log.file.internal.async
-import io.matthewnelson.kmp.log.file.internal.atomicLong
-import io.matthewnelson.kmp.log.file.internal.atomicRef
 import io.matthewnelson.kmp.log.file.internal.consumeAndIgnore
 import io.matthewnelson.kmp.log.file.internal.exists2Robustly
 import io.matthewnelson.kmp.log.file.internal.format
@@ -82,10 +88,6 @@ import io.matthewnelson.kmp.log.file.internal.pid
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
 import io.matthewnelson.kmp.log.file.internal.uninterruptedRunBlocking
 import io.matthewnelson.kmp.log.file.internal.use
-import io.matthewnelson.kmp.log.file.internal.valueDecrement
-import io.matthewnelson.kmp.log.file.internal.valueGet
-import io.matthewnelson.kmp.log.file.internal.valueGetAndSet
-import io.matthewnelson.kmp.log.file.internal.valueIncrement
 import kotlinx.coroutines.CloseableCoroutineDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -289,7 +291,7 @@ public class FileLog: Log {
      * TODO
      * */
     @get:JvmName("pendingLogCount")
-    public val pendingLogCount: Long get() = _pendingLogCount.valueGet()
+    public val pendingLogCount: Long get() = _pendingLogCount._get()
 
     /**
      * TODO
@@ -903,10 +905,10 @@ public class FileLog: Log {
     @Volatile
     private var _onInstallInvocations: Long = 0L
     @Volatile
-    private var _logHandle: Pair<LogBuffer, ScopeLogHandle>? = null
-    @Volatile
     private var _logJob: Job? = null
-    private val _pendingLogCount = atomicLong(0L)
+
+    private val _logHandle = _atomicRef<Pair<LogBuffer, ScopeLogHandle>?>(initial = null)
+    private val _pendingLogCount = _atomic(initial = 0L)
 
     private constructor(
         min: Level,
@@ -1012,13 +1014,14 @@ public class FileLog: Log {
         if (_whitelistTag.isNotEmpty()) {
             if (!_whitelistTag.contains(tag)) return false
         }
-        // TODO: Check scope.supervisorJob.isActive
-        return _logHandle != null
+        val (_, scope) = _logHandle._get() ?: return false
+        return scope.supervisorJob.isActive
     }
 
     override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        val (logBuffer, scope) = _logHandle ?: return false
-        // TODO: Check scope.supervisorJob.isActive
+        val (logBuffer, scope) = _logHandle._get() ?: return false
+        if (!scope.supervisorJob.isActive) return false
+
         val tid = CurrentThread.id()
 
         // The formatted text to write, and its pre-calculated UTF-8 byte-size.
@@ -1063,7 +1066,7 @@ public class FileLog: Log {
             if (stream == null) {
                 preprocessing.cancel()
                 logWait?.fail()
-                _pendingLogCount.valueDecrement()
+                _pendingLogCount._decrement()
                 return@logAction 0L
             }
 
@@ -1091,7 +1094,7 @@ public class FileLog: Log {
                     }
                 }
 
-                _pendingLogCount.valueDecrement()
+                _pendingLogCount._decrement()
                 logWait?.fail()
 
                 // threw will only ever be non-null when result == null
@@ -1149,7 +1152,7 @@ public class FileLog: Log {
                 }
             }
 
-            _pendingLogCount.valueDecrement()
+            _pendingLogCount._decrement()
             threw?.let { t ->
                 logWait?.fail()
                 throw t
@@ -1167,7 +1170,7 @@ public class FileLog: Log {
                 preprocessing.cancel()
                 return false
             }
-            if (logBuffer != _logHandle?.first) {
+            if (logBuffer != _logHandle._get()?.first) {
                 // Log.Root.uninstall was called between the time log was invoked and now
                 logWait?.fail()
                 preprocessing.cancel()
@@ -1187,7 +1190,7 @@ public class FileLog: Log {
             LogSend(scope, logBuffer, logAction)
         }
 
-        _pendingLogCount.valueIncrement()
+        _pendingLogCount._increment()
         preprocessing.start()
 
         // If logWait is non-null, we do not care about logSend result because it will either
@@ -1347,21 +1350,20 @@ public class FileLog: Log {
             // callback is invoked for any stragglers.
             logJob.invokeOnCompletion { logBuffer.channel.cancel() }
 
-            // TODO: Use AtomicRef to compareAndSet _logHandle to
-            //  ensure it gets set to null (if it is our instance). If
-            //  logJob stops due to error, we want isLoggable to return false
-            //  to mitigate unnecessary work.
-
             _logJob = logJob
-            _logHandle = logHandle
+            _logHandle._set(new = logHandle)
+
+            // In the event of an error experienced by logJob, if onUninstall has not been called
+            // yet, dereferencing logHandle will inhibit all further logging even though Log.Root
+            // still has this FileLog instance available.
+            logJob.invokeOnCompletion { _logHandle._compareAndSet(expected = logHandle, new = null) }
         }
 
         log(Level.Info, LOG.domain, LOG.tag, "Log file opened at ${files[0].name}", t = null)
     }
 
     override fun onUninstall() {
-        val (logBuffer, _) = _logHandle ?: return
-        _logHandle = null
+        val (logBuffer, _) = _logHandle._getAndSet(new = null) ?: return
         // Close for send only. All remaining LogAction will be
         // processed by the LogLoop until exhaustion.
         logBuffer.channel.close(cause = null)
@@ -1408,7 +1410,7 @@ public class FileLog: Log {
         // exceed the configured maxLogFileSize, it is cached here and retried after
         // a log rotation is performed. This allows us to not drop lockLog and perform
         // an immediate retry of the LogAction after returning from rotateLogs.
-        val retryAction = atomicRef<LogAction?>(initialValue = null)
+        val retryAction = _atomicRef<LogAction?>(initial = null)
         jobLogLoop.invokeOnCompletion {
             // This should never really be the case because the main loop would have
             // dequeued this for processing over ever calling logBuffer.channel.receive.
@@ -1416,7 +1418,7 @@ public class FileLog: Log {
             // Only in the event of an error within the loop (such as file re-open
             // failure) where a LogAction from rotateActionQueue was dequeued over one
             // from retryAction would there be unprocessed LogAction present.
-            val action = retryAction.valueGetAndSet(newValue = null)
+            val action = retryAction._getAndSet(new = null)
                 ?: return@invokeOnCompletion
 
             @OptIn(DelicateCoroutinesApi::class)
@@ -1449,7 +1451,7 @@ public class FileLog: Log {
 
                     // Priority 2 LogAction that came from FileLog.log and was cached
                     // in order to perform a log rotation to make room for its write.
-                    ?: retryAction.valueGetAndSet(newValue = null)
+                    ?: retryAction._getAndSet(new = null)
 
                     // Lastly, LogAction sent from FileLog.log
                     ?: logBuffer.channel.receive()
@@ -1573,7 +1575,7 @@ public class FileLog: Log {
             }
 
             logD {
-                val count = _pendingLogCount.valueGet()
+                val count = _pendingLogCount._get()
                 "Current ${files[0].name} file byte size is $size, with $count log(s) pending"
             }
 
@@ -1612,7 +1614,7 @@ public class FileLog: Log {
                         if (written == EXECUTE_ROTATE_LOGS_AND_RETRY) {
                             size = maxLogFileSize // Force a log rotation
 
-                            val previous = retryAction.valueGetAndSet(newValue = action)
+                            val previous = retryAction._getAndSet(new = action)
                             if (previous != null) {
                                 previous.consumeAndIgnore(buf)
                                 // HARD fail.... There should ONLY ever be 1 retryAction.
@@ -1642,7 +1644,7 @@ public class FileLog: Log {
                             yield()
 
                             rotateActionQueue.dequeueOrNull()
-                                ?: retryAction.valueGetAndSet(newValue = null)
+                                ?: retryAction._getAndSet(new = null)
                                 ?: logBuffer.channel.tryReceive().getOrNull()
                         } catch (_: CancellationException) {
                             // Shouldn't happen b/c just checked isActive, but if so
@@ -1687,7 +1689,7 @@ public class FileLog: Log {
                             logStream = logStream,
                             lockFile = lockFile,
                             buf = buf,
-                            retryActionIsNotNull = retryAction.valueGet() != null,
+                            retryActionIsNotNull = retryAction._get() != null,
                         )
                     }
                 } else {
@@ -1700,7 +1702,7 @@ public class FileLog: Log {
             // immediately dequeued and executed while still holding our lock
             // on writes to logStream (unless there are LogAction present in the
             // rotateActionQueue which come first).
-            if (retryAction.valueGet() == null && lockLog.isValid()) try {
+            if (retryAction._get() == null && lockLog.isValid()) try {
                 lockLog.release()
                 logD { "Released lock on ${dotLockFile.name} >> $lockLog" }
             } catch (e: IOException) {
@@ -1903,9 +1905,7 @@ public class FileLog: Log {
             return
         }
 
-        val child = executeLogRotationMoves(rotateActionQueue, moves)
-
-        child.invokeOnCompletion {
+        executeLogRotationMoves(rotateActionQueue, moves).invokeOnCompletion {
             if (lockRotate.isValid()) try {
                 lockRotate.release()
                 logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
@@ -1960,8 +1960,6 @@ public class FileLog: Log {
                 }
             }
         }
-
-        child.invokeOnCompletion { logD { "$LOG_ROTATION Stopped >> $child" } }
     }
 
     /*
@@ -2349,7 +2347,9 @@ public class FileLog: Log {
         rotateActionQueue: RotateActionQueue,
         moves: ArrayDeque<Pair<File, File>>,
     ): Job = scopeLogLoop.launch(context = CoroutineName(LOG.tag + "-$LOG_ROTATION")) {
-        logD { "$LOG_ROTATION Started >> ${currentCoroutineContext().job}" }
+        val thisJob = currentCoroutineContext().job
+        thisJob.invokeOnCompletion { logD { "$LOG_ROTATION Stopped >> $thisJob" } }
+        logD { "$LOG_ROTATION Started >> $thisJob" }
 
 //        val startSize = moves.size
         while (moves.isNotEmpty()) {
