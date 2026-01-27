@@ -1416,7 +1416,7 @@ public class FileLog: Log {
             // Only in the event of an error within the loop (such as file re-open
             // failure) where a LogAction from rotateActionQueue was dequeued over one
             // from retryAction would there be unprocessed LogAction present.
-            val action = retryAction.valueGetAndSet(newValue = null)
+            val action = retryAction.valueGetAndSet(new = null)
                 ?: return@invokeOnCompletion
 
             @OptIn(DelicateCoroutinesApi::class)
@@ -1449,7 +1449,7 @@ public class FileLog: Log {
 
                     // Priority 2 LogAction that came from FileLog.log and was cached
                     // in order to perform a log rotation to make room for its write.
-                    ?: retryAction.valueGetAndSet(newValue = null)
+                    ?: retryAction.valueGetAndSet(new = null)
 
                     // Lastly, LogAction sent from FileLog.log
                     ?: logBuffer.channel.receive()
@@ -1612,7 +1612,7 @@ public class FileLog: Log {
                         if (written == EXECUTE_ROTATE_LOGS_AND_RETRY) {
                             size = maxLogFileSize // Force a log rotation
 
-                            val previous = retryAction.valueGetAndSet(newValue = action)
+                            val previous = retryAction.valueGetAndSet(new = action)
                             if (previous != null) {
                                 previous.consumeAndIgnore(buf)
                                 // HARD fail.... There should ONLY ever be 1 retryAction.
@@ -1642,7 +1642,7 @@ public class FileLog: Log {
                             yield()
 
                             rotateActionQueue.dequeueOrNull()
-                                ?: retryAction.valueGetAndSet(newValue = null)
+                                ?: retryAction.valueGetAndSet(new = null)
                                 ?: logBuffer.channel.tryReceive().getOrNull()
                         } catch (_: CancellationException) {
                             // Shouldn't happen b/c just checked isActive, but if so

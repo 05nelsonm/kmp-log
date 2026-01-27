@@ -30,4 +30,5 @@ internal expect inline fun AtomicLong.valueIncrement()
 internal expect inline fun AtomicLong.valueDecrement()
 
 internal expect inline fun <T> AtomicRef<T>.valueGet(): T
-internal expect inline fun <T> AtomicRef<T>.valueGetAndSet(newValue: T): T
+internal expect inline fun <T> AtomicRef<T>.valueGetAndSet(new: T): T
+internal expect inline fun <T> AtomicRef<T>.valueCompareAndSet(expected: T, new: T): Boolean
