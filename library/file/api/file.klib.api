@@ -48,6 +48,10 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
     final fun uninstallAndAwaitSync(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.uninstallAndAwaitSync|uninstallAndAwaitSync(){}[0]
     final suspend fun uninstallAndAwaitAsync(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.uninstallAndAwaitAsync|uninstallAndAwaitAsync(){}[0]
 
+    abstract fun interface Formatter { // io.matthewnelson.kmp.log.file/FileLog.Formatter|null[0]
+        abstract fun format(kotlin/CharSequence, kotlin/Int, kotlin/Long, io.matthewnelson.kmp.log/Log.Level, kotlin/String?, kotlin/String, kotlin/String?, kotlin/Throwable?): kotlin/CharSequence? // io.matthewnelson.kmp.log.file/FileLog.Formatter.format|format(kotlin.CharSequence;kotlin.Int;kotlin.Long;io.matthewnelson.kmp.log.Log.Level;kotlin.String?;kotlin.String;kotlin.String?;kotlin.Throwable?){}[0]
+    }
+
     final class Builder { // io.matthewnelson.kmp.log.file/FileLog.Builder|null[0]
         constructor <init>(kotlin/String) // io.matthewnelson.kmp.log.file/FileLog.Builder.<init>|<init>(kotlin.String){}[0]
 
@@ -71,6 +75,8 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         final fun fileName(kotlin/String): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.fileName|fileName(kotlin.String){}[0]
         final fun fileOtherReadable(kotlin/Boolean): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.fileOtherReadable|fileOtherReadable(kotlin.Boolean){}[0]
         final fun fileOtherWritable(kotlin/Boolean): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.fileOtherWritable|fileOtherWritable(kotlin.Boolean){}[0]
+        final fun format(io.matthewnelson.kmp.log.file/FileLog.Formatter?): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.format|format(io.matthewnelson.kmp.log.file.FileLog.Formatter?){}[0]
+        final fun formatOmitYear(kotlin/Boolean): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.formatOmitYear|formatOmitYear(kotlin.Boolean){}[0]
         final fun max(io.matthewnelson.kmp.log/Log.Level): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.max|max(io.matthewnelson.kmp.log.Log.Level){}[0]
         final fun maxLogFileSize(kotlin/Long): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.maxLogFileSize|maxLogFileSize(kotlin.Long){}[0]
         final fun maxLogFiles(kotlin/Byte): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.maxLogFiles|maxLogFiles(kotlin.Byte){}[0]
