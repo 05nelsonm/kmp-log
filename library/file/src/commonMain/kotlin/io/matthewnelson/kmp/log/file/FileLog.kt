@@ -63,9 +63,15 @@ import io.matthewnelson.kmp.log.file.internal.ScopeLogHandle
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop.Companion.scopeLogLoop
 import io.matthewnelson.kmp.log.file.internal.SharedResourceAllocator
-import io.matthewnelson.kmp.log.file.internal.async
 import io.matthewnelson.kmp.log.file.internal._atomic
 import io.matthewnelson.kmp.log.file.internal._atomicRef
+import io.matthewnelson.kmp.log.file.internal._compareAndSet
+import io.matthewnelson.kmp.log.file.internal._decrement
+import io.matthewnelson.kmp.log.file.internal._get
+import io.matthewnelson.kmp.log.file.internal._getAndSet
+import io.matthewnelson.kmp.log.file.internal._increment
+import io.matthewnelson.kmp.log.file.internal._set
+import io.matthewnelson.kmp.log.file.internal.async
 import io.matthewnelson.kmp.log.file.internal.consumeAndIgnore
 import io.matthewnelson.kmp.log.file.internal.exists2Robustly
 import io.matthewnelson.kmp.log.file.internal.format
@@ -82,10 +88,6 @@ import io.matthewnelson.kmp.log.file.internal.pid
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
 import io.matthewnelson.kmp.log.file.internal.uninterruptedRunBlocking
 import io.matthewnelson.kmp.log.file.internal.use
-import io.matthewnelson.kmp.log.file.internal._decrement
-import io.matthewnelson.kmp.log.file.internal._get
-import io.matthewnelson.kmp.log.file.internal._getAndSet
-import io.matthewnelson.kmp.log.file.internal._increment
 import kotlinx.coroutines.CloseableCoroutineDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -903,10 +905,10 @@ public class FileLog: Log {
     @Volatile
     private var _onInstallInvocations: Long = 0L
     @Volatile
-    private var _logHandle: Pair<LogBuffer, ScopeLogHandle>? = null
-    @Volatile
     private var _logJob: Job? = null
-    private val _pendingLogCount = _atomic(0L)
+
+    private val _logHandle = _atomicRef<Pair<LogBuffer, ScopeLogHandle>?>(initial = null)
+    private val _pendingLogCount = _atomic(initial = 0L)
 
     private constructor(
         min: Level,
@@ -1012,13 +1014,14 @@ public class FileLog: Log {
         if (_whitelistTag.isNotEmpty()) {
             if (!_whitelistTag.contains(tag)) return false
         }
-        // TODO: Check scope.supervisorJob.isActive
-        return _logHandle != null
+        val (_, scope) = _logHandle._get() ?: return false
+        return scope.supervisorJob.isActive
     }
 
     override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-        val (logBuffer, scope) = _logHandle ?: return false
-        // TODO: Check scope.supervisorJob.isActive
+        val (logBuffer, scope) = _logHandle._get() ?: return false
+        if (!scope.supervisorJob.isActive) return false
+
         val tid = CurrentThread.id()
 
         // The formatted text to write, and its pre-calculated UTF-8 byte-size.
@@ -1167,7 +1170,7 @@ public class FileLog: Log {
                 preprocessing.cancel()
                 return false
             }
-            if (logBuffer != _logHandle?.first) {
+            if (logBuffer != _logHandle._get()?.first) {
                 // Log.Root.uninstall was called between the time log was invoked and now
                 logWait?.fail()
                 preprocessing.cancel()
@@ -1347,21 +1350,20 @@ public class FileLog: Log {
             // callback is invoked for any stragglers.
             logJob.invokeOnCompletion { logBuffer.channel.cancel() }
 
-            // TODO: Use AtomicRef to compareAndSet _logHandle to
-            //  ensure it gets set to null (if it is our instance). If
-            //  logJob stops due to error, we want isLoggable to return false
-            //  to mitigate unnecessary work.
-
             _logJob = logJob
-            _logHandle = logHandle
+            _logHandle._set(new = logHandle)
+
+            // In the event of an error experienced by logJob, if onUninstall has not been called
+            // yet, dereferencing logHandle will inhibit all further logging even though Log.Root
+            // still has this FileLog instance available.
+            logJob.invokeOnCompletion { _logHandle._compareAndSet(expected = logHandle, new = null) }
         }
 
         log(Level.Info, LOG.domain, LOG.tag, "Log file opened at ${files[0].name}", t = null)
     }
 
     override fun onUninstall() {
-        val (logBuffer, _) = _logHandle ?: return
-        _logHandle = null
+        val (logBuffer, _) = _logHandle._getAndSet(new = null) ?: return
         // Close for send only. All remaining LogAction will be
         // processed by the LogLoop until exhaustion.
         logBuffer.channel.close(cause = null)
@@ -1903,9 +1905,7 @@ public class FileLog: Log {
             return
         }
 
-        val child = executeLogRotationMoves(rotateActionQueue, moves)
-
-        child.invokeOnCompletion {
+        executeLogRotationMoves(rotateActionQueue, moves).invokeOnCompletion {
             if (lockRotate.isValid()) try {
                 lockRotate.release()
                 logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
@@ -1960,8 +1960,6 @@ public class FileLog: Log {
                 }
             }
         }
-
-        child.invokeOnCompletion { logD { "$LOG_ROTATION Stopped >> $child" } }
     }
 
     /*
@@ -2349,7 +2347,9 @@ public class FileLog: Log {
         rotateActionQueue: RotateActionQueue,
         moves: ArrayDeque<Pair<File, File>>,
     ): Job = scopeLogLoop.launch(context = CoroutineName(LOG.tag + "-$LOG_ROTATION")) {
-        logD { "$LOG_ROTATION Started >> ${currentCoroutineContext().job}" }
+        val thisJob = currentCoroutineContext().job
+        thisJob.invokeOnCompletion { logD { "$LOG_ROTATION Stopped >> $thisJob" } }
+        logD { "$LOG_ROTATION Started >> $thisJob" }
 
 //        val startSize = moves.size
         while (moves.isNotEmpty()) {
