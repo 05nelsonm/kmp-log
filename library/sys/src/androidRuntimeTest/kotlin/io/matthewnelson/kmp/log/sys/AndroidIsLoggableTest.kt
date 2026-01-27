@@ -46,7 +46,11 @@ class AndroidIsLoggableTest {
                     Log.Level.Fatal -> true
                 }
 
-                assertEquals(expected, SysLog.androidIsLoggable(level, LOG.domain, LOG.tag), "$LOG >> $level")
+                assertEquals(
+                    expected,
+                    SysLog.androidIsLoggable(level, LOG.domain, LOG.tag, default = !expected),
+                    "$LOG >> $level",
+                )
                 assertEquals(expected, LOG.isLoggable(level), "$LOG >> $level")
             }
         } finally {

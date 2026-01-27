@@ -59,8 +59,8 @@ public actual class SysLog private actual constructor(min: Level): Log(SYS_LOG_U
 
         // Exposed for testing
         @OptIn(ExperimentalForeignApi::class)
-        internal fun isLoggableOrNull(level: Level, domain: String?, tag: String): Boolean? {
-            val ___android_log_is_loggable = ANDROID_LOG_IS_LOGGABLE ?: return null
+        internal fun isLoggableOrDefault(level: Level, domain: String?, tag: String, default: Boolean): Boolean {
+            val ___android_log_is_loggable = ANDROID_LOG_IS_LOGGABLE ?: return default
             val priority = level.toPriority()
             // Do not need to use androidDomainTag b/c __android_log_is_loggable is only available
             // from API 30+, so no need to check device API level as the limitation on tag length
@@ -110,6 +110,6 @@ public actual class SysLog private actual constructor(min: Level): Log(SYS_LOG_U
     }
 
     actual override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
-        return isLoggableOrNull(level, domain, tag) ?: true
+        return isLoggableOrDefault(level, domain, tag, default = true)
     }
 }
