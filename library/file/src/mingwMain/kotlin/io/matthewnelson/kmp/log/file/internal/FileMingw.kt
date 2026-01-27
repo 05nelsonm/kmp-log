@@ -27,7 +27,6 @@ import io.matthewnelson.kmp.file.errnoToIOException
 import io.matthewnelson.kmp.file.lastErrorToIOException
 import io.matthewnelson.kmp.file.path
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.MemScope
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
@@ -53,52 +52,38 @@ internal actual fun File.moveLogTo(dest: File) {
     // moveLogTo is only utilized for log file rotation and is always
     // called while holding a FileLock (other processes using FileLog
     // will not be executing a rotation at the same time).
-    val sourceIsDirectory = memScoped { isDirectory(file = this@moveLogTo) }
+    val sourceIsDirectory = isDirectory()
+    if (sourceIsDirectory) try {
+        if (!dest.isDirectory()) throw NotDirectoryException(dest)
 
-    if (sourceIsDirectory) memScoped {
-        try {
-            if (!isDirectory(file = dest)) throw NotDirectoryException(dest)
-        } catch (e: IOException) {
-            if (e is FileNotFoundException) return@memScoped
-            throw e
-        }
-        // dest is either also a directory, or does not exist.
+        // Dest exists and is also a directory. Try deleting it to
+        // force a DirectoryNotEmptyException.
+        dest.delete2(ignoreReadOnly = true, mustExist = true)
+    } catch (e: IOException) {
+        if (e !is FileNotFoundException) throw e
+        // Dest does not exist.
     }
 
     if (doMove(dest) != 0) return
 
     val error = GetLastError()
-    if (error.toInt() == ERROR_ACCESS_DENIED) {
-        // Source exists and:
-        //  - Is a directory, while Dest exists and is NOT a directory.
-        //  - Is not a directory, while Dest exists and IS a directory.
+    if (error.toInt() == ERROR_ACCESS_DENIED && !sourceIsDirectory) try {
+        if (dest.isDirectory()) {
+            // Potential malicious behavior. Should be a regular file from
+            // a prior move; try deleting. DirectoryNotEmptyException will
+            // be thrown for us if unable to delete.
+            dest.delete2(ignoreReadOnly = true)
+            if (doMove(dest) != 0) return // Success
 
-        if (sourceIsDirectory) {
-            // Dest was checked above. If it did NOT exist, this error is
-            // related to permissions or something. If it DID exist, then
-            // it was also a directory and this error is related to
-            // something else like moving the file to a different filesystem.
-            throw lastErrorToIOException(this, dest, error)
-        }
-
-        // Source was NOT a directory. Dest was NOT checked above.
-        try {
-            if (memScoped { isDirectory(file = dest) }) {
-                // Potential malicious behavior. Should be a regular file from
-                // a prior move; try deleting. DirectoryNotEmptyException will
-                // be thrown for us if unable to delete.
-                dest.delete2(ignoreReadOnly = true)
-                if (doMove(dest) != 0) return // Success
-
-                // 2nd rename failed; throw so we can add original as suppressed.
-                throw lastErrorToIOException(this, dest)
-            }
-        } catch (e: IOException) {
-            val original = lastErrorToIOException(this, dest, error)
-            e.addSuppressed(original)
-            throw e
-        }
-        // Fall through
+            // 2nd rename failed; throw so we can add original as suppressed.
+            throw lastErrorToIOException(this, dest)
+        }/* else {
+            // Fall through
+        }*/
+    } catch (e: IOException) {
+        val original = lastErrorToIOException(this, dest, error)
+        e.addSuppressed(original)
+        throw e
     }
 
     throw lastErrorToIOException(this, dest, error)
@@ -112,7 +97,8 @@ private inline fun File.doMove(dest: File): Int = MoveFileExA(
 
 @OptIn(ExperimentalForeignApi::class)
 @Throws(FileNotFoundException::class, FileSystemException::class)
-private inline fun MemScope.isDirectory(file: File): Boolean {
+private inline fun File.isDirectory(): Boolean = memScoped {
+    val file = this@isDirectory
     val stat = alloc<_stat64>()
     var ret: Int
     do {
