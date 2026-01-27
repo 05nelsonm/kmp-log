@@ -32,6 +32,7 @@ internal actual inline fun AtomicLong._increment() { incrementAndGet() }
 internal actual inline fun AtomicLong._decrement() { decrementAndGet() }
 
 internal actual inline fun <T> AtomicRef<T>._get(): T = get()
+internal actual inline fun <T> AtomicRef<T>._set(new: T) { set(new) }
 internal actual inline fun <T> AtomicRef<T>._getAndSet(new: T): T = getAndSet(new)
 internal actual inline fun <T> AtomicRef<T>._compareAndSet(expected: T, new: T): Boolean {
     return compareAndSet(expected, new)
