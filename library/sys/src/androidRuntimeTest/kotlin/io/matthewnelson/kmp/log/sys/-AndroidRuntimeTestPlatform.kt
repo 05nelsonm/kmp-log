@@ -21,4 +21,9 @@ expect fun isNative(): Boolean
 expect fun deviceApiLevel(): Int
 
 expect val IS_LOGGABLE_REQUIRED_API_LEVEL: Int
-expect fun SysLog.Companion.androidIsLoggable(level: Log.Level, domain: String?, tag: String): Boolean?
+expect fun SysLog.Companion.androidIsLoggable(
+    level: Log.Level,
+    domain: String?,
+    tag: String,
+    default: Boolean,
+): Boolean

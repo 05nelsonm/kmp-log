@@ -47,8 +47,8 @@ public actual class SysLog private actual constructor(min: Level): Log(SYS_LOG_U
 
         // Exposed for testing
         @JvmSynthetic
-        internal fun isLoggableOrNull(level: Level, domain: String?, tag: String): Boolean? {
-            if (Build.VERSION.SDK_INT <= 0) return null
+        internal fun isLoggableOrDefault(level: Level, domain: String?, tag: String, default: Boolean): Boolean {
+            if (Build.VERSION.SDK_INT <= 0) return default
             // TODO: Should `null` be passed for domain here and only check for tag?
             val _tag = androidDomainTag(Build.VERSION.SDK_INT, domain, tag)
             return android.util.Log.isLoggable(_tag, level.toPriority())
@@ -80,6 +80,6 @@ public actual class SysLog private actual constructor(min: Level): Log(SYS_LOG_U
     }
 
     actual override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
-        return isLoggableOrNull(level, domain, tag) ?: true
+        return isLoggableOrDefault(level, domain, tag, default = true)
     }
 }
