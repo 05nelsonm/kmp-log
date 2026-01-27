@@ -16,12 +16,14 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.DirectoryNotEmptyException
+import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.NotDirectoryException
 import io.matthewnelson.kmp.file.delete2
 import io.matthewnelson.kmp.file.exists2
 import io.matthewnelson.kmp.file.mkdirs2
 import io.matthewnelson.kmp.file.name
+import io.matthewnelson.kmp.file.parentFile
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.file.readUtf8
 import io.matthewnelson.kmp.file.resolve
@@ -31,6 +33,7 @@ import io.matthewnelson.kmp.log.file.withTmpFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -183,6 +186,27 @@ class MoveLogToUnitTest {
                 subDirDest.delete2()
                 subDirDest2.delete2()
             }
+        }
+    }
+
+    @Test
+    fun givenExistingDirectory_whenNonEmpty_thenDeleteOrMoveToRandomIsSuccessful() = withTmpFile { tmp ->
+        val maxNewNameLen = 7
+        val subDirTmp = tmp.resolve("sub_directory").mkdirs2(mode = null)
+        var moved: File? = null
+        try {
+            moved = tmp.deleteOrMoveToRandomIfNonEmptyDirectory(ByteArray(128), maxNewNameLen)
+            assertNotNull(moved)
+            assertFalse(tmp.exists2(), "tmp.exists2")
+            assertTrue(moved.resolve(subDirTmp.name).exists2(), "moved(sub_directory).exists2")
+            assertEquals(tmp.parentFile, moved.parentFile, "parent directories were not the same")
+            assertNotNull(tmp.parentFile)
+            assertTrue(moved.name.startsWith('.'), "does not start with '.'")
+            assertEquals(maxNewNameLen, moved.name.length, "maxNewNameLen")
+        } finally {
+            subDirTmp.delete2()
+            moved?.resolve(subDirTmp.name)?.delete2()
+            moved?.delete2()
         }
     }
 }

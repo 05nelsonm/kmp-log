@@ -17,6 +17,7 @@ package io.matthewnelson.kmp.log.file
 
 import io.matthewnelson.kmp.file.SysDirSep
 import io.matthewnelson.kmp.file.SysTempDir
+import io.matthewnelson.kmp.file.name
 import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.log.Log
 import kotlinx.coroutines.channels.Channel
@@ -131,6 +132,12 @@ class FileLogBuilderUnitTest {
         } catch (e: IllegalArgumentException) {
             assertEquals("fileName cannot exceed 64 characters", e.message)
         }
+    }
+
+    @Test
+    fun givenFileName_when1Character_thenDotLockFileNameIs7CharacterInLength() {
+        // Required minimum for File.deleteOrMoveToRandomIfNonEmptyDirectory
+        assertEquals(7, newBuilder().fileName("a").build().dotLockFile.name.length)
     }
 
     @Test

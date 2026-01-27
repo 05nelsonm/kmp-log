@@ -27,6 +27,7 @@ import io.matthewnelson.immutable.collections.toImmutableList
 import io.matthewnelson.immutable.collections.toImmutableSet
 import io.matthewnelson.kmp.file.Closeable
 import io.matthewnelson.kmp.file.ClosedException
+import io.matthewnelson.kmp.file.DirectoryNotEmptyException
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.FileStream
@@ -73,6 +74,7 @@ import io.matthewnelson.kmp.log.file.internal._increment
 import io.matthewnelson.kmp.log.file.internal._set
 import io.matthewnelson.kmp.log.file.internal.async
 import io.matthewnelson.kmp.log.file.internal.consumeAndIgnore
+import io.matthewnelson.kmp.log.file.internal.deleteOrMoveToRandomIfNonEmptyDirectory
 import io.matthewnelson.kmp.log.file.internal.exists2Robustly
 import io.matthewnelson.kmp.log.file.internal.format
 import io.matthewnelson.kmp.log.file.internal.id
@@ -1733,6 +1735,7 @@ public class FileLog: Log {
     *
     * NOTE: lockLog is required to be held when calling this function.
     * */
+    @Throws(CancellationException::class, DirectoryNotEmptyException::class)
     private suspend fun ScopeLogLoop.rotateLogs(
         rotateActionQueue: RotateActionQueue,
         logStream: FileStream.ReadWrite,
@@ -1964,7 +1967,8 @@ public class FileLog: Log {
 
     /*
     * Does a full log rotation. Assumes dotRotateFile has been checked for
-    * existence and DOES NOT exist on the filesystem.
+    * existence and DOES NOT exist on the filesystem. If it does, it will
+    * be deleted or moved (if non-empty directory) to a randomly named file.
     *
     * NOTE: Both lockLog and lockRotate are required to be held when calling
     * this function.
@@ -1972,6 +1976,7 @@ public class FileLog: Log {
     * If moves is left unpopulated after returning, an error has occurred and
     * an immediate retry should be scheduled.
     * */
+    @Throws(DirectoryNotEmptyException::class)
     private fun prepareLogRotationFull(
         logStream: FileStream.ReadWrite,
         buf: ByteArray,
@@ -1983,13 +1988,22 @@ public class FileLog: Log {
             // Not a show-stopper. Ignore.
         }
 
-        // TODO: delete dotRotateTmpFile
-        //  - If DirectoryNotEmptyException
-        //      - Move to random file name in current directory; someone is being malicious
-        //        because who TF names a directory .{fileName}{.fileExtension}.tmp and then
-        //        populates it? Must use current directory to eliminate failure attributed
-        //        to moving across filesystems.
-        //          - If failure to move, fail hard.
+        // These files should NOT exist, but need to check and expunge to avoid complications going forward.
+        arrayOf(dotRotateTmpFile, dotRotateFile).forEach { file ->
+
+            // If ends up throwing a DirectoryNotEmptyException because it failed to move the thing, we want
+            // to let it through and error out here.
+            val moved = file.deleteOrMoveToRandomIfNonEmptyDirectory(
+                buf = buf,
+
+                // Will be at LEAST 7 characters in length ('.' prefix + ".lock" + minimum 1 character name).
+                // This is to ensure new randomly generated name does not exceed it and risk an ENAMETOOLONG
+                // error.
+                maxNewNameLen = dotLockFile.name.length,
+            ) ?: return@forEach
+
+            logW { "Moved non-empty directory (which should NOT be there) ${file.name} >> ${moved.name}" }
+        }
 
         try {
             // Shouldn't exist, but just in case using openWrite instead of
