@@ -360,10 +360,6 @@ public class FileLog: Log {
 
     /**
      * TODO
-     *
-     * @throws [IllegalArgumentException] When:
-     *  - [logDirectory] is empty
-     *  - [logDirectory] contains null character `\u0000`
      * */
     public class Builder(
 
@@ -373,11 +369,6 @@ public class FileLog: Log {
         @JvmField
         public val logDirectory: String,
     ) {
-
-        init {
-            require(logDirectory.isNotEmpty()) { "logDirectory cannot be empty" }
-            require(!logDirectory.contains('\u0000')) { "logDirectory cannot contain null character '\\u0000'" }
-        }
 
         private var _min = Level.Info
         private var _max = Level.Fatal
@@ -850,8 +841,9 @@ public class FileLog: Log {
          *
          * @return The [FileLog] to [Log.Root.install]
          *
-         * @throws [IOException] If [File.canonicalFile2] fails.
+         * @throws [IOException] If [File.canonicalFile2] fails to resolve [logDirectory].
          * */
+        @Throws(Exception::class)
         public fun build(): FileLog {
             val fileName = _fileName
             val fileExtension = _fileExtension

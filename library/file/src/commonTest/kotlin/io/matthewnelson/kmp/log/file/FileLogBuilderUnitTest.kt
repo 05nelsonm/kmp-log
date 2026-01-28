@@ -15,7 +15,6 @@
  **/
 package io.matthewnelson.kmp.log.file
 
-import io.matthewnelson.kmp.file.SysDirSep
 import io.matthewnelson.kmp.file.SysTempDir
 import io.matthewnelson.kmp.file.name
 import io.matthewnelson.kmp.file.path
@@ -89,26 +88,6 @@ class FileLogBuilderUnitTest {
         assertEquals(prefix.length + 24, fileLog.uid.length)
         assertEquals(24, fileLog.logFiles0Hash.length)
         assertTrue(fileLog.uid.endsWith(fileLog.logFiles0Hash))
-    }
-
-    @Test
-    fun givenLogDirectory_whenEmpty_thenThrowsIllegalArgumentException() {
-        try {
-            newBuilder("")
-            fail()
-        } catch (e: IllegalArgumentException) {
-            assertEquals("logDirectory cannot be empty", e.message)
-        }
-    }
-
-    @Test
-    fun givenLogDirectory_whenContainsNullCharacter_thenThrowsIllegalArgumentException() {
-        try {
-            newBuilder(SysTempDir.path + SysDirSep + '\u0000')
-            fail()
-        } catch (e: IllegalArgumentException) {
-            assertEquals("logDirectory cannot contain null character '\\u0000'", e.message)
-        }
     }
 
     @Test
