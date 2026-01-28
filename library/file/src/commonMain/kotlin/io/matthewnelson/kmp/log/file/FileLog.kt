@@ -1050,7 +1050,10 @@ public class FileLog: Log {
             override fun debug(): Boolean = this@FileLog.debug
         }
         // For logLoop's RotateActionQueue
-        this.checkIfLogRotationIsNeeded = LogAction.Rotation { _, _, sizeLog, _ ->
+        this.checkIfLogRotationIsNeeded = LogAction.Rotation { _, _, sizeLog, processedWrites ->
+            // We are being consumed and ignored.
+            if (processedWrites < 0) return@Rotation 0L
+
             if (sizeLog >= maxLogFileSize) return@Rotation EXECUTE_ROTATE_LOGS
 
             // Moving dotRotateFile -> *.001 is the last move that gets
@@ -1854,7 +1857,7 @@ public class FileLog: Log {
         // NO LogAction before continuing.
         while (true) {
             val action = rotateActionQueue.dequeueOrNull() ?: break
-            action(logStream, buf, 0L, 0)
+            action(logStream, buf, 0L, processedWrites = -1)
         }
 
         val lockRotate = try {
