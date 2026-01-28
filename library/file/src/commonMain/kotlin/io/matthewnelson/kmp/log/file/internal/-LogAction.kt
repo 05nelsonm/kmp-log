@@ -50,12 +50,7 @@ internal sealed interface LogAction {
      * */
     interface Write: LogAction {
 
-        /**
-         * Called when the action is to be dropped such that cancellation and
-         * cleanup can take place. [undelivered] will be `false` if and only
-         * called via [LogBuffer.use], otherwise it will be `true` indicating
-         * that a [Log.Level.Warn] should be generated.
-         * */
+        @Throws(IllegalStateException::class)
         fun drop(undelivered: Boolean)
     }
 

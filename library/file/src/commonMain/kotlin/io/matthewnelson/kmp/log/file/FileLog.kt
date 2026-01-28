@@ -21,6 +21,7 @@ import io.matthewnelson.encoding.base16.Base16
 import io.matthewnelson.encoding.core.Decoder.Companion.decodeBuffered
 import io.matthewnelson.encoding.core.Decoder.Companion.decodeToByteArray
 import io.matthewnelson.encoding.core.Encoder.Companion.encodeToString
+import io.matthewnelson.encoding.core.EncoderDecoder.Companion.DEFAULT_BUFFER_SIZE
 import io.matthewnelson.encoding.utf8.UTF8
 import io.matthewnelson.encoding.utf8.UTF8.CharPreProcessor.Companion.sizeUTF8
 import io.matthewnelson.immutable.collections.toImmutableList
@@ -88,7 +89,6 @@ import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
 import io.matthewnelson.kmp.log.file.internal.pid
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
 import io.matthewnelson.kmp.log.file.internal.uninterruptedRunBlocking
-import io.matthewnelson.kmp.log.file.internal.use
 import kotlinx.coroutines.CloseableCoroutineDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -1146,8 +1146,12 @@ public class FileLog: Log {
 
             @Volatile
             private var _retries = 0
+            @Volatile
+            private var _executed = 0
 
             override fun drop(undelivered: Boolean) {
+                check(_executed++ == 0) { _executed--; "LogAction.Write has already been executed" }
+
                 preprocessing.cancel()
                 logWait?.fail()
                 _pendingLogCount._decrement()
@@ -1162,6 +1166,8 @@ public class FileLog: Log {
                 sizeLog: Long,
                 processedWrites: Int,
             ): Long {
+                check(_executed++ == 0) { _executed--; "LogAction.Write has already been executed" }
+
                 var threw: Throwable? = null
                 val preprocessingResult = try {
                     preprocessing.await()
@@ -1213,6 +1219,7 @@ public class FileLog: Log {
                 }
 
                 if (needsRotation && _retries++ < MAX_RETRIES) {
+                    _executed--
                     return EXECUTE_ROTATE_LOGS
                 }
 
@@ -1358,80 +1365,93 @@ public class FileLog: Log {
         val previousLogJob = _logJob
 
         scopeFileLog.launch(dispatcher, start = CoroutineStart.ATOMIC) {
-            logBuffer.use(::logW) { buf ->
-                scopeLog {
-                    jobLog.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $jobLog" } }
-                    logD { "$LOG_JOB Started >> $jobLog" }
+            scopeLog {
+                jobLog.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $jobLog" } }
+                logD { "$LOG_JOB Started >> $jobLog" }
 
-                    if (previousLogJob != null) {
-                        logD {
-                            if (!previousLogJob.isActive) null
-                            else "Waiting for previous $LOG_JOB to complete >> $previousLogJob"
-                        }
-                        previousLogJob.join()
+                if (previousLogJob != null) {
+                    logD {
+                        if (!previousLogJob.isActive) null
+                        else "Waiting for previous $LOG_JOB to complete >> $previousLogJob"
                     }
-
-                    directory.mkdirs2(mode = modeDirectory, mustCreate = false)
-
-                    run {
-                        val canonical = directory.canonicalFile2()
-                        if (canonical != directory) {
-                            // FAIL:
-                            //   Between time of Builder.build and Log.Root.install, the specified
-                            //   directory was modified to contain symbolic links such that the current
-                            //   one points to a different location. This would invalidate the Log.uid,
-                            //   allowing multiple FileLog instances to be installed simultaneously for
-                            //   the same log file leading to data corruption.
-                            throw IllegalStateException("Symbolic link hijacking detected >> [$canonical] != [$directory]")
-                        }
-                    }
-
-                    try {
-                        // Some systems, such as macOS, have highly unreliable fcntl byte-range file lock
-                        // behavior when the target is a symbolic link. We want no part in that and require
-                        // the lock file to be a regular file.
-                        val canonical = dotLockFile.canonicalFile2()
-                        if (canonical != dotLockFile) {
-                            logW { "Symbolic link detected >> [$canonical] != [$dotLockFile]" }
-                            dotLockFile.delete2(ignoreReadOnly = true)
-                            delay(10.milliseconds)
-                        }
-                    } catch (t: Throwable) {
-                        if (t is CancellationException) throw t
-                        // ignore
-                    }
-
-                    jobLog.ensureActive()
-                    val lockFile = dotLockFile.openLockFileRobustly()
-                    val lockFileCompletion = jobLog.closeOnCompletion(lockFile)
-
-                    try {
-                        val canonical = files[0].canonicalFile2()
-                        if (canonical != files[0]) {
-                            logW { "Symbolic link detected >> [$canonical] != [${files[0]}]" }
-                            files[0].delete2(ignoreReadOnly = true)
-                            delay(10.milliseconds)
-                        }
-                    } catch (t: Throwable) {
-                        if (t is CancellationException) throw t
-                        // ignore
-                    }
-
-                    jobLog.ensureActive()
-                    val logStream = files[0].openLogFileRobustly(modeFile)
-                    val logStreamCompletion = jobLog.closeOnCompletion(logStream)
-
-                    logLoop(
-                        logBuffer = logBuffer,
-                        buf = buf,
-                        _lockFile = lockFile,
-                        _lockFileCompletion = lockFileCompletion,
-                        _logStream = logStream,
-                        _logStreamCompletion = logStreamCompletion,
-                    )
+                    previousLogJob.join()
                 }
+
+                directory.mkdirs2(mode = modeDirectory, mustCreate = false)
+
+                run {
+                    val canonical = directory.canonicalFile2()
+                    if (canonical != directory) {
+                        // FAIL:
+                        //   Between time of Builder.build and Log.Root.install, the specified
+                        //   directory was modified to contain symbolic links such that the current
+                        //   one points to a different location. This would invalidate the Log.uid,
+                        //   allowing multiple FileLog instances to be installed simultaneously for
+                        //   the same log file leading to data corruption.
+                        throw IllegalStateException("Symbolic link hijacking detected >> [$canonical] != [$directory]")
+                    }
+                }
+
+                try {
+                    // Some systems, such as macOS, have highly unreliable fcntl byte-range file lock
+                    // behavior when the target is a symbolic link. We want no part in that and require
+                    // the lock file to be a regular file.
+                    val canonical = dotLockFile.canonicalFile2()
+                    if (canonical != dotLockFile) {
+                        logW { "Symbolic link detected >> [$canonical] != [$dotLockFile]" }
+                        dotLockFile.delete2(ignoreReadOnly = true)
+                        delay(10.milliseconds)
+                    }
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    // ignore
+                }
+
+                jobLog.ensureActive()
+                val lockFile = dotLockFile.openLockFileRobustly()
+                val lockFileCompletion = jobLog.closeOnCompletion(lockFile)
+
+                try {
+                    val canonical = files[0].canonicalFile2()
+                    if (canonical != files[0]) {
+                        logW { "Symbolic link detected >> [$canonical] != [${files[0]}]" }
+                        files[0].delete2(ignoreReadOnly = true)
+                        delay(10.milliseconds)
+                    }
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    // ignore
+                }
+
+                jobLog.ensureActive()
+                val logStream = files[0].openLogFileRobustly(modeFile)
+                val logStreamCompletion = jobLog.closeOnCompletion(logStream)
+
+                logLoop(
+                    logBuffer = logBuffer,
+                    _lockFile = lockFile,
+                    _lockFileCompletion = lockFileCompletion,
+                    _logStream = logStream,
+                    _logStreamCompletion = logStreamCompletion,
+                )
             }
         }.let { logJob ->
+            logJob.invokeOnCompletion { t ->
+                logBuffer.channel.close()
+                var count = 0L
+                try {
+                    while (true) {
+                        val logAction = logBuffer.channel.tryReceive().getOrNull() ?: break
+                        count++
+                        logAction.drop(undelivered = false)
+                    }
+                } finally {
+                    // Paranoia; if drop throws exception which it "shouldn't".
+                    logBuffer.channel.cancel()
+                }
+                if (count > 0L) logW(t) { "$count log(s) awaiting processing were dropped." }
+            }
+
             val logHandle = logBuffer to ScopeLogHandle(
                 logJob,
                 scopeFileLog,
@@ -1439,11 +1459,6 @@ public class FileLog: Log {
                 dispatcher,
                 dispatcherDeRef,
             )
-
-            // Paranoia. LogBuffer.use {} will close the channel and consume all undelivered
-            // LogAction, but this will guarantee that LogBuffer.channel's onUndeliveredElement
-            // callback is invoked for any stragglers.
-            logJob.invokeOnCompletion { logBuffer.channel.cancel() }
 
             _logJob = logJob
             _logHandle._set(new = logHandle)
@@ -1470,7 +1485,6 @@ public class FileLog: Log {
     * */
     private suspend fun ScopeLog.logLoop(
         logBuffer: LogBuffer,
-        buf: ByteArray,
         _lockFile: LockFile,
         _lockFileCompletion: DisposableHandle,
         _logStream: FileStream.ReadWrite,
@@ -1515,6 +1529,9 @@ public class FileLog: Log {
             // from retryAction would there be unprocessed LogAction present.
             retryAction._getAndSet(new = null)?.drop(undelivered = true)
         }
+
+        val buf = ByteArray(DEFAULT_BUFFER_SIZE)
+        jobLogLoop.invokeOnCompletion { buf.fill(0) }
 
         // Migrate completion handles to ScopeLogLoop (take ownership over them)
         lockFileCompletion.dispose()
