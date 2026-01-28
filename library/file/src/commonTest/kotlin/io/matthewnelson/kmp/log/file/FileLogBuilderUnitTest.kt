@@ -59,7 +59,9 @@ class FileLogBuilderUnitTest {
 
     @Test
     fun givenBufferCapacity_whenMinWaitOnEqualsMin_thenIsChannelUNLIMITED() {
-        assertEquals(Channel.UNLIMITED, newBuilder().build().bufferCapacity)
+        val log = newBuilder().build()
+        assertEquals(log.min, log.minWaitOn)
+        assertEquals(Channel.UNLIMITED, log.bufferCapacity)
     }
 
     @Test
@@ -72,12 +74,44 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenBufferCapacity_whenMinWaitOnGreaterThanMinButCapacityLessThanChannelRENDEZVOUS_thenIsChannelRENDEZVOUS() {
+    fun givenBufferCapacity_whenMinWaitOnGreaterThanMinAndBufferOverflowSUSPENDButCapacityLessThan0_thenIs0() {
         val log = newBuilder()
             .minWaitOn(Log.Level.Fatal)
             .bufferCapacity(-1)
+            .bufferOverflow(dropOldest = false) // BufferOverflow.SUSPEND
             .build()
+        // Channel.RENDEZVOUS == 0
         assertEquals(Channel.RENDEZVOUS, log.bufferCapacity)
+    }
+
+    @Test
+    fun givenBufferCapacity_whenMinWaitOnGreaterThanMinAndBufferOverflowDROPOLDESTButCapacityLessThan256_thenIs256() {
+        val log = newBuilder()
+            .minWaitOn(Log.Level.Fatal)
+            .bufferCapacity(2)
+            .bufferOverflow(dropOldest = true)
+            .build()
+        assertEquals(256, log.bufferCapacity)
+    }
+
+    @Test
+    fun givenBufferOverflow_whenMinWaitOnEqualsMinAndBufferOverflowDROPOLDEST_thenIsBufferOverflowSUSPEND() {
+        val log = newBuilder()
+            .bufferOverflow(dropOldest = true)
+            .build()
+        assertEquals(log.min, log.minWaitOn)
+        // false == BufferOverflow.SUSPEND
+        assertEquals(false, log.bufferOverflowDropOldest)
+    }
+
+    @Test
+    fun givenBufferOverflow_whenMinWaitOnGreaterThanMinAndBufferOverflowDROPOLDEST_thenIsBufferOverflowDROPOLDEST() {
+        val log = newBuilder()
+            .minWaitOn(Log.Level.Fatal)
+            .bufferOverflow(dropOldest = true)
+            .build()
+        // true == BufferOverflow.DROP_OLDEST
+        assertEquals(true, log.bufferOverflowDropOldest)
     }
 
     @Test

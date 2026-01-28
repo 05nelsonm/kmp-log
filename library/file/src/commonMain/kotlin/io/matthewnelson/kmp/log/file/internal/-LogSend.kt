@@ -30,7 +30,7 @@ internal value class LogSend private constructor(private val job: Deferred<Byte>
     internal constructor(
         scope: ScopeLogHandle,
         logBuffer: LogBuffer,
-        logAction: LogAction,
+        logAction: LogAction.Write,
     ): this(job = scope.async(start = CoroutineStart.ATOMIC) {
         try {
             withContext(NonCancellable) { logBuffer.channel.send(logAction) }

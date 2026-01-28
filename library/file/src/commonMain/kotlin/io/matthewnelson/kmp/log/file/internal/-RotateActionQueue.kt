@@ -21,16 +21,16 @@ import kotlinx.coroutines.channels.Channel
 import kotlin.jvm.JvmInline
 
 @JvmInline
-internal value class RotateActionQueue private constructor(private val channel: Channel<LogAction>) {
+internal value class RotateActionQueue private constructor(private val channel: Channel<LogAction.Rotation>) {
 
-    internal constructor(scope: ScopeLogLoop): this(LogBuffer(capacity = Channel.UNLIMITED).channel) {
+    internal constructor(scope: ScopeLogLoop): this(Channel(Channel.UNLIMITED)) {
         scope.jobLogLoop.invokeOnCompletion { channel.cancel(cause = null) }
     }
 
-    internal inline fun enqueue(noinline action: LogAction) {
+    internal inline fun enqueue(action: LogAction.Rotation) {
         // Will never fail because Channel.UNLIMITED
         channel.trySend(action)
     }
 
-    internal inline fun dequeueOrNull(): LogAction? = channel.tryReceive().getOrNull()
+    internal inline fun dequeueOrNull(): LogAction.Rotation? = channel.tryReceive().getOrNull()
 }
