@@ -17,12 +17,8 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
-import io.matthewnelson.encoding.core.EncoderDecoder.Companion.DEFAULT_BUFFER_SIZE
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
-import kotlin.contracts.ExperimentalContracts
-import kotlin.contracts.InvocationKind
-import kotlin.contracts.contract
 import kotlin.jvm.JvmInline
 
 @JvmInline
@@ -37,41 +33,4 @@ internal value class LogBuffer private constructor(internal val channel: Channel
         // Channel.RENDEZVOUS == 0
         require(capacity >= Channel.RENDEZVOUS) { "capacity[$capacity] < Channel.RENDEZVOUS" }
     }
-}
-
-@OptIn(ExperimentalContracts::class)
-internal inline fun <T> LogBuffer.use(
-    logW: (t: Throwable?, lazyMsg: () -> Any?) -> Int,
-    block: (buf: ByteArray) -> T,
-): T {
-    contract {
-        callsInPlace(block, InvocationKind.EXACTLY_ONCE)
-        callsInPlace(logW, InvocationKind.AT_MOST_ONCE)
-    }
-
-    val buf = ByteArray(DEFAULT_BUFFER_SIZE)
-    var threw: Throwable? = null
-
-    val result: T? = try {
-        block(buf)
-    } catch (t: Throwable) {
-        threw = t
-        null
-    } finally {
-        channel.close()
-        var count = 0L
-        while (true) {
-            val logAction = channel.tryReceive().getOrNull() ?: break
-            count++
-            logAction.drop(undelivered = false)
-        }
-        buf.fill(0)
-        if (count > 0L) logW(threw) {
-            "$count log(s) awaiting processing were dropped due to Channel closure."
-        }
-    }
-
-    threw?.let { throw it }
-    @Suppress("UNCHECKED_CAST")
-    return result as T
 }
