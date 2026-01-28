@@ -102,6 +102,7 @@ import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.currentCoroutineContext
@@ -238,6 +239,11 @@ public class FileLog: Log {
     /**
      * TODO
      * */
+    public val bufferOverflowDropOldest: Boolean
+
+    /**
+     * TODO
+     * */
     @JvmField
     public val minWaitOn: Level
 
@@ -334,10 +340,6 @@ public class FileLog: Log {
         return true
     }
 
-    // TODO: (Issue #60)
-    //  @Throws(CancellationException::class, IOException:class)
-    //  public suspend fun enqueueRead(buf: ByteArray, offset: Int, len: Int, position: Long): Int
-
     /**
      * TODO
      * */
@@ -379,6 +381,7 @@ public class FileLog: Log {
         private var _maxLogFileSize = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
         private var _maxLogFiles: Byte = if (isDesktop()) 5 else 3
         private var _bufferCapacity = -1
+        private var _bufferOverflowDropOldest = false
         private var _minWaitOn = Level.Verbose
         private var _yieldOn: Byte = 2
         private var _formatter = DEFAULT_FORMATTER
@@ -572,6 +575,15 @@ public class FileLog: Log {
          * @return The [Builder]
          * */
         public fun bufferCapacity(nLogs: Int): Builder = apply { _bufferCapacity = nLogs }
+
+        /**
+         * DEFAULT: `false` (i.e. TODO)
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun bufferOverflow(dropOldest: Boolean): Builder = apply { _bufferOverflowDropOldest = dropOldest }
 
         /**
          * DEFAULT: [Level.Verbose]
@@ -883,6 +895,11 @@ public class FileLog: Log {
 
             val min = _min
             val minWaitOn = _minWaitOn.coerceAtLeast(min)
+            val bufferOverflow = when {
+                minWaitOn == min -> BufferOverflow.SUSPEND
+                _bufferOverflowDropOldest -> BufferOverflow.DROP_OLDEST
+                else -> BufferOverflow.SUSPEND
+            }
             val bufferCapacity = if (minWaitOn == min) {
                 // If minWaitOn is configured such that FileLog.log blocks for all
                 // Log.Level, then LogBuffer's Channel capacity has an inherent
@@ -891,7 +908,11 @@ public class FileLog: Log {
                 // (if not closed).
                 Channel.UNLIMITED
             } else {
-                _bufferCapacity.coerceAtLeast(Channel.RENDEZVOUS /* 0 */)
+                // If DROP_OLDEST is configured we cannot use Channel.RENDEZVOUS as
+                // the minimum. Otherwise, with Channel.trySend always succeeding,
+                // logs will almost always be dropped.
+                val minimum = if (bufferOverflow == BufferOverflow.SUSPEND) Channel.RENDEZVOUS else 256
+                _bufferCapacity.coerceAtLeast(minimum)
             }
 
             return FileLog(
@@ -904,6 +925,7 @@ public class FileLog: Log {
                 modeDirectory = _modeDirectory.build(),
                 modeFile = _modeFile.build(),
                 bufferCapacity = bufferCapacity,
+                bufferOverflow = bufferOverflow,
                 minWaitOn = minWaitOn,
                 yieldOn = _yieldOn.coerceIn(1, 10),
                 formatter = _formatter,
@@ -930,6 +952,8 @@ public class FileLog: Log {
     internal val dotRotateFile: File
     @get:JvmSynthetic
     internal val dotRotateTmpFile: File
+
+    private val bufferOverflow: BufferOverflow
 
     private val formatter: Formatter
     private val formatterOmitYear: Boolean
@@ -961,6 +985,7 @@ public class FileLog: Log {
         modeDirectory: String,
         modeFile: String,
         bufferCapacity: Int,
+        bufferOverflow: BufferOverflow,
         minWaitOn: Level,
         yieldOn: Byte,
         formatter: Formatter,
@@ -1008,6 +1033,8 @@ public class FileLog: Log {
             this.dotRotateTmpFile = directory.resolve("$dotName0.tmp")
         }
 
+        this.bufferOverflow = bufferOverflow
+
         this.formatter = formatter
         this.formatterOmitYear = formatterOmitYear
 
@@ -1037,6 +1064,7 @@ public class FileLog: Log {
         this.modeDirectory = modeDirectory
         this.modeFile = modeFile
         this.bufferCapacity = bufferCapacity
+        this.bufferOverflowDropOldest = bufferOverflow == BufferOverflow.DROP_OLDEST
         this.minWaitOn = minWaitOn
         this.yieldOn = yieldOn
         this.blacklistDomain = blacklistDomain
@@ -1305,7 +1333,7 @@ public class FileLog: Log {
         // thread starvation could occur and LogLoop is unable to yield or launch LogRotation.
         val (dispatcher, dispatcherDeRef) = allocator.getOrAllocate()
 
-        val logBuffer = LogBuffer(capacity = bufferCapacity)
+        val logBuffer = LogBuffer(capacity = bufferCapacity, overflow = bufferOverflow)
         val previousLogJob = _logJob
 
         scopeFileLog.launch(dispatcher, start = CoroutineStart.ATOMIC) {

@@ -77,12 +77,10 @@ internal suspend inline fun LogAction.consumeAndIgnore(buf: ByteArray, sizeLog: 
 @JvmInline
 internal value class LogBuffer private constructor(internal val channel: Channel<LogAction>) {
 
-    internal constructor(): this(capacity = Channel.UNLIMITED)
-
     @Throws(IllegalArgumentException::class)
-    internal constructor(capacity: Int): this(Channel(
+    internal constructor(capacity: Int, overflow: BufferOverflow): this(Channel(
         capacity = capacity,
-        onBufferOverflow = BufferOverflow.SUSPEND,
+        onBufferOverflow = overflow,
         onUndeliveredElement = { logAction ->
             @OptIn(DelicateCoroutinesApi::class)
             GlobalScope.launch(context = Dispatchers.Unconfined, start = CoroutineStart.ATOMIC) {
@@ -95,6 +93,10 @@ internal value class LogBuffer private constructor(internal val channel: Channel
     }
 
     internal companion object {
+
+        internal fun unlimited(): LogBuffer {
+            return LogBuffer(capacity = Channel.UNLIMITED, overflow = BufferOverflow.SUSPEND)
+        }
 
         // Special return value for a LogAction to trigger rotateLogs
         internal const val EXECUTE_ROTATE_LOGS = -42L

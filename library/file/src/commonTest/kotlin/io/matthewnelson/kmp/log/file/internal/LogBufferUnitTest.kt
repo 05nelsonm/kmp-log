@@ -35,7 +35,7 @@ class LogBufferUnitTest {
 
     @Test
     fun givenUse_whenFinallyBlockExecutes_thenClosesChannelAndConsumesAllBufferedActions() = runTest {
-        val logBuffer = LogBuffer()
+        val logBuffer = LogBuffer.unlimited()
         val expected = 11
 
         var count = 0
