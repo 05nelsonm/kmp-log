@@ -1150,7 +1150,7 @@ public class FileLog: Log {
             private var _executed = 0
 
             override fun drop(undelivered: Boolean) {
-                check(_executed++ == 0) { "LogAction.Write has already been executed" }
+                check(_executed++ == 0) { _executed--; "LogAction.Write has already been executed" }
 
                 preprocessing.cancel()
                 logWait?.fail()
@@ -1166,7 +1166,7 @@ public class FileLog: Log {
                 sizeLog: Long,
                 processedWrites: Int,
             ): Long {
-                check(_executed++ == 0) { "LogAction.Write has already been executed" }
+                check(_executed++ == 0) { _executed--; "LogAction.Write has already been executed" }
 
                 var threw: Throwable? = null
                 val preprocessingResult = try {
