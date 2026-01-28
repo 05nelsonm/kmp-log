@@ -16,7 +16,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 	public final field whitelistDomainNull Z
 	public final field whitelistTag Ljava/util/Set;
 	public final field yieldOn B
-	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/util/List;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;ILkotlinx/coroutines/channels/BufferOverflow;Lio/matthewnelson/kmp/log/Log$Level;BLio/matthewnelson/kmp/log/file/FileLog$Formatter;ZLjava/util/Set;Ljava/util/Set;ZLjava/util/Set;ZZLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/util/List;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;IZLio/matthewnelson/kmp/log/Log$Level;BLio/matthewnelson/kmp/log/file/FileLog$Formatter;ZLjava/util/Set;Ljava/util/Set;ZLjava/util/Set;ZZLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getBufferOverflowDropOldest ()Z
 	public final fun isActive ()Z
 	public final fun pendingLogCount ()J
