@@ -15,39 +15,41 @@
  **/
 package io.matthewnelson.kmp.log.file.internal
 
-import io.matthewnelson.encoding.core.EncoderDecoder.Companion.DEFAULT_BUFFER_SIZE
+import io.matthewnelson.kmp.file.FileStream
 import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.toList
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertNotEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(DelicateCoroutinesApi::class)
 class LogBufferUnitTest {
 
     @Test
     fun givenUse_whenFinallyBlockExecutes_thenClosesChannelAndConsumesAllBufferedActions() = runTest {
-        val logBuffer = LogBuffer.unlimited()
+        val logBuffer = LogBuffer(Channel.UNLIMITED, BufferOverflow.SUSPEND)
         val expected = 11
 
         var count = 0
         repeat(expected) {
-            logBuffer.channel.trySend { stream, buf, sizeLog, processed ->
-                count++
-                assertEquals(null, stream)
-                assertEquals(DEFAULT_BUFFER_SIZE, buf.size)
-                assertEquals(0L, sizeLog)
-                assertEquals(0, processed)
-                0L
-            }
+            logBuffer.channel.trySend(object : LogAction.Write {
+                override suspend fun invoke(
+                    stream: FileStream.ReadWrite,
+                    buf: ByteArray,
+                    sizeLog: Long,
+                    processedWrites: Int,
+                ): Long = error("Should not be called")
+
+                override fun drop(undelivered: Boolean) {
+                    count++
+                    // LogBuffer.use should always pass `false`
+                    assertFalse(undelivered)
+                }
+            })
         }
 
         try {

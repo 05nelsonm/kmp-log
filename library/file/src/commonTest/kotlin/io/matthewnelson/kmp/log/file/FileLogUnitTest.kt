@@ -268,6 +268,7 @@ class FileLogUnitTest {
                 override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
                     if (msg == null) return false
                     val print = when {
+                        level > Level.Debug -> true
 //                        msg.startsWith("Block[") -> true
                         msg.startsWith("LogRotation") -> true
                         msg.contains("log(s)") -> true

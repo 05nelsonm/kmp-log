@@ -49,10 +49,10 @@ import io.matthewnelson.kmp.log.file.internal.FileLock
 import io.matthewnelson.kmp.log.file.internal.InvalidFileLock
 import io.matthewnelson.kmp.log.file.internal.LockFile
 import io.matthewnelson.kmp.log.file.internal.LogAction
+import io.matthewnelson.kmp.log.file.internal.LogAction.Companion.EXECUTE_ROTATE_LOGS
+import io.matthewnelson.kmp.log.file.internal.LogAction.Companion.MAX_RETRIES
+import io.matthewnelson.kmp.log.file.internal.LogAction.Companion.drop
 import io.matthewnelson.kmp.log.file.internal.LogBuffer
-import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE_LOGS
-import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.EXECUTE_ROTATE_LOGS_AND_RETRY
-import io.matthewnelson.kmp.log.file.internal.LogBuffer.Companion.MAX_RETRIES
 import io.matthewnelson.kmp.log.file.internal.LogSend
 import io.matthewnelson.kmp.log.file.internal.LogWait
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
@@ -73,7 +73,6 @@ import io.matthewnelson.kmp.log.file.internal._getAndSet
 import io.matthewnelson.kmp.log.file.internal._increment
 import io.matthewnelson.kmp.log.file.internal._set
 import io.matthewnelson.kmp.log.file.internal.async
-import io.matthewnelson.kmp.log.file.internal.consumeAndIgnore
 import io.matthewnelson.kmp.log.file.internal.deleteOrMoveToRandomIfNonEmptyDirectory
 import io.matthewnelson.kmp.log.file.internal.exists2Robustly
 import io.matthewnelson.kmp.log.file.internal.format
@@ -967,6 +966,8 @@ public class FileLog: Log {
     private val scopeFileLog: ScopeFileLog
     private val allocator: DispatcherAllocator
 
+    private val checkIfLogRotationIsNeeded: LogAction.Rotation
+
     @Volatile
     private var _onInstallInvocations: Long = 0L
     @Volatile
@@ -1056,6 +1057,20 @@ public class FileLog: Log {
             override fun doAllocation(): CloseableCoroutineDispatcher = newSingleThreadContext(name = LOG.tag)
             override fun debug(): Boolean = this@FileLog.debug
         }
+        // For logLoop's RotateActionQueue
+        this.checkIfLogRotationIsNeeded = LogAction.Rotation { _, _, sizeLog, _ ->
+            if (sizeLog >= maxLogFileSize) return@Rotation EXECUTE_ROTATE_LOGS
+
+            // Moving dotRotateFile -> *.001 is the last move that gets
+            // executed, so its existence indicates that a log rotation
+            // was interrupted, either by process termination or error.
+            if (dotRotateFile.exists2Robustly()) return@Rotation EXECUTE_ROTATE_LOGS
+
+            logD { "$LOG_ROTATION not needed" }
+
+            // Good to go; do nothing.
+            0L
+        }
 
         this.logDirectory = directory.path
         this.logFiles = files.map { it.path }.toImmutableList()
@@ -1132,108 +1147,116 @@ public class FileLog: Log {
             else -> LogWait(scope)
         }
 
-        var retries = 0
-        val logAction: LogAction = logAction@ { stream, buf, sizeLog, _ ->
-            // Can be null if we're being dropped by LogBuffer.use {} completion
-            // or LogBuffer.channel's onUndeliveredElement callback being triggered
-            // due to a send failure because Channel.close had been called.
-            if (stream == null) {
+        val logAction = object : LogAction.Write {
+
+            @Volatile
+            private var _retries = 0
+
+            override fun drop(undelivered: Boolean) {
                 preprocessing.cancel()
                 logWait?.fail()
                 _pendingLogCount._decrement()
-                return@logAction 0L
+                if (undelivered) logW {
+                    "A log awaiting processing was dropped. ${_pendingLogCount._get()} log(s) are currently pending."
+                }
             }
 
-            var threw: Throwable? = null
-            val preprocessingResult = try {
-                preprocessing.await()
-            } catch (t: Throwable) {
-                threw = t
-                null
-            }
+            override suspend fun invoke(
+                stream: FileStream.ReadWrite,
+                buf: ByteArray,
+                sizeLog: Long,
+                processedWrites: Int,
+            ): Long {
+                var threw: Throwable? = null
+                val preprocessingResult = try {
+                    preprocessing.await()
+                } catch (t: Throwable) {
+                    threw = t
+                    null
+                }
 
-            if (preprocessingResult == null) {
-                if (level == Level.Fatal) {
-                    // fsync no matter what before the process is aborted.
-                    try {
-                        stream.sync(meta = true)
-                    } catch (e: IOException) {
-                        // Try to force it by closing.
+                if (preprocessingResult == null) {
+                    if (level == Level.Fatal) {
+                        // fsync no matter what before the process is aborted.
                         try {
-                            stream.close()
-                        } catch (ee: IOException) {
-                            e.addSuppressed(ee)
+                            stream.sync(meta = true)
+                        } catch (e: IOException) {
+                            // Try to force it by closing.
+                            try {
+                                stream.close()
+                            } catch (ee: IOException) {
+                                e.addSuppressed(ee)
+                            }
+                            threw?.addSuppressed(e)
                         }
-                        threw?.addSuppressed(e)
+                    }
+
+                    _pendingLogCount._decrement()
+                    logWait?.fail()
+
+                    // threw will only ever be non-null when result == null
+                    threw?.let { throw it }
+
+                    return 0L
+                }
+
+                val (formatted, sizeUTF8) = preprocessingResult
+
+                val needsRotation = if (sizeUTF8 >= maxLogFileSize) {
+                    // Ideally this will NEVER be the case. But, if it is, a rotation
+                    // will be executed to truncate log file to 0 and commit the entire
+                    // log to a single log file. After return, another log rotation will
+                    // transpire. This "should" be ok b/c retries will not release the
+                    // file lock, so another process writing to it will not occur. Of
+                    // course, if the log rotation executes and there is a lock release
+                    // failure requiring closure of the lock file, then we may lose our
+                    // log lock, but that is unlikely and will simply retry again after
+                    // re-acquisition.
+                    sizeLog > 0L
+                } else {
+                    (sizeLog + sizeUTF8) !in 0L..maxLogFileSize
+                }
+
+                if (needsRotation && _retries++ < MAX_RETRIES) {
+                    return EXECUTE_ROTATE_LOGS
+                }
+
+                val written = try {
+                    formatted.decodeBuffered(
+                        UTF8,
+                        throwOnOverflow = false,
+                        buf = buf,
+                        action = stream::write,
+                    )
+                } catch (t: Throwable) {
+                    threw = t
+                    0L
+                } finally {
+                    if (level == Level.Fatal) {
+                        // fsync no matter what before the process is aborted.
+                        try {
+                            stream.sync(meta = true)
+                        } catch (e: IOException) {
+                            // Try to force it by closing.
+                            try {
+                                stream.close()
+                            } catch (ee: IOException) {
+                                e.addSuppressed(ee)
+                            }
+                            threw?.addSuppressed(e)
+                        }
                     }
                 }
 
                 _pendingLogCount._decrement()
-                logWait?.fail()
-
-                // threw will only ever be non-null when result == null
-                threw?.let { throw it }
-
-                return@logAction 0L
-            }
-
-            val (formatted, sizeUTF8) = preprocessingResult
-
-            val needsRotation = if (sizeUTF8 >= maxLogFileSize) {
-                // Ideally this will NEVER be the case. But, if it is, a rotation
-                // will be executed to truncate log file to 0 and commit the entire
-                // log to a single log file. After return, another log rotation will
-                // transpire. This "should" be ok b/c retries will not release the
-                // file lock, so another process writing to it will not occur. Of
-                // course, if the log rotation executes and there is a lock release
-                // failure requiring closure of the lock file, then we may lose our
-                // log lock, but that is unlikely and will simply retry again after
-                // re-acquisition.
-                sizeLog > 0L
-            } else {
-                (sizeLog + sizeUTF8) !in 0L..maxLogFileSize
-            }
-
-            @Suppress("AssignedValueIsNeverRead")
-            if (needsRotation && retries++ < MAX_RETRIES) {
-                return@logAction EXECUTE_ROTATE_LOGS_AND_RETRY
-            }
-
-            val written = try {
-                formatted.decodeBuffered(
-                    UTF8,
-                    throwOnOverflow = false,
-                    buf = buf,
-                    action = stream::write,
-                )
-            } catch (t: Throwable) {
-                threw = t
-                0L
-            } finally {
-                if (level == Level.Fatal) {
-                    // fsync no matter what before the process is aborted.
-                    try {
-                        stream.sync(meta = true)
-                    } catch (e: IOException) {
-                        // Try to force it by closing.
-                        try {
-                            stream.close()
-                        } catch (ee: IOException) {
-                            e.addSuppressed(ee)
-                        }
-                        threw?.addSuppressed(e)
-                    }
+                threw?.let { t ->
+                    logWait?.fail()
+                    throw t
                 }
-            }
 
-            _pendingLogCount._decrement()
-            threw?.let { t ->
-                logWait?.fail()
-                throw t
+                logWait?.succeed()
+                return written
             }
-
-            logWait?.succeed()
-            written
         }
 
         val trySendResult = logBuffer.channel.trySend(logAction)
@@ -1401,7 +1424,7 @@ public class FileLog: Log {
                     val logStreamCompletion = jobLog.closeOnCompletion(logStream)
 
                     logLoop(
-                        logBuffer = this@use,
+                        logBuffer = logBuffer,
                         buf = buf,
                         _lockFile = lockFile,
                         _lockFileCompletion = lockFileCompletion,
@@ -1478,13 +1501,13 @@ public class FileLog: Log {
         // to check for an interrupted log rotation before any writes to logStream
         // occur. If the program previously terminated in the midst of moving files,
         // that needs to be finished off firstly.
-        rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
+        rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
 
         // If a write operation for a log entry would end up causing the log file to
         // exceed the configured maxLogFileSize, it is cached here and retried after
         // a log rotation is performed. This allows us to not drop lockLog and perform
         // an immediate retry of the LogAction after returning from rotateLogs.
-        val retryAction = _atomicRef<LogAction?>(initial = null)
+        val retryAction = _atomicRef<LogAction.Write?>(initial = null)
         jobLogLoop.invokeOnCompletion {
             // This should never really be the case because the main loop would have
             // dequeued this for processing over ever calling logBuffer.channel.receive.
@@ -1492,15 +1515,7 @@ public class FileLog: Log {
             // Only in the event of an error within the loop (such as file re-open
             // failure) where a LogAction from rotateActionQueue was dequeued over one
             // from retryAction would there be unprocessed LogAction present.
-            val action = retryAction._getAndSet(new = null)
-                ?: return@invokeOnCompletion
-
-            @OptIn(DelicateCoroutinesApi::class)
-            scopeFileLog.launch(Dispatchers.Unconfined, start = CoroutineStart.ATOMIC) {
-                action.consumeAndIgnore(buf)
-            }
-
-            logW { "A cached LogAction awaiting retry after log rotation was dropped." }
+            retryAction._getAndSet(new = null)?.drop(undelivered = true)
         }
 
         // Migrate completion handles to ScopeLogLoop (take ownership over them)
@@ -1518,7 +1533,7 @@ public class FileLog: Log {
             yield()
 
             // Will only be set to null via the inner loop. Once available, it MUST be
-            // processed or LogAction.consumeAndIgnore called on it.
+            // processed or LogAction.drop called on it.
             var logAction: LogAction? = try {
                 // Priority 1 LogAction to process immediately.
                 rotateActionQueue.dequeueOrNull()
@@ -1566,7 +1581,7 @@ public class FileLog: Log {
                             // so that we do not invalidate its lockRotate inadvertently.
                             awaitLogRotation()
                         } catch (t: CancellationException) {
-                            logAction?.consumeAndIgnore(buf)
+                            logAction.drop(undelivered = true)
                             throw t
                         }
                     }
@@ -1597,7 +1612,7 @@ public class FileLog: Log {
                         lockFile.lockLog()
                     } catch (tt: Throwable) {
                         // Total failure. Close up shop.
-                        logAction?.consumeAndIgnore(buf)
+                        logAction.drop(undelivered = true)
                         if (tt is CancellationException) throw tt
                         t.addSuppressed(tt)
                         throw t
@@ -1640,7 +1655,7 @@ public class FileLog: Log {
                         logStream.position(new = size)
                     } catch (t: Throwable) {
                         // Total failure. Close up shop.
-                        logAction?.consumeAndIgnore(buf)
+                        logAction.drop(undelivered = true)
                         if (t is CancellationException) throw t
                         e.addSuppressed(t)
                         throw e
@@ -1684,21 +1699,20 @@ public class FileLog: Log {
                         size += written
                         logD { "Wrote $written bytes to ${files[0].name}" }
                     } else {
-                        // Check "special" negative return values
+                        // Check "special" negative return value
                         if (written == EXECUTE_ROTATE_LOGS) {
                             size = maxLogFileSize // Force a log rotation
-                        }
-                        if (written == EXECUTE_ROTATE_LOGS_AND_RETRY) {
-                            size = maxLogFileSize // Force a log rotation
 
-                            val previous = retryAction._getAndSet(new = action)
-                            if (previous != null) {
-                                previous.consumeAndIgnore(buf)
-                                // HARD fail.... There should ONLY ever be 1 retryAction.
-                                throw IllegalStateException("retryAction's previous value was non-null")
+                            if (action is LogAction.Write) {
+                                val previous = retryAction._getAndSet(new = action)
+                                if (previous != null) {
+                                    previous.drop(undelivered = true)
+                                    // HARD fail.... There should ONLY ever be 1 retryAction.
+                                    throw IllegalStateException("retryAction's previous value was non-null")
+                                }
+
+                                logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after $LOG_ROTATION." }
                             }
-
-                            logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after $LOG_ROTATION." }
                         }
                     }
 
@@ -1771,7 +1785,7 @@ public class FileLog: Log {
                     }
                 } else {
                     // We lost lockLog. Trigger an immediate retry.
-                    rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
+                    rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
                 }
             }
 
@@ -1845,7 +1859,7 @@ public class FileLog: Log {
         // NO LogAction before continuing.
         while (true) {
             val action = rotateActionQueue.dequeueOrNull() ?: break
-            action.consumeAndIgnore(buf)
+            action(logStream, buf, 0L, 0)
         }
 
         val lockRotate = try {
@@ -1872,7 +1886,7 @@ public class FileLog: Log {
             logW(t) { "Failed to acquire a rotation lock on ${dotLockFile.name}. Retrying $LOG_ROTATION." }
 
             // Trigger an immediate retry.
-            rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
+            rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
 
             return
         }
@@ -1927,7 +1941,7 @@ public class FileLog: Log {
                 // The retryAction is currently null, so trigger an immediate
                 // retry with a freshly opened logStream. If another process is also
                 // logging, it may finish off the log rotation for us, so.
-                rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
+                rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
 
                 // Release lockRotate below and return early.
                 0L
@@ -1978,7 +1992,7 @@ public class FileLog: Log {
 
             // Trigger an immediate retry. If another process is also
             // logging, it may finish off the log rotation for us, so.
-            rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
+            rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
 
             return
         }
@@ -1994,7 +2008,7 @@ public class FileLog: Log {
                 // and invalidate all locks currently held, otherwise the
                 // next log rotation may deadlock when attempting to acquire
                 // lockRotate.
-                rotateActionQueue.enqueue { stream, _, _, processed ->
+                rotateActionQueue.enqueue { stream, _, _, processedWrites ->
                     // This is done lazily here as a priority LogAction in order
                     // to not inadvertently invalidate a lockLog in the midst
                     // of executing a LogAction that is writing to logStream. If
@@ -2011,7 +2025,7 @@ public class FileLog: Log {
                     // (all data has been pushed to disk already because the sync was
                     // performed here and then the inner loop popped out as a result
                     // of losing lockLog).
-                    if (stream != null && processed > 0 && stream.isOpen()) {
+                    if (processedWrites > 0 && stream.isOpen()) {
                         logD { "Syncing ${files[0].name}" }
                         try {
                             stream.sync(meta = true)
@@ -2468,7 +2482,7 @@ public class FileLog: Log {
 
                 // Trigger an immediate retry. If another process is also
                 // logging, it may finish off the log rotation for us, so.
-                rotateActionQueue.enqueue(::checkIfLogRotationIsNeeded)
+                rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
                 break
             }
         }
@@ -2476,33 +2490,6 @@ public class FileLog: Log {
 //        if (moves.size != startSize) {
 //            // TODO: fsync directory???
 //        }
-    }
-
-    /*
-    * A LogAction utilized by rotateActionQueue and executed by
-    * LogLoop's inner loop to trigger a rotateLogs call
-    * */
-    @Suppress("UNUSED", "UNUSED_PARAMETER")
-    private suspend fun checkIfLogRotationIsNeeded(
-        stream: FileStream.ReadWrite?,
-        buf: ByteArray,
-        sizeLog: Long,
-        processed: Int,
-    ): Long {
-        // This is being consumed and ignored. Return early.
-        if (stream == null) return 0L
-
-        if (sizeLog >= maxLogFileSize) return EXECUTE_ROTATE_LOGS
-
-        // Moving dotRotateFile -> *.001 is the last move that gets
-        // executed, so its existence indicates that a log rotation
-        // was interrupted, either by process termination or error.
-        if (dotRotateFile.exists2Robustly()) return EXECUTE_ROTATE_LOGS
-
-        logD { "$LOG_ROTATION not needed" }
-
-        // Good to go; do nothing.
-        return 0L
     }
 
     @Throws(CancellationException::class)
