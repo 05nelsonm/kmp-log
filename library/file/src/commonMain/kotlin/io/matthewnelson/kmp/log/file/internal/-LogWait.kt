@@ -35,8 +35,8 @@ internal value class LogWait private constructor(private val job: CompletableJob
         return !job.isCancelled
     }
 
-    internal inline fun fail() { job.cancel() }
-    internal inline fun succeed() { job.complete() }
+    internal inline fun failure() { job.cancel() }
+    internal inline fun success() { job.complete() }
 
     @Throws(CancellationException::class)
     internal suspend inline fun join() { job.join() }

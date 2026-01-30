@@ -28,7 +28,7 @@ internal value class LogBuffer private constructor(internal val channel: Channel
     internal constructor(capacity: Int, overflow: BufferOverflow): this(Channel(
         capacity = capacity,
         onBufferOverflow = overflow,
-        onUndeliveredElement = { logAction -> logAction.drop(undelivered = true) },
+        onUndeliveredElement = { logAction -> logAction.drop(warn = true) },
     )) {
         // Channel.RENDEZVOUS == 0
         require(capacity >= Channel.RENDEZVOUS) { "capacity[$capacity] < Channel.RENDEZVOUS" }

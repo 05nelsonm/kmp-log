@@ -127,8 +127,9 @@ internal value class ScopeLogHandle private constructor(
         logJob: Job,
         scope: ScopeFileLog,
         onInstallInvocations: Long,
-        dispatcher: CoroutineDispatcher,
-        dispatcherDeRef: SharedResourceAllocator.DeRefHandle,
+        dispatcherLog: CoroutineDispatcher,
+        deRefLog: SharedResourceAllocator.DeRefHandle,
+        deRefBlockMonitor: SharedResourceAllocator.DeRefHandle,
     ): this(scopeLogHandle = CoroutineScope(context =
         CoroutineName(scope.coroutineName.name + "-Handle{$onInstallInvocations}")
 
@@ -145,17 +146,18 @@ internal value class ScopeLogHandle private constructor(
         + SupervisorJob(parent = scope.supervisorJob)
 
         + scope.handler
-        + dispatcher
+        + dispatcherLog
     )) {
         logJob.invokeOnCompletion { t ->
             val cause = (t as? CancellationException)
                 ?: CancellationException("LogJob completed", t)
             supervisorJob.cancel(cause)
         }
-        supervisorJob.invokeOnCompletion { dispatcherDeRef.invoke() }
+        supervisorJob.invokeOnCompletion { deRefLog.invoke() }
+        supervisorJob.invokeOnCompletion { deRefBlockMonitor.invoke() }
     }
 
-    internal inline val dispatcher: CoroutineDispatcher get() {
+    internal inline val dispatcherLog: CoroutineDispatcher get() {
         @Suppress("DEPRECATION_ERROR")
         return scopeLogHandle.coroutineContext[ContinuationInterceptor] as CoroutineDispatcher
     }

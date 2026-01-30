@@ -53,6 +53,7 @@ import io.matthewnelson.kmp.log.file.internal.LogAction
 import io.matthewnelson.kmp.log.file.internal.LogAction.Companion.EXECUTE_ROTATE_LOGS
 import io.matthewnelson.kmp.log.file.internal.LogAction.Companion.MAX_RETRIES
 import io.matthewnelson.kmp.log.file.internal.LogAction.Companion.drop
+import io.matthewnelson.kmp.log.file.internal.LogAction.Rotation.Companion.CONSUME_AND_IGNORE
 import io.matthewnelson.kmp.log.file.internal.LogBuffer
 import io.matthewnelson.kmp.log.file.internal.LogSend
 import io.matthewnelson.kmp.log.file.internal.LogWait
@@ -1051,14 +1052,13 @@ public class FileLog: Log {
         }
         // For logLoop's RotateActionQueue
         this.checkIfLogRotationIsNeeded = LogAction.Rotation { _, _, sizeLog, processedWrites ->
-            // We are being consumed and ignored.
-            if (processedWrites < 0) return@Rotation 0L
+            if (processedWrites == CONSUME_AND_IGNORE) return@Rotation 0L
 
             if (sizeLog >= maxLogFileSize) return@Rotation EXECUTE_ROTATE_LOGS
 
-            // Moving dotRotateFile -> *.001 is the last move that gets
-            // executed, so its existence indicates that a log rotation
-            // was interrupted, either by process termination or error.
+            // Moving dotRotateFile -> *.001 is the final move that gets executed in the
+            // log rotation process, so its existence indicates that a log rotation was
+            // previously interrupted, either by process termination or error/cancellation.
             if (dotRotateFile.exists2Robustly()) return@Rotation EXECUTE_ROTATE_LOGS
 
             logD { "$LOG_ROTATION not needed" }
@@ -1147,16 +1147,16 @@ public class FileLog: Log {
             @Volatile
             private var _retries = 0
             @Volatile
-            private var _executed = 0
+            private var _guard = 0
 
-            override fun drop(undelivered: Boolean) {
-                check(_executed++ == 0) { _executed--; "LogAction.Write has already been executed" }
+            override fun drop(warn: Boolean) {
+                check(_guard++ == 0) { _guard--; "LogAction.Write has already been executed" }
 
                 preprocessing.cancel()
-                logWait?.fail()
+                logWait?.failure()
                 _pendingLogCount._decrement()
-                if (undelivered) logW {
-                    "A log awaiting processing was dropped. ${_pendingLogCount._get()} log(s) are currently pending."
+                if (warn) logW {
+                    "Dropped 1 log(s) >> ${_pendingLogCount._get()} log(s) are currently pending processing."
                 }
             }
 
@@ -1166,7 +1166,7 @@ public class FileLog: Log {
                 sizeLog: Long,
                 processedWrites: Int,
             ): Long {
-                check(_executed++ == 0) { _executed--; "LogAction.Write has already been executed" }
+                check(_guard++ == 0) { _guard--; "LogAction.Write has already been executed" }
 
                 var threw: Throwable? = null
                 val preprocessingResult = try {
@@ -1193,7 +1193,7 @@ public class FileLog: Log {
                     }
 
                     _pendingLogCount._decrement()
-                    logWait?.fail()
+                    logWait?.failure()
 
                     // threw will only ever be non-null when result == null
                     threw?.let { throw it }
@@ -1219,7 +1219,7 @@ public class FileLog: Log {
                 }
 
                 if (needsRotation && _retries++ < MAX_RETRIES) {
-                    _executed--
+                    _guard--
                     return EXECUTE_ROTATE_LOGS
                 }
 
@@ -1252,11 +1252,11 @@ public class FileLog: Log {
 
                 _pendingLogCount._decrement()
                 threw?.let { t ->
-                    logWait?.fail()
+                    logWait?.failure()
                     throw t
                 }
 
-                logWait?.succeed()
+                logWait?.success()
                 return written
             }
         }
@@ -1265,13 +1265,13 @@ public class FileLog: Log {
         val logSend = if (trySendResult.isSuccess) null else {
             // Failure
             if (trySendResult.isClosed) {
-                logWait?.fail()
+                logWait?.failure()
                 preprocessing.cancel()
                 return false
             }
             if (logBuffer != _logHandle._get()?.first) {
                 // Log.Root.uninstall was called between the time log was invoked and now
-                logWait?.fail()
+                logWait?.failure()
                 preprocessing.cancel()
                 return false
             }
@@ -1314,7 +1314,7 @@ public class FileLog: Log {
             var result = LogSend.RESULT_UNKNOWN
             while (result == LogSend.RESULT_UNKNOWN) {
                 try {
-                    result = CurrentThread.uninterruptedRunBlocking(scope.dispatcher) {
+                    result = CurrentThread.uninterruptedRunBlocking(scope.dispatcherLog) {
                         // This will NOT throw CancellationException, as
                         // CoroutineStart.ATOMIC + withContext(NonCancellable)
                         // were used.
@@ -1331,7 +1331,7 @@ public class FileLog: Log {
         while (logWait.isActive) {
             logD { "Block[blocked=1, threadId=$tid] >> $logWait" }
             try {
-                CurrentThread.uninterruptedRunBlocking(scope.dispatcher) {
+                CurrentThread.uninterruptedRunBlocking(scope.dispatcherLog) {
                     // If logSendResult was false (closed channel) then
                     // LogBuffer.channel's onUndeliveredElement will clean
                     // everything up for us and cancel logWait (eventually).
@@ -1356,7 +1356,8 @@ public class FileLog: Log {
         // CoroutineDispatcher of our own. If we were to use Dispatchers.IO for everything,
         // then it could result in a deadlock if caller is also using Dispatchers.IO whereby
         // thread starvation could occur and LogLoop is unable to yield or launch LogRotation.
-        val (dispatcher, dispatcherDeRef) = allocator.getOrAllocate()
+        val (dispatcherLog, deRefLog) = allocator.getOrAllocate()
+        val (dispatcherBlockMonitor, deRefBlockMonitor) = DispatcherAllocator.BlockMonitor.getOrAllocate()
 
         val logBuffer = LogBuffer(
             capacity = bufferCapacity,
@@ -1364,7 +1365,7 @@ public class FileLog: Log {
         )
         val previousLogJob = _logJob
 
-        scopeFileLog.launch(dispatcher, start = CoroutineStart.ATOMIC) {
+        scopeFileLog.launch(dispatcherLog, start = CoroutineStart.ATOMIC) {
             scopeLog {
                 jobLog.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $jobLog" } }
                 logD { "$LOG_JOB Started >> $jobLog" }
@@ -1428,11 +1429,12 @@ public class FileLog: Log {
                 val logStreamCompletion = jobLog.closeOnCompletion(logStream)
 
                 logLoop(
-                    logBuffer = logBuffer,
-                    _lockFile = lockFile,
-                    _lockFileCompletion = lockFileCompletion,
-                    _logStream = logStream,
-                    _logStreamCompletion = logStreamCompletion,
+                    logBuffer,
+                    dispatcherBlockMonitor,
+                    lockFile,
+                    lockFileCompletion,
+                    logStream,
+                    logStreamCompletion,
                 )
             }
         }.let { logJob ->
@@ -1443,21 +1445,22 @@ public class FileLog: Log {
                     while (true) {
                         val logAction = logBuffer.channel.tryReceive().getOrNull() ?: break
                         count++
-                        logAction.drop(undelivered = false)
+                        logAction.drop(warn = false)
                     }
                 } finally {
                     // Paranoia; if drop throws exception which it "shouldn't".
                     logBuffer.channel.cancel()
                 }
-                if (count > 0L) logW(t) { "$count log(s) awaiting processing were dropped." }
+                if (count > 0L) logW(t) { "Dropped $count log(s)" }
             }
 
             val logHandle = logBuffer to ScopeLogHandle(
                 logJob,
                 scopeFileLog,
                 _onInstallInvocations,
-                dispatcher,
-                dispatcherDeRef,
+                dispatcherLog,
+                deRefLog,
+                deRefBlockMonitor,
             )
 
             _logJob = logJob
@@ -1481,10 +1484,11 @@ public class FileLog: Log {
 
     /*
     * Loops until LogBuffer is closed via onUninstall and is "drained" of all its
-    * remaining LogAction.
+    * remaining LogAction.Write.
     * */
     private suspend fun ScopeLog.logLoop(
         logBuffer: LogBuffer,
+        blockMonitor: CoroutineDispatcher,
         _lockFile: LockFile,
         _lockFileCompletion: DisposableHandle,
         _logStream: FileStream.ReadWrite,
@@ -1527,7 +1531,7 @@ public class FileLog: Log {
             // Only in the event of an error within the loop (such as file re-open
             // failure) where a LogAction from rotateActionQueue was dequeued over one
             // from retryAction would there be unprocessed LogAction present.
-            retryAction._getAndSet(new = null)?.drop(undelivered = true)
+            retryAction._getAndSet(new = null)?.drop(warn = true)
         }
 
         val buf = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -1596,7 +1600,7 @@ public class FileLog: Log {
                             // so that we do not invalidate its lockRotate inadvertently.
                             awaitLogRotation()
                         } catch (t: CancellationException) {
-                            logAction.drop(undelivered = true)
+                            logAction.drop(warn = true)
                             throw t
                         }
                     }
@@ -1627,7 +1631,7 @@ public class FileLog: Log {
                         lockFile.lockLog()
                     } catch (tt: Throwable) {
                         // Total failure. Close up shop.
-                        logAction.drop(undelivered = true)
+                        logAction.drop(warn = true)
                         if (tt is CancellationException) throw tt
                         t.addSuppressed(tt)
                         throw t
@@ -1670,7 +1674,7 @@ public class FileLog: Log {
                         logStream.position(new = size)
                     } catch (t: Throwable) {
                         // Total failure. Close up shop.
-                        logAction.drop(undelivered = true)
+                        logAction.drop(warn = true)
                         if (t is CancellationException) throw t
                         e.addSuppressed(t)
                         throw e
@@ -1721,7 +1725,7 @@ public class FileLog: Log {
                             if (action is LogAction.Write) {
                                 val previous = retryAction._getAndSet(new = action)
                                 if (previous != null) {
-                                    previous.drop(undelivered = true)
+                                    previous.drop(warn = true)
                                     // HARD fail.... There should ONLY ever be 1 retryAction.
                                     throw IllegalStateException("retryAction's previous value was non-null")
                                 }
@@ -1874,7 +1878,7 @@ public class FileLog: Log {
         // NO LogAction before continuing.
         while (true) {
             val action = rotateActionQueue.dequeueOrNull() ?: break
-            action(logStream, buf, 0L, processedWrites = -1)
+            action(logStream, buf, 0L, processedWrites = CONSUME_AND_IGNORE)
         }
 
         val lockRotate = try {
@@ -1928,16 +1932,16 @@ public class FileLog: Log {
             // If was successful (moves is populated), logStream may not have
             // been truncated and may still need to have another full log rotation
             // done. The current state could also be that there is a LogAction
-            // present still in the retryAction. In any event, the LogAction
-            // produced by FileLog.log() will return EXECUTE_ROTATE_LOGS_AND_RETRY
-            // again where we'll go through another log rotation. Next time,
-            // however, dotRotateFile should have already been moved into place
-            // and not exist on the filesystem anymore.
+            // present still in the retryAction. In any event, the LogAction.Write
+            // produced by FileLog.log will return EXECUTE_ROTATE_LOGS again where
+            // we'll go through another log rotation. Next time, however, dotRotateFile
+            // should have already been moved into place and not exist on the filesystem
+            // anymore.
         } else {
             // Full log rotation. Check if it's actually necessary.
 
-            // If a LogAction returned EXECUTE_ROTATE_LOGS_AND_RETRY, it wants a
-            // log rotation so it can fit its log in there; fake it till we make it.
+            // If a LogAction.Write returned EXECUTE_ROTATE_LOGS, it wants a log
+            // rotation so it can fit its log in there; fake it till we make it.
             val size = if (retryActionIsNotNull) maxLogFileSize else try {
                 logStream.size()
             } catch (e: IOException) {
@@ -2581,29 +2585,22 @@ public class FileLog: Log {
         abstract override fun doAllocation(): CloseableCoroutineDispatcher
         final override fun CoroutineDispatcher.doDeallocation() { (this as CloseableCoroutineDispatcher).close() }
 
-//        companion object Global {
-//
-//            private const val TAG_BLOCKING_MONITOR = "BlockingMonitor"
-//            private const val TAG_SHARED_POOL = "SharedPool"
-//
-//            private const val NAME_BLOCKING_MONITOR = "FileLog.$TAG_BLOCKING_MONITOR"
-//            private const val NAME_SHARED_POOL = "FileLog.$TAG_SHARED_POOL"
-//
-//            // TODO: Use within logLoop of all FileLog to monitor FileLock acquisitions
-//            val BlockingMonitor = object : DispatcherAllocator(Logger.of(tag = TAG_BLOCKING_MONITOR, domain = DOMAIN)) {
-//                override fun doAllocation(): CloseableCoroutineDispatcher {
-//                    return newSingleThreadContext(name = NAME_BLOCKING_MONITOR)
-//                }
-//            }
-//
-//            // TODO: Add ability to configure via FileLog.Builder to use instead of a dedicated allocator
-//            //  Need to think about how best to do this, if at all.
-//            val SharedPool = object : DispatcherAllocator(Logger.of(tag = TAG_SHARED_POOL, domain = DOMAIN)) {
-//                override fun doAllocation(): CloseableCoroutineDispatcher {
-//                    // TODO: Make configurable via environment variables/properties?
-//                    return newFixedThreadPoolContext(nThreads = 3, name = NAME_SHARED_POOL)
-//                }
-//            }
-//        }
+        companion object {
+
+            private const val TAG = "BlockMonitor"
+            private const val NAME = "FileLog.$TAG"
+
+            /*
+            * Shared between all FileLog instances for monitoring LockFile.lock blocking calls
+            * such that they can be interrupted by LockFile closure if they block for too long.
+            *
+            * If another process is holding a FileLock for our requested range (maliciously???),
+            * we could end up blocking forever; no logs are better than bringing down an entire
+            * application due to logging...
+            * */
+            val BlockMonitor = object : DispatcherAllocator(Logger.of(tag = TAG, domain = DOMAIN)) {
+                override fun doAllocation(): CloseableCoroutineDispatcher = newSingleThreadContext(name = NAME)
+            }
+        }
     }
 }

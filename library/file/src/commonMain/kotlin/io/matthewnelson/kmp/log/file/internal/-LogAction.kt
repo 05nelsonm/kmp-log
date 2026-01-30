@@ -18,7 +18,6 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.FileStream
-import io.matthewnelson.kmp.log.Log
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -39,7 +38,17 @@ internal sealed interface LogAction {
      * it is simply for weaving into the loop. Should always return `0`, or
      * [EXECUTE_ROTATE_LOGS].
      * */
-    fun interface Rotation: LogAction
+    fun interface Rotation: LogAction {
+
+        companion object {
+            // Special value for passing via processedWrites parameter to indicate
+            // that this Rotation action is being consumed and ignored. Serves a
+            // double purpose in that if the Rotation action is for lazily closing
+            // a LockFile due to FileLock release failure, the negative value will
+            // not trigger a FileStream.sync call.
+            internal const val CONSUME_AND_IGNORE = -615
+        }
+    }
 
     /**
      * An action whereby data is to be written to the log. If the action is to be
@@ -51,7 +60,7 @@ internal sealed interface LogAction {
     interface Write: LogAction {
 
         @Throws(IllegalStateException::class)
-        fun drop(undelivered: Boolean)
+        fun drop(warn: Boolean)
     }
 
     companion object {
@@ -65,8 +74,8 @@ internal sealed interface LogAction {
         // simply write its log to the stream and move on.
         internal const val MAX_RETRIES = 3
 
-        internal inline fun LogAction?.drop(undelivered: Boolean) {
-            (this as? Write)?.drop(undelivered)
+        internal inline fun LogAction?.drop(warn: Boolean) {
+            (this as? Write)?.drop(warn)
         }
     }
 }
