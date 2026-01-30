@@ -4,6 +4,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 	public final field blacklistDomain Ljava/util/Set;
 	public final field bufferCapacity I
 	public field debug Z
+	public final field fileLockTimeout J
 	public final field logDirectory Ljava/lang/String;
 	public final field logFiles Ljava/util/List;
 	public final field logFiles0Hash Ljava/lang/String;
@@ -16,7 +17,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 	public final field whitelistDomainNull Z
 	public final field whitelistTag Ljava/util/Set;
 	public final field yieldOn B
-	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/util/List;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;IZLio/matthewnelson/kmp/log/Log$Level;BLio/matthewnelson/kmp/log/file/FileLog$Formatter;ZLjava/util/Set;Ljava/util/Set;ZLjava/util/Set;ZZLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/matthewnelson/kmp/log/Log$Level;Lio/matthewnelson/kmp/log/Log$Level;Ljava/io/File;Ljava/util/List;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;IZLio/matthewnelson/kmp/log/Log$Level;BJLio/matthewnelson/kmp/log/file/FileLog$Formatter;ZLjava/util/Set;Ljava/util/Set;ZLjava/util/Set;ZZLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getBufferOverflowDropOldest ()Z
 	public final fun isActive ()Z
 	public final fun pendingLogCount ()J
@@ -42,6 +43,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 	public final fun fileExtension (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun fileGroupReadable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun fileGroupWritable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
+	public final fun fileLockTimeout (J)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun fileName (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun fileOtherReadable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun fileOtherWritable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;

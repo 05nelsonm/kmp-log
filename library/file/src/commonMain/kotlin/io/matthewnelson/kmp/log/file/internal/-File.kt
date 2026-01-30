@@ -93,20 +93,19 @@ internal fun File.exists2Robustly(): Boolean {
  *   - [File.isAbsolute] is `false`
  *   - [maxNewNameLen] is less than `7` characters in length
  *   - [File.parentFile] is `null`
- *   - [buf] size is less than `128`
+ *   - [buf] size is less than `32`
  * @throws [DirectoryNotEmptyException] If was unable to move to a randomly named [File].
  * */
-@Suppress("LocalVariableName")
 @Throws(IllegalArgumentException::class, DirectoryNotEmptyException::class)
 internal fun File.deleteOrMoveToRandomIfNonEmptyDirectory(
     buf: ByteArray,
     maxNewNameLen: Int,
 ): File? {
     require(isAbsolute()) { "isAbsolute[false]" }
-    val _parent = parentFile
-    val minBufSize = 128
+    val parent = parentFile
+    val minBufSize = 32 // must be at LEAST 32 bytes for BLAKE2s digestInto
     require(maxNewNameLen >= 7) { "maxNewNameLen[$maxNewNameLen] < 7" }
-    require(_parent != null) { "parent directory must not be null" }
+    require(parent != null) { "parent directory must not be null" }
     require(buf.size >= minBufSize) { "buf.size[${buf.size}] < $minBufSize" }
 
     val e: DirectoryNotEmptyException = try {
@@ -133,7 +132,7 @@ internal fun File.deleteOrMoveToRandomIfNonEmptyDirectory(
     // which is what Base16.config.lineBreakInterval is configured with (i.e.
     // the 65th character gets prefixed with a new line).
     val randomHidden = '.' + buf.encodeToString(Base16, 0, len)
-    val dest = _parent.resolve(randomHidden)
+    val dest = parent.resolve(randomHidden)
 
     try {
         moveLogTo(dest)
@@ -147,8 +146,6 @@ internal fun File.deleteOrMoveToRandomIfNonEmptyDirectory(
 
 /**
  * Move a log file, taking the place of [dest]
- *
- * TODO: Promote to kmp-file >> https://github.com/05nelsonm/kmp-file/issues/209
  *
  * @param [dest] The destination to move the file to.
  *

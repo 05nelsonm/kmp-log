@@ -22,6 +22,10 @@ import io.matthewnelson.kmp.file.Closeable
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.chmod2
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
 
 @Throws(IOException::class)
 internal inline fun File.openLockFileRobustly(): LockFile = try {
@@ -47,19 +51,51 @@ internal const val FILE_LOCK_POS_LOG = 0L
 // Bytes 1-2 are locked when performing a log rotation
 internal const val FILE_LOCK_POS_ROTATE = FILE_LOCK_POS_LOG + FILE_LOCK_SIZE
 
-@Throws(IllegalStateException::class, IOException::class)
-internal inline fun LockFile.lockLog(): FileLock = lock(position = FILE_LOCK_POS_LOG, size = FILE_LOCK_SIZE)
-@Throws(IllegalStateException::class, IOException::class)
-internal inline fun LockFile.tryLockLog(): FileLock? = tryLock(position = FILE_LOCK_POS_LOG, size = FILE_LOCK_SIZE)
+// There are no guarantees as to the order of acquisition when using the
+// blocking lock function (i.e. no fairness or FIFO). In addition to that,
+// you are unable to interrupt the call via closure; blocking I/O will
+// continue endlessly until acquisition or process termination. That's kind
+// of wild (and dangerous?) with file locks because if another process
+// obtains one on our requested range maliciously and does not release it,
+// we would end up blocking forever.
+//
+// If failure was attributed to timing out, the thrown IOException's cause
+// will be a TimeoutCancellationException.
+@Throws(CancellationException::class, IllegalArgumentException::class, IllegalStateException::class, IOException::class)
+internal suspend fun LockFile.lockNonBlock(position: Long, size: Long, timeout: Duration): FileLock {
+    // Try once first.
+    tryLock(position, size)?.let { return it }
 
-@Throws(IllegalStateException::class, IOException::class)
-internal inline fun LockFile.lockRotate(): FileLock = lock(position = FILE_LOCK_POS_ROTATE, size = FILE_LOCK_SIZE)
-@Throws(IllegalStateException::class, IOException::class)
-internal inline fun LockFile.tryLockRotate(): FileLock? = tryLock(position = FILE_LOCK_POS_ROTATE, size = FILE_LOCK_SIZE)
+    var lock: FileLock? = null
+    var threw: CancellationException? = null
+    try {
+        // Can throw a TimeoutCancellationException on lambda closure, so to
+        // prevent a runaway FileLock we always want to hoist the result out
+        // of block lambda (never set variable with its return value) while
+        // ignoring any exceptions if the result is non-null (i.e. the lock
+        // acquisition was actually successful, even in the face of timing out).
+        withTimeout(timeout) {
+            var i = 0
+            while (lock == null) {
+                if (i++ == 50) {
+                    i = 0
+                    yield()
+                }
+                lock = tryLock(position, size)
+            }
+        }
+    } catch (t: CancellationException) {
+        threw = t
+    }
+
+    lock?.let { return it }
+    throw IOException("Failed to acquire FileLock on [$position:$size]", threw)
+}
 
 @Throws(IOException::class)
 internal expect inline fun File.openLockFile(): LockFile
 
+@Suppress("UNUSED")
 @Throws(IllegalArgumentException::class, IllegalStateException::class, IOException::class)
 internal expect inline fun LockFile.lock(position: Long, size: Long): FileLock
 
@@ -84,5 +120,6 @@ internal expect object InvalidFileLock: FileLock {
 }
 
 internal expect abstract class LockFile: Closeable {
+    internal fun isOpen(): Boolean
     final override fun close()
 }

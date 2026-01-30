@@ -17,11 +17,19 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
+import io.matthewnelson.kmp.file.File
+import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.errnoToIOException
 import io.matthewnelson.kmp.file.exists2
 import io.matthewnelson.kmp.file.toFile
+import io.matthewnelson.kmp.file.use
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import platform.posix.EAGAIN
 import platform.posix.EWOULDBLOCK
 import platform.posix.close
@@ -29,32 +37,38 @@ import platform.posix.errno
 import platform.posix.getenv
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import kotlin.time.Duration.Companion.milliseconds
 
+private const val ENV_PATH = "io_matthewnelson_kmp_log_file_test_setlk_path"
+
+/**
+ * These tests are run via module `:sys` on an emulator, executed as a child process.
+ *
+ * Prior to process execution, a file is opened by the parent process whose path is
+ * then passed in via environment variable [ENV_PATH]. File locks on byte ranges
+ * `position = 0, length = 1` and `position = Long.MAX_VALUE - 1, length = 0` are
+ * acquired by the parent process so that failure testing can be had here.
+ * */
 @OptIn(ExperimentalForeignApi::class)
-class LockFileSetLkAndroidNativeUnitTest {
+class LockFileAndroidNativeUnitTest {
+
+    @Throws(AssertionError::class)
+    private fun testLockFile(): File {
+        val file = getenv(ENV_PATH)?.toKString()?.toFile()
+            ?: throw AssertionError("getenv($ENV_PATH) == null")
+        assertTrue(file.exists2(), "file[$file].exists2 != true")
+        return file
+    }
 
     @Test
     fun givenLockedFile_whenRangesHeldByAnotherProcess_thenSetlkFunctionsAsExpected() {
-        // When this test runs in :library:sys via androidInstrumentedTest,
-        // it will open and lock a file before executing the test binary in
-        // within emulator.
-        val path = getenv("io_matthewnelson_kmp_log_file_test_setlk_path")
-            ?.toKString()
-
-        if (path.isNullOrBlank()) {
-            println("Skipping...")
-            return
-        } else {
-            println("CHECKING")
-        }
-
-        val file = path.toFile()
-        assertTrue(file.exists2(), "exists")
-
+        val file = testLockFile()
         val fd = LockFile.openFd(file)
         try {
+            // non-blocking lock acquisition fails on ranges held in parent process.
             assertEquals(
                 -1,
                 kmp_log_file_setlk(fd, position = 0, length = 1, locking = 1, blocking = 0, exclusive = 1),
@@ -87,6 +101,20 @@ class LockFileSetLkAndroidNativeUnitTest {
             )
         } finally {
             if (close(fd) != 0) errnoToIOException(errno)
+        }
+    }
+
+    @Test
+    fun givenLockedFile_whenRangesHeldByAnotherProcess_thenLockNonBlockFailsDueToTimeoutCancellation() = runTest {
+        testLockFile().openLockFile().use { lockFile ->
+            withContext(Dispatchers.IO) {
+                try {
+                    lockFile.lockNonBlock(timeout = 50.milliseconds, position = 0, size = 1)
+                    fail("lockNonBlock did not timeout as expected...")
+                } catch (e: IOException) {
+                    assertIs<TimeoutCancellationException>(e.cause)
+                }
+            }
         }
     }
 }
