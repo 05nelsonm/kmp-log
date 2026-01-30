@@ -36,6 +36,7 @@ internal actual typealias LockFile = java.nio.channels.FileChannel
 @Throws(IOException::class)
 internal actual inline fun File.openLockFile(): LockFile = openNioFileChannel()
 
+@Suppress("UNUSED")
 @Throws(IllegalArgumentException::class, IllegalStateException::class, IOException::class)
 internal actual inline fun LockFile.lock(position: Long, size: Long): FileLock {
     return lock(position, size, /* shared */ false)

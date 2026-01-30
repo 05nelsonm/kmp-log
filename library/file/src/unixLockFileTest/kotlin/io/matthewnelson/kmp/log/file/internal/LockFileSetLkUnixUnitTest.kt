@@ -19,12 +19,8 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.errnoToIOException
-import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.file.use
 import io.matthewnelson.kmp.log.file.withTmpFile
-import io.matthewnelson.kmp.process.Output
-import io.matthewnelson.kmp.process.Process
-import io.matthewnelson.kmp.process.Stdio
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.posix.EAGAIN
 import platform.posix.EINVAL
@@ -80,7 +76,7 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
             // Acquiring a lock should inhibit other processes from locking it with the range.
             assertEquals(0, kmp_log_file_setlk(fd, position = 1L, length = 0L, locking = 1, blocking = 0, exclusive = 1))
 
-            var out = runJarOutput(tmp, 150, 1, 3)
+            var out = execTestFileLockJarOutput(tmp, 150, 1, 3)
             if (!out.stdout.startsWith("FAILURE")) {
                 println(out)
                 println(out.stdout)
@@ -91,7 +87,7 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
             // Unlocking it should allow other processes to acquire the lock.
             assertEquals(0, kmp_log_file_setlk(fd, position = 1L, length = 0L, locking = 0, blocking = 0, exclusive = 1))
 
-            out = runJarOutput(tmp, 150, 1, 3)
+            out = execTestFileLockJarOutput(tmp, 150, 1, 3)
             if (!out.stdout.startsWith("ACQUIRED")) {
                 println(out)
                 println(out.stdout)
@@ -100,7 +96,7 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
             }
 
             // If another process holds the lock, we should fail with EWOULDBLOCK when blocking = 0 (false)
-            runJar(tmp, 500, 0, 3).createProcess().use { p ->
+            execTestFileLockJar(tmp, 500, 0, 3).createProcess().use { p ->
                 var acquired: Boolean? = null
                 var releasing = false
                 var released = false
@@ -119,7 +115,7 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
                     println(line ?: return@stderrFeed)
                 }
 
-                while (acquired == null) {
+                while (acquired == null && p.isAlive) {
                     p.waitFor(5.milliseconds)
                 }
 
@@ -149,28 +145,5 @@ class LockFileSetLkUnixUnitTest: LockFileNativeBaseTest<Int>() {
         } finally {
             fd.close()
         }
-    }
-
-    private fun runJar(
-        tmp: File,
-        timeoutMs: Long,
-        position: Long,
-        size: Long,
-    ): Process.Builder = Process.Builder(command = "java")
-        .args("-jar")
-        .args(TEST_FILE_LOCK_JAR)
-        .args(tmp.path)
-        .args(timeoutMs.toString())
-        .args(position.toString())
-        .args(size.toString())
-        .stdin(Stdio.Null)
-
-    private fun runJarOutput(
-        tmp: File,
-        timeoutMs: Long,
-        position: Long,
-        size: Long,
-    ): Output = runJar(tmp, timeoutMs, position, size).createOutput {
-        timeoutMillis = (timeoutMs + 500).toInt()
     }
 }

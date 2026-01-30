@@ -169,13 +169,9 @@ class FileLogUnitTest {
                 private val lock = SynchronizedLock()
 
                 override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
-                    val printed = super.log(level, domain, tag, msg, t)
+                    super.log(level, domain, tag, msg, t)
 
-                    if (msg == null) return printed
-
-                    // So BlockMonitor allocation/de-allocation does not pollute test results
-                    if (!log.uid.endsWith(tag)) return printed
-
+                    if (msg == null) return false
                     if (msg.startsWith("Allocated >> ")) {
                         synchronized(lock) {
                             allocated.add(msg.substringAfter("Allocated >> "))
@@ -200,7 +196,12 @@ class FileLogUnitTest {
                         }
                         return true
                     }
-                    return printed
+                    return false
+                }
+
+                override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
+                    if (!super.isLoggable(level, domain, tag)) return false
+                    return log.uid.endsWith(tag)
                 }
             }
 

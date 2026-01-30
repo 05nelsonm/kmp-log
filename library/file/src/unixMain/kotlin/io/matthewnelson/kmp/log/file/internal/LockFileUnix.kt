@@ -44,6 +44,7 @@ import kotlin.concurrent.Volatile
 @Throws(IOException::class)
 internal actual inline fun File.openLockFile(): LockFile = LockFile.open(this)
 
+@Suppress("UNUSED")
 @Throws(IllegalArgumentException::class, IllegalStateException::class, IOException::class)
 internal actual inline fun LockFile.lock(position: Long, size: Long): FileLock {
     return lock(position, size, blocking = true)!!
@@ -59,6 +60,8 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
     @Volatile
     private var _fd: Int = fd
     private val closeLock = SynchronizedObject()
+
+    internal actual fun isOpen(): Boolean = _fd != -1
 
     @Throws(IllegalArgumentException::class, IOException::class)
     internal fun lock(position: Long, size: Long, blocking: Boolean): FileLock? {
@@ -131,7 +134,7 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
         @Volatile
         private var isReleased = false
 
-        override fun isValid(): Boolean = _fd != -1 && !isReleased
+        override fun isValid(): Boolean = isOpen() && !isReleased
 
         override fun release() {
             if (isReleased) return

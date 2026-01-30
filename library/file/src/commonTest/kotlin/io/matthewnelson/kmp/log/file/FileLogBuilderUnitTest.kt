@@ -26,6 +26,8 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 class FileLogBuilderUnitTest {
 
@@ -282,6 +284,30 @@ class FileLogBuilderUnitTest {
     @Test
     fun givenYieldOn_whenGreaterThan10_thenUses10() {
         assertEquals(10, newBuilder().yieldOn(11).build().yieldOn)
+    }
+
+    @Test
+    fun givenFileLockTimeout_whenLessThan1_thenUsesCalculatedValue() {
+        val fileLockTimeout = newBuilder().fileLockTimeout(-1L).build().fileLockTimeout
+        // TODO: Hone into place
+        val expectedMin = 1L
+        val expectedMax = 10_000L
+        assertTrue(
+            fileLockTimeout in expectedMin..expectedMax,
+            "fileLockTimeout[$fileLockTimeout] !in $expectedMin..$expectedMax"
+        )
+    }
+
+    @Test
+    fun givenFileLockTimeout_whenGreaterThan1LessThanDurationINFINITE_thenUsesValue() {
+        assertEquals(15L, newBuilder().fileLockTimeout(15L).build().fileLockTimeout)
+    }
+
+    @Test
+    fun givenFileLockTimeout_whenGreaterThanDurationINFINITE_thenUsesDurationINFINITE() {
+        val expected = Duration.INFINITE.inWholeMilliseconds
+        assertEquals(expected, newBuilder().fileLockTimeout(Long.MAX_VALUE).build().fileLockTimeout)
+        assertEquals(Duration.INFINITE, expected.milliseconds)
     }
 
     @Test

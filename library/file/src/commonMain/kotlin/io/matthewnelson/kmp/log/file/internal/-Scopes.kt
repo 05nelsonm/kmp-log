@@ -83,27 +83,11 @@ internal value class ScopeFileLog private constructor(
 }
 
 @JvmInline
-internal value class ScopeLog private constructor(internal val scopeLog: CoroutineScope) {
-
-    internal companion object {
-        @OptIn(ExperimentalContracts::class)
-        internal suspend inline fun <R> scopeLog(
-            crossinline block: suspend ScopeLog.() -> R,
-        ): R {
-            contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
-            return supervisorScope { block(ScopeLog(this)) }
-        }
-    }
-
-    internal inline val jobLog: Job get() = scopeLog.coroutineContext.job
-}
-
-@JvmInline
 internal value class ScopeLogLoop private constructor(internal val scopeLogLoop: CoroutineScope) {
 
     internal companion object {
         @OptIn(ExperimentalContracts::class)
-        internal suspend inline fun <R> ScopeLog.scopeLogLoop(
+        internal suspend inline fun <R> scopeLogLoop(
             crossinline block: suspend ScopeLogLoop.() -> R,
         ): R {
             contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
@@ -127,9 +111,8 @@ internal value class ScopeLogHandle private constructor(
         logJob: Job,
         scope: ScopeFileLog,
         onInstallInvocations: Long,
-        dispatcherLog: CoroutineDispatcher,
-        deRefLog: SharedResourceAllocator.DeRefHandle,
-        deRefBlockMonitor: SharedResourceAllocator.DeRefHandle,
+        dispatcher: CoroutineDispatcher,
+        dispatcherDeRef: SharedResourceAllocator.DeRefHandle,
     ): this(scopeLogHandle = CoroutineScope(context =
         CoroutineName(scope.coroutineName.name + "-Handle{$onInstallInvocations}")
 
@@ -146,18 +129,17 @@ internal value class ScopeLogHandle private constructor(
         + SupervisorJob(parent = scope.supervisorJob)
 
         + scope.handler
-        + dispatcherLog
+        + dispatcher
     )) {
         logJob.invokeOnCompletion { t ->
             val cause = (t as? CancellationException)
                 ?: CancellationException("LogJob completed", t)
             supervisorJob.cancel(cause)
         }
-        supervisorJob.invokeOnCompletion { deRefLog.invoke() }
-        supervisorJob.invokeOnCompletion { deRefBlockMonitor.invoke() }
+        supervisorJob.invokeOnCompletion { dispatcherDeRef.invoke() }
     }
 
-    internal inline val dispatcherLog: CoroutineDispatcher get() {
+    internal inline val dispatcher: CoroutineDispatcher get() {
         @Suppress("DEPRECATION_ERROR")
         return scopeLogHandle.coroutineContext[ContinuationInterceptor] as CoroutineDispatcher
     }

@@ -28,7 +28,7 @@ class FileLockUnitTest {
     @Test
     fun givenFileLock_whenLockFileClosed_thenIsValidReturnsFalse() = withTmpFile { tmp ->
         tmp.openLockFile().use { lf ->
-            val lock = lf.tryLockLog()
+            val lock = lf.tryLock(position = 0, size = 1)
             assertNotNull(lock, "lock was null???")
             assertTrue(lock.isValid())
             lf.close()
@@ -40,7 +40,7 @@ class FileLockUnitTest {
     fun givenLockFile_whenLockLog_thenRangeIsZeroToOne() = withTmpFile { tmp ->
         // This should NEVER change...
         tmp.openLockFile().use { lf ->
-            val lockLog = lf.tryLockLog()
+            val lockLog = lf.tryLock(position = FILE_LOCK_POS_LOG, size = FILE_LOCK_SIZE)
             assertNotNull(lockLog, "lock was null???")
             assertEquals(0L, lockLog.position())
             assertEquals(1L, lockLog.size())
@@ -51,7 +51,7 @@ class FileLockUnitTest {
     fun givenLockFile_whenLockRotate_thenRangeIsOneToTwo() = withTmpFile { tmp ->
         // This should NEVER change...
         tmp.openLockFile().use { lf ->
-            val lockRotate = lf.tryLockRotate()
+            val lockRotate = lf.tryLock(position = FILE_LOCK_POS_ROTATE, size = FILE_LOCK_SIZE)
             assertNotNull(lockRotate, "lock was null???")
             assertEquals(1L, lockRotate.position())
             assertEquals(1L, lockRotate.size())
@@ -61,12 +61,15 @@ class FileLockUnitTest {
     @Test
     fun givenLockFile_whenLockRotateLockLog_thenRangesDoNotConflict() = withTmpFile { tmp ->
         tmp.openLockFile().use { lf ->
-            val lockLog = lf.tryLockLog()
-            val lockRotate = lf.tryLockRotate()
+            val lockLog = lf.tryLock(position = FILE_LOCK_POS_LOG, size = FILE_LOCK_SIZE)
+            val lockRotate = lf.tryLock(position = FILE_LOCK_POS_ROTATE, size = FILE_LOCK_SIZE)
             assertEquals(true, lockLog?.isValid(), "lockLog")
             assertEquals(true, lockRotate?.isValid(), "lockRotate")
             lockLog?.release()
+            assertEquals(false, lockLog?.isValid(), "lockLog2")
             assertEquals(true, lockRotate?.isValid(), "lockRotate2")
+            lockRotate?.release()
+            assertEquals(false, lockRotate?.isValid(), "lockRotate3")
         }
     }
 }

@@ -27,7 +27,6 @@ import io.matthewnelson.encoding.utf8.UTF8.CharPreProcessor.Companion.sizeUTF8
 import io.matthewnelson.immutable.collections.toImmutableList
 import io.matthewnelson.immutable.collections.toImmutableSet
 import io.matthewnelson.kmp.file.Closeable
-import io.matthewnelson.kmp.file.ClosedException
 import io.matthewnelson.kmp.file.DirectoryNotEmptyException
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.FileNotFoundException
@@ -46,6 +45,9 @@ import io.matthewnelson.kmp.file.toFile
 import io.matthewnelson.kmp.file.use
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.file.internal.CurrentThread
+import io.matthewnelson.kmp.log.file.internal.FILE_LOCK_POS_LOG
+import io.matthewnelson.kmp.log.file.internal.FILE_LOCK_POS_ROTATE
+import io.matthewnelson.kmp.log.file.internal.FILE_LOCK_SIZE
 import io.matthewnelson.kmp.log.file.internal.FileLock
 import io.matthewnelson.kmp.log.file.internal.InvalidFileLock
 import io.matthewnelson.kmp.log.file.internal.LockFile
@@ -60,8 +62,6 @@ import io.matthewnelson.kmp.log.file.internal.LogWait
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
 import io.matthewnelson.kmp.log.file.internal.RotateActionQueue
 import io.matthewnelson.kmp.log.file.internal.ScopeFileLog
-import io.matthewnelson.kmp.log.file.internal.ScopeLog
-import io.matthewnelson.kmp.log.file.internal.ScopeLog.Companion.scopeLog
 import io.matthewnelson.kmp.log.file.internal.ScopeLogHandle
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop.Companion.scopeLogLoop
@@ -81,8 +81,7 @@ import io.matthewnelson.kmp.log.file.internal.format
 import io.matthewnelson.kmp.log.file.internal.id
 import io.matthewnelson.kmp.log.file.internal.isDesktop
 import io.matthewnelson.kmp.log.file.internal.launch
-import io.matthewnelson.kmp.log.file.internal.lockLog
-import io.matthewnelson.kmp.log.file.internal.lockRotate
+import io.matthewnelson.kmp.log.file.internal.lockNonBlock
 import io.matthewnelson.kmp.log.file.internal.moveLogTo
 import io.matthewnelson.kmp.log.file.internal.now
 import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
@@ -102,6 +101,7 @@ import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
@@ -122,6 +122,7 @@ import kotlin.jvm.JvmField
 import kotlin.jvm.JvmName
 import kotlin.jvm.JvmSynthetic
 import kotlin.sequences.forEach
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -257,6 +258,12 @@ public class FileLog: Log {
      * TODO
      * */
     @JvmField
+    public val fileLockTimeout: Long
+
+    /**
+     * TODO
+     * */
+    @JvmField
     public val blacklistDomain: Set<String>
 
     /**
@@ -384,6 +391,7 @@ public class FileLog: Log {
         private var _bufferOverflowDropOldest = false
         private var _minWaitOn = Level.Verbose
         private var _yieldOn: Byte = 2
+        private var _fileLockTimeout = -1L
         private var _formatter = DEFAULT_FORMATTER
         private var _formatterOmitYear = true
         private val _blacklistDomain = mutableSetOf<String>()
@@ -602,6 +610,15 @@ public class FileLog: Log {
          * @return The [Builder]
          * */
         public fun yieldOn(nLogs: Byte): Builder = apply { _yieldOn = nLogs }
+
+        /**
+         * DEFAULT: `-1` (i.e. TODO)
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun fileLockTimeout(millis: Long): Builder = apply { _fileLockTimeout = millis }
 
         /**
          * DEFAULT: `null` (i.e. Use the default [Formatter])
@@ -911,19 +928,35 @@ public class FileLog: Log {
                 _bufferCapacity.coerceAtLeast(minimum)
             }
 
+            val yieldOn = _yieldOn.coerceIn(1, 10)
+            val maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L) // 50kb
+            val fileLockTimeout = _fileLockTimeout.let {
+                when {
+                    it < 1L -> {
+                        // TODO: Calculate based on yieldOn and maxLogFileSize
+                        //  maybe even take into consideration bufferOverflowDropOldest
+                        //  and bufferCapacity < Channel.UNLIMITED?
+                        125L
+                    }
+                    it >= Duration.INFINITE.inWholeMilliseconds -> Duration.INFINITE.inWholeMilliseconds
+                    else -> it
+                }
+            }
+
             return FileLog(
                 min = min,
                 max = _max,
                 directory = directory,
                 files = files.toImmutableList(),
                 files0Hash = files0Hash,
-                maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L), // 50kb
+                maxLogFileSize = maxLogFileSize,
                 modeDirectory = _modeDirectory.build(),
                 modeFile = _modeFile.build(),
                 bufferCapacity = bufferCapacity,
                 bufferOverflowDropOldest = bufferOverflowDropOldest,
                 minWaitOn = minWaitOn,
-                yieldOn = _yieldOn.coerceIn(1, 10),
+                yieldOn = yieldOn,
+                fileLockTimeout = fileLockTimeout,
                 formatter = _formatter,
                 formatterOmitYear = _formatterOmitYear,
                 blacklistDomain = blacklistDomain,
@@ -984,6 +1017,7 @@ public class FileLog: Log {
         bufferOverflowDropOldest: Boolean,
         minWaitOn: Level,
         yieldOn: Byte,
+        fileLockTimeout: Long,
         formatter: Formatter,
         formatterOmitYear: Boolean,
         blacklistDomain: Set<String>,
@@ -1077,6 +1111,7 @@ public class FileLog: Log {
         this.bufferOverflowDropOldest = bufferOverflowDropOldest
         this.minWaitOn = minWaitOn
         this.yieldOn = yieldOn
+        this.fileLockTimeout = fileLockTimeout
         this.blacklistDomain = blacklistDomain
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull
@@ -1314,7 +1349,7 @@ public class FileLog: Log {
             var result = LogSend.RESULT_UNKNOWN
             while (result == LogSend.RESULT_UNKNOWN) {
                 try {
-                    result = CurrentThread.uninterruptedRunBlocking(scope.dispatcherLog) {
+                    result = CurrentThread.uninterruptedRunBlocking(scope.dispatcher) {
                         // This will NOT throw CancellationException, as
                         // CoroutineStart.ATOMIC + withContext(NonCancellable)
                         // were used.
@@ -1331,7 +1366,7 @@ public class FileLog: Log {
         while (logWait.isActive) {
             logD { "Block[blocked=1, threadId=$tid] >> $logWait" }
             try {
-                CurrentThread.uninterruptedRunBlocking(scope.dispatcherLog) {
+                CurrentThread.uninterruptedRunBlocking(scope.dispatcher) {
                     // If logSendResult was false (closed channel) then
                     // LogBuffer.channel's onUndeliveredElement will clean
                     // everything up for us and cancel logWait (eventually).
@@ -1356,8 +1391,7 @@ public class FileLog: Log {
         // CoroutineDispatcher of our own. If we were to use Dispatchers.IO for everything,
         // then it could result in a deadlock if caller is also using Dispatchers.IO whereby
         // thread starvation could occur and LogLoop is unable to yield or launch LogRotation.
-        val (dispatcherLog, deRefLog) = allocator.getOrAllocate()
-        val (dispatcherBlockMonitor, deRefBlockMonitor) = DispatcherAllocator.BlockMonitor.getOrAllocate()
+        val (dispatcher, dispatcherDeRef) = allocator.getOrAllocate()
 
         val logBuffer = LogBuffer(
             capacity = bufferCapacity,
@@ -1365,78 +1399,77 @@ public class FileLog: Log {
         )
         val previousLogJob = _logJob
 
-        scopeFileLog.launch(dispatcherLog, start = CoroutineStart.ATOMIC) {
-            scopeLog {
-                jobLog.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $jobLog" } }
-                logD { "$LOG_JOB Started >> $jobLog" }
+        scopeFileLog.launch(dispatcher, start = CoroutineStart.ATOMIC) {
+            val logJob = currentCoroutineContext().job
+            logJob.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $logJob" } }
+            logD { "$LOG_JOB Started >> $logJob" }
 
-                if (previousLogJob != null) {
-                    logD {
-                        if (!previousLogJob.isActive) null
-                        else "Waiting for previous $LOG_JOB to complete >> $previousLogJob"
-                    }
-                    previousLogJob.join()
+            if (previousLogJob != null) {
+                logD {
+                    if (!previousLogJob.isActive) null
+                    else "Waiting for previous $LOG_JOB to complete >> $previousLogJob"
                 }
-
-                directory.mkdirs2(mode = modeDirectory, mustCreate = false)
-
-                run {
-                    val canonical = directory.canonicalFile2()
-                    if (canonical != directory) {
-                        // FAIL:
-                        //   Between time of Builder.build and Log.Root.install, the specified
-                        //   directory was modified to contain symbolic links such that the current
-                        //   one points to a different location. This would invalidate the Log.uid,
-                        //   allowing multiple FileLog instances to be installed simultaneously for
-                        //   the same log file leading to data corruption.
-                        throw IllegalStateException("Symbolic link hijacking detected >> [$canonical] != [$directory]")
-                    }
-                }
-
-                try {
-                    // Some systems, such as macOS, have highly unreliable fcntl byte-range file lock
-                    // behavior when the target is a symbolic link. We want no part in that and require
-                    // the lock file to be a regular file.
-                    val canonical = dotLockFile.canonicalFile2()
-                    if (canonical != dotLockFile) {
-                        logW { "Symbolic link detected >> [$canonical] != [$dotLockFile]" }
-                        dotLockFile.delete2(ignoreReadOnly = true)
-                        delay(10.milliseconds)
-                    }
-                } catch (t: Throwable) {
-                    if (t is CancellationException) throw t
-                    // ignore
-                }
-
-                jobLog.ensureActive()
-                val lockFile = dotLockFile.openLockFileRobustly()
-                val lockFileCompletion = jobLog.closeOnCompletion(lockFile)
-
-                try {
-                    val canonical = files[0].canonicalFile2()
-                    if (canonical != files[0]) {
-                        logW { "Symbolic link detected >> [$canonical] != [${files[0]}]" }
-                        files[0].delete2(ignoreReadOnly = true)
-                        delay(10.milliseconds)
-                    }
-                } catch (t: Throwable) {
-                    if (t is CancellationException) throw t
-                    // ignore
-                }
-
-                jobLog.ensureActive()
-                val logStream = files[0].openLogFileRobustly(modeFile)
-                val logStreamCompletion = jobLog.closeOnCompletion(logStream)
-
-                logLoop(
-                    logBuffer,
-                    dispatcherBlockMonitor,
-                    lockFile,
-                    lockFileCompletion,
-                    logStream,
-                    logStreamCompletion,
-                )
+                // TODO: If it is not processing jobs, cancel it. It could
+                //  be stuck waiting for a FileLock or something.
+                previousLogJob.join()
             }
+
+            directory.mkdirs2(mode = modeDirectory, mustCreate = false)
+
+            run {
+                val canonical = directory.canonicalFile2()
+                if (canonical != directory) {
+                    // FAIL:
+                    //   Between time of Builder.build and Log.Root.install, the specified
+                    //   directory was modified to contain symbolic links such that the current
+                    //   one points to a different location. This would invalidate the Log.uid,
+                    //   allowing multiple FileLog instances to be installed simultaneously for
+                    //   the same log file leading to data corruption.
+                    throw IllegalStateException("Symbolic link hijacking detected >> [$canonical] != [$directory]")
+                }
+            }
+
+            try {
+                // Some systems, such as macOS, have highly unreliable fcntl byte-range file lock
+                // behavior when the target is a symbolic link. We want no part in that and require
+                // the lock file to be a regular file.
+                val canonical = dotLockFile.canonicalFile2()
+                if (canonical != dotLockFile) {
+                    logW { "Symbolic link detected >> [$canonical] != [$dotLockFile]" }
+                    dotLockFile.delete2(ignoreReadOnly = true)
+                    delay(10.milliseconds)
+                }
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                // ignore
+            }
+
+            logJob.ensureActive()
+            val lockFile = dotLockFile.openLockFileRobustly()
+            val lockFileCompletion = logJob.closeOnCompletion(lockFile)
+
+            try {
+                val canonical = files[0].canonicalFile2()
+                if (canonical != files[0]) {
+                    logW { "Symbolic link detected >> [$canonical] != [${files[0]}]" }
+                    files[0].delete2(ignoreReadOnly = true)
+                    delay(10.milliseconds)
+                }
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                // ignore
+            }
+
+            logJob.ensureActive()
+            val logStream = files[0].openLogFileRobustly(modeFile)
+            val logStreamCompletion = logJob.closeOnCompletion(logStream)
+
+            logBuffer.logLoop(
+                lockFile,
+                lockFileCompletion,
+                logStream,
+                logStreamCompletion,
+            )
         }.let { logJob ->
             logJob.invokeOnCompletion { t ->
                 logBuffer.channel.close()
@@ -1458,9 +1491,8 @@ public class FileLog: Log {
                 logJob,
                 scopeFileLog,
                 _onInstallInvocations,
-                dispatcherLog,
-                deRefLog,
-                deRefBlockMonitor,
+                dispatcher,
+                dispatcherDeRef,
             )
 
             _logJob = logJob
@@ -1486,9 +1518,7 @@ public class FileLog: Log {
     * Loops until LogBuffer is closed via onUninstall and is "drained" of all its
     * remaining LogAction.Write.
     * */
-    private suspend fun ScopeLog.logLoop(
-        logBuffer: LogBuffer,
-        blockMonitor: CoroutineDispatcher,
+    private suspend fun LogBuffer.logLoop(
         _lockFile: LockFile,
         _lockFileCompletion: DisposableHandle,
         _logStream: FileStream.ReadWrite,
@@ -1562,7 +1592,7 @@ public class FileLog: Log {
                     ?: retryAction._getAndSet(new = null)
 
                     // Lastly, LogAction sent from FileLog.log
-                    ?: logBuffer.channel.receive()
+                    ?: channel.receive()
             } catch (_: ClosedReceiveChannelException) {
                 // FileLog was uninstalled via Log.Root.uninstall, and there are no
                 // remaining LogAction within the LogBuffer to process.
@@ -1580,8 +1610,11 @@ public class FileLog: Log {
             // containing a cached LogAction.
             lockLog = if (lockLog.isValid()) lockLog else CurrentThread.uninterrupted {
                 try {
-                    // TODO: Blocking timeout monitor
-                    lockFile.lockLog()
+                    lockFile.lockNonBlock(
+                        position = FILE_LOCK_POS_LOG,
+                        size = FILE_LOCK_SIZE,
+                        timeout = fileLockTimeout.milliseconds,
+                    )
                 } catch (t: Throwable) {
                     // Could be an OverlappingFileLockException on Jvm/Android. Someone
                     // within this process may be holding a lock on our requested range
@@ -1592,9 +1625,14 @@ public class FileLog: Log {
                     // Alternatively, lockFile was previously closed due to a release
                     // failure requiring a re-open.
 
-                    // If it was closed, the rotation job's lock is already invalid, so
-                    // no reason to wait for it.
-                    if (t !is ClosedException) {
+                    // If we timed out, that's a showstopper.
+                    if (t.cause is TimeoutCancellationException) {
+                        logAction.drop(warn = true)
+                        jobLogLoop.ensureActive()
+                        throw t
+                    }
+
+                    if (lockFile.isOpen()) {
                         try {
                             // If a log rotation is currently underway, we must wait for it
                             // so that we do not invalidate its lockRotate inadvertently.
@@ -1619,7 +1657,7 @@ public class FileLog: Log {
                         directory.mkdirs2(mode = modeDirectory, mustCreate = false)
                     } catch (eee: IOException) {
                         t.addSuppressed(eee)
-                        // Not a show-stopper. Ignore.
+                        // Not a showstopper. Ignore.
                     }
 
                     try {
@@ -1627,12 +1665,16 @@ public class FileLog: Log {
                         jobLogLoop.ensureActive()
                         lockFile = dotLockFile.openLockFileRobustly()
                         lockFileCompletion = jobLogLoop.closeOnCompletion(lockFile)
-                        // TODO: Blocking timeout monitor
-                        lockFile.lockLog()
+                        lockFile.lockNonBlock(
+                            position = FILE_LOCK_POS_LOG,
+                            size = FILE_LOCK_SIZE,
+                            timeout = fileLockTimeout.milliseconds,
+                        )
                     } catch (tt: Throwable) {
                         // Total failure. Close up shop.
                         logAction.drop(warn = true)
                         if (tt is CancellationException) throw tt
+                        if (tt.cause is TimeoutCancellationException) jobLogLoop.ensureActive()
                         t.addSuppressed(tt)
                         throw t
                     }
@@ -1662,7 +1704,7 @@ public class FileLog: Log {
                         directory.mkdirs2(mode = modeDirectory, mustCreate = false)
                     } catch (eee: IOException) {
                         e.addSuppressed(eee)
-                        // Not a show-stopper. Ignore.
+                        // Not a showstopper. Ignore.
                     }
 
                     try {
@@ -1755,7 +1797,7 @@ public class FileLog: Log {
 
                             rotateActionQueue.dequeueOrNull()
                                 ?: retryAction._getAndSet(new = null)
-                                ?: logBuffer.channel.tryReceive().getOrNull()
+                                ?: channel.tryReceive().getOrNull()
                         } catch (_: CancellationException) {
                             // Shouldn't happen b/c just checked isActive, but if so
                             // we want to ensure we pop out for logStream.sync. The
@@ -1815,6 +1857,11 @@ public class FileLog: Log {
             if (retryAction._get() == null && lockLog.isValid()) try {
                 lockLog.release()
                 logD { "Released lock on ${dotLockFile.name} >> $lockLog" }
+
+                // Slight delay after releasing the lock such that any other
+                // processes waiting on it have a chance to acquire it before
+                // we jump back to the top of the loop.
+                delay(2.milliseconds)
             } catch (e: IOException) {
                 // If a log rotation is currently underway, we must wait for it
                 // so that we do not invalidate its lockRotate inadvertently.
@@ -1882,8 +1929,11 @@ public class FileLog: Log {
         }
 
         val lockRotate = try {
-            // TODO: Blocking timeout monitor
-            lockFile.lockRotate()
+            lockFile.lockNonBlock(
+                position = FILE_LOCK_POS_ROTATE,
+                size = FILE_LOCK_SIZE,
+                timeout = fileLockTimeout.milliseconds,
+            )
         } catch (t: Throwable) {
             // Could be an OverlappingFileLockException on Jvm/Android. Someone
             // within this process may be holding a lock on our requested range
@@ -1893,6 +1943,12 @@ public class FileLog: Log {
             //
             // Alternatively, lockFile was previously closed due to a release
             // failure and requires a re-open.
+
+            // If we timed out, that's a showstopper.
+            if (t.cause is TimeoutCancellationException) {
+                jobLogLoop.ensureActive()
+                throw t
+            }
 
             try {
                 // Close the lock file (if not already). Next logLoop iteration
@@ -2093,7 +2149,7 @@ public class FileLog: Log {
         try {
             directory.mkdirs2(mode = modeDirectory, mustCreate = false)
         } catch (_: IOException) {
-            // Not a show-stopper. Ignore.
+            // Not a showstopper. Ignore.
         }
 
         // These files should NOT exist, but need to check and expunge to avoid complications going forward.
@@ -2581,26 +2637,7 @@ public class FileLog: Log {
         deallocationDelay = 250.milliseconds,
         deallocationDispatcher = Dispatchers.IO,
     ) {
-
         abstract override fun doAllocation(): CloseableCoroutineDispatcher
         final override fun CoroutineDispatcher.doDeallocation() { (this as CloseableCoroutineDispatcher).close() }
-
-        companion object {
-
-            private const val TAG = "BlockMonitor"
-            private const val NAME = "FileLog.$TAG"
-
-            /*
-            * Shared between all FileLog instances for monitoring LockFile.lock blocking calls
-            * such that they can be interrupted by LockFile closure if they block for too long.
-            *
-            * If another process is holding a FileLock for our requested range (maliciously???),
-            * we could end up blocking forever; no logs are better than bringing down an entire
-            * application due to logging...
-            * */
-            val BlockMonitor = object : DispatcherAllocator(Logger.of(tag = TAG, domain = DOMAIN)) {
-                override fun doAllocation(): CloseableCoroutineDispatcher = newSingleThreadContext(name = NAME)
-            }
-        }
     }
 }

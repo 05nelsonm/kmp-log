@@ -79,12 +79,7 @@ kmpConfiguration {
         kotlin {
             with(sourceSets) {
                 val sets = arrayOf(
-                    "jvm" to emptyList(),
-                    "ios" to listOf(
-                        "iosArm64",
-                        "iosSimulatorArm64",
-                        "iosX64",
-                    ),
+                    "jvm" to listOf("jvm"),
                     "unixLockFile" to listOf(
                         "linuxArm64",
                         "linuxX64",
@@ -93,12 +88,8 @@ kmpConfiguration {
                     ),
                 ).mapNotNull { (name, dependencies) ->
                     val test = findByName(name + "Test") ?: return@mapNotNull null
-                    val mapped = if (dependencies.isEmpty()) {
-                        listOf(name + "Test")
-                    } else {
-                        dependencies.map { it + "Test" }
-                    }
-                    test to mapped
+                    check(dependencies.isNotEmpty()) { "dependencies cannot be empty" }
+                    test to dependencies.map { it + "Test" }
                 }
                 if (sets.isEmpty()) return@kotlin
 
@@ -149,7 +140,7 @@ kmpConfiguration {
                         ""
                     }
 
-                    configDir.resolve("-LockFileTestPlatform.kt").writeText("""
+                    configDir.resolve("-LockFileTestConfig.kt").writeText("""
                         package $packageName
 
                         internal const val TEST_FILE_LOCK_JAR: String = "$jarPath"
