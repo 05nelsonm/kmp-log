@@ -17,9 +17,11 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.use
 import io.matthewnelson.kmp.log.file.withTmpFile
+import io.matthewnelson.kmp.process.Process
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlin.test.Test
@@ -42,7 +44,10 @@ class LockFileLockFileUnitTest {
                 val position = 0L
                 val size = 30L
 
-                execTestFileLockJar(tmp, 2_000, position, size).createProcess().use { p ->
+                var threw: Throwable? = null
+                var p: Process? = null
+                try {
+                    p = execTestFileLockJar(tmp, 2_000, position, size).createProcess()
                     var acquired: Boolean? = null
                     p.stdoutFeed { line ->
                         when {
@@ -69,7 +74,24 @@ class LockFileLockFileUnitTest {
                             assertIs<TimeoutCancellationException>(t.cause)
                         }
                     }
+                } catch (t: Throwable) {
+                    threw = t
+                } finally {
+                    p?.destroy()
                 }
+
+                p?.stdoutWaiter()
+                    ?.awaitStop()
+                    ?.stderrWaiter()
+                    ?.awaitStop()
+                    ?.waitFor()
+
+                // On Windows, withTmpFile file deletion can fail if another
+                // process has it opened. This ensures that the process is good
+                // and dead before deletion.
+                withContext(Dispatchers.IO) { delay(5.milliseconds) }
+
+                threw?.let { throw it }
             }
         }
     }
