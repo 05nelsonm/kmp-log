@@ -361,7 +361,11 @@ public class FileLog: Log {
     public val logFiles: List<String>
 
     /**
-     * A hash of the canonical path of the active log [File] (i.e. element `0` of [logFiles]).
+     * A `24` character, base 16 (hex) encoded, double hash of the canonical path of the active
+     * log [File] (i.e. element `0` of [logFiles]).
+     *
+     * **NOTE:** This value is device specific and should not be utilized as a stable reference
+     * externally of said device.
      * */
     @JvmField
     public val logFiles0Hash: String
