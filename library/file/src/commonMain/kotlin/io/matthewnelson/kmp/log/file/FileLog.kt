@@ -202,7 +202,7 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * [FileLog] supports the ability to define both directory and log [File] permissions. By default,
  * directory permissions `700` and log [File] permissions `600` are used; permissions for `group`
- * and `others` of each being configurable via [Builder].
+ * and `other` of each being configurable via [Builder].
  *
  * **NOTE:** Applications supporting multi-user installations **must** keep this in mind if
  * logging to a shared directory or shared log [File] (or are planning to do so in the future).
@@ -375,7 +375,7 @@ public class FileLog: Log {
     public val maxLogFileSize: Long
 
     /**
-     * The permissions mode to use for [File.mkdirs2] when creating [logDirectory].
+     * The permissions to use for [File.mkdirs2] when creating [logDirectory].
      *
      * @see [File.chmod2]
      * @see [Builder.directoryGroupReadable]
@@ -387,7 +387,7 @@ public class FileLog: Log {
     public val modeDirectory: String
 
     /**
-     * The permissions mode to use for [OpenExcl.MaybeCreate] when opening log files.
+     * The permissions to use for [OpenExcl.MaybeCreate] when opening log files.
      *
      * @see [File.chmod2]
      * @see [Builder.fileGroupReadable]
