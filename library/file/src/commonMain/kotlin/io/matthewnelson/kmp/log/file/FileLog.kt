@@ -176,11 +176,11 @@ import kotlin.time.Duration.Companion.milliseconds
  * first thing [FileLog] does at time of [Log.Root.install].
  *
  * As soon as the log [File] reaches capacity, it is atomically copied to its reproducibly
- * derived preparatory move location within the directory, then truncated to `0`. Execution of
+ * derived pre-archival location within the [logDirectory], then truncated to `0`. Execution of
  * rotating log archives is then performed by a separate [Job], allowing for a prompt return to
  * writing logs to the log [File]. This ensures, as much as the underlying file system permits,
- * `0` log loss and an ability to detect previously interrupted log rotations (if the preparatory
- * move [File] has not been moved to its final `{fileName}{.fileExtension}.001` archive location).
+ * `0` log loss and an ability to detect previously interrupted log rotations (if the pre-archival
+ * [File] has not been moved to its final `{fileName}{.fileExtension}.001` location).
  *
  * [Builder.maxLogFileSize] and [Builder.maxLogFiles] are `2` configuration options which
  * directly affect log rotations.
@@ -226,7 +226,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * 3) The first character of the [Log.Level] name
  * 4) The `0` prefixed 7-digit process id
  * 5) The `0` prefixed 7-digit thread id
- * 6) The [Logger.domain] (if non-null) and [Logger.tag]
+ * 6) The concatenated [Logger.domain] (if non-null) and [Logger.tag]
  *
  * ```
  * 01-01 01:59:01.850 D 0452849 0452849 [some.domain]SomeTag: {log line 1 of 3}
@@ -262,6 +262,31 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * [Builder.minWaitOn], [Builder.bufferCapacity] and [Builder.bufferOverflow] are `3` configuration
  * options which directly affect blocking and non-blocking modes of operation.
+ *
+ * ### Irrecoverable Errors
+ *
+ * The [FileLog] implementation is one that is **highly** redundant, but there are *some* scenarios
+ * in which it has no other choice but to shut itself down. Most irrecoverable errors are security
+ * related, attributed to potential malicious actors on the device doing things they should not.
+ *
+ * 1) Symbolic link hijacking: If between the time [Builder.build] is called and the resulting [FileLog]
+ *    instance is installed at [Log.Root], a symbolic link is created to alter the destination of
+ *    [FileLog.logDirectory], [FileLog] will error out and shut itself down. This is to prevent data
+ *    corruption due to the potential of multiple [FileLog] instances being installed, modifying the
+ *    *same* log [File].
+ * 2) Failure to open the log [File] or its associated lock [File]: [FileLog] tries its best with robust
+ *    [File] open logic, but if it is unable to open a [File], it will error out and shut itself down.
+ * 3) Failure to obtain a [File] lock: [FileLog] tries its best with robust lock acquisition logic (such
+ *    as closing and re-opening the lock [File] on certain failures). But, if unable to obtain a [File]
+ *    lock for the requested byte-range, or within the specified [fileLockTimeout], [FileLog] will error
+ *    out and shut itself down.
+ * 4) Failure to rotate logs: [FileLog] has many redundancies built into its log rotation implementation
+ *    to handle edge-cases, and will almost always attempt retries upon failure. But, to prevent itself
+ *    from looping infinitely on retries, [FileLog] will error out and shut itself down.
+ *
+ * Errors that [FileLog] experiences are always dispatched as [Level.Error] logs via its internally
+ * instantiated [Logger]. If the [Level.Error] log was not logged by another installed [Log] instance
+ * (i.e. [Logger.e] returned `0`), then [Throwable.printStackTrace] is used.
  *
  * @see [Builder]
  * @see [DOMAIN]
@@ -343,7 +368,7 @@ public class FileLog: Log {
 
     /**
      * A list of all log [File]; element `0` being the active log, and all other elements
-     * being archive logs. Will **always** contain *at least* 2 elements.
+     * being archive logs. Will **always** contain *at least* `2` elements.
      *
      * e.g.
      *

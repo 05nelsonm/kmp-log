@@ -49,6 +49,7 @@ internal actual inline fun LockFile.tryLock(position: Long, size: Long): FileLoc
 
 @Throws(IOException::class)
 internal fun File.openNioFileChannel(): LockFile  = try {
+    // mode: 666
     RandomAccessFile(this, "rw").channel
 } catch (t: Throwable) {
     if (t is SecurityException) {

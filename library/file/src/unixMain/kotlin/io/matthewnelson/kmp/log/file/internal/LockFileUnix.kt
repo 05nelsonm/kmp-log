@@ -36,7 +36,11 @@ import platform.posix.EWOULDBLOCK
 import platform.posix.O_CLOEXEC
 import platform.posix.O_CREAT
 import platform.posix.O_RDWR
+import platform.posix.S_IRGRP
+import platform.posix.S_IROTH
 import platform.posix.S_IRUSR
+import platform.posix.S_IWGRP
+import platform.posix.S_IWOTH
 import platform.posix.S_IWUSR
 import platform.posix.errno
 import kotlin.concurrent.Volatile
@@ -115,10 +119,9 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
         // Exposed for testing
         @Throws(IOException::class)
         internal inline fun openFd(file: File): Int {
-            // No O_TRUNC because if a lock is held by another
-            // process, it could cause problems.
+            // No O_TRUNC because if a lock is held by another process, it could cause problems.
             val flags = O_RDWR or O_CREAT or O_CLOEXEC
-            val mode = S_IRUSR or S_IWUSR // 600
+            val mode = S_IRUSR or S_IWUSR or S_IRGRP or S_IWGRP or S_IROTH or S_IWOTH // mode: 666
             var fd: Int
             do {
                 fd = platform.posix.open(file.path, flags, mode)
