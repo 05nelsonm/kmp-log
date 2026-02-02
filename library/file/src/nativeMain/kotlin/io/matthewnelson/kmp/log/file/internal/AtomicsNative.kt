@@ -28,8 +28,8 @@ internal actual inline fun FileLog.Companion._atomic(initial: Long): AtomicLong 
 internal actual inline fun <T> FileLog.Companion._atomicRef(initial: T): AtomicRef<T> = AtomicRef(initial)
 
 internal actual inline fun AtomicLong._get(): Long = value
-internal actual inline fun AtomicLong._increment() { incrementAndGet() }
-internal actual inline fun AtomicLong._decrement() { decrementAndGet() }
+internal actual inline fun AtomicLong._incrementAndGet(): Long = incrementAndGet()
+internal actual inline fun AtomicLong._decrementAndGet(): Long = decrementAndGet()
 
 internal actual inline fun <T> AtomicRef<T>._get(): T = value
 internal actual inline fun <T> AtomicRef<T>._set(new: T) { value = new }

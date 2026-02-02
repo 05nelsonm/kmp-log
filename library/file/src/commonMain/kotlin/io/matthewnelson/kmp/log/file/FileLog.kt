@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("DuplicatedCode", "LocalVariableName", "PrivatePropertyName", "NOTHING_TO_INLINE")
+@file:Suppress("LocalVariableName", "PrivatePropertyName")
 
 package io.matthewnelson.kmp.log.file
 
@@ -70,10 +70,10 @@ import io.matthewnelson.kmp.log.file.internal.SharedResourceAllocator
 import io.matthewnelson.kmp.log.file.internal._atomic
 import io.matthewnelson.kmp.log.file.internal._atomicRef
 import io.matthewnelson.kmp.log.file.internal._compareAndSet
-import io.matthewnelson.kmp.log.file.internal._decrement
+import io.matthewnelson.kmp.log.file.internal._decrementAndGet
 import io.matthewnelson.kmp.log.file.internal._get
 import io.matthewnelson.kmp.log.file.internal._getAndSet
-import io.matthewnelson.kmp.log.file.internal._increment
+import io.matthewnelson.kmp.log.file.internal._incrementAndGet
 import io.matthewnelson.kmp.log.file.internal._set
 import io.matthewnelson.kmp.log.file.internal.async
 import io.matthewnelson.kmp.log.file.internal.deleteOrMoveToRandomIfNonEmptyDirectory
@@ -111,6 +111,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.newFixedThreadPoolContext
 import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.yield
 import org.kotlincrypto.hash.blake2.BLAKE2s
@@ -121,6 +122,7 @@ import kotlin.contracts.contract
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.jvm.JvmField
 import kotlin.jvm.JvmName
+import kotlin.jvm.JvmStatic
 import kotlin.jvm.JvmSynthetic
 import kotlin.sequences.forEach
 import kotlin.time.Duration
@@ -161,11 +163,11 @@ import kotlin.time.Duration.Companion.milliseconds
  * (or upon experiencing an early shutdown due to an irrecoverable error).
  *
  * Each installed [FileLog] instance allocates a single `8192` byte array, `2` always-open [File]
- * (the log [File] and its associated lock [File]), a single background [CoroutineDispatcher],
- * and a few data structures for logging operations.
+ * (the log [File] and its associated lock [File]), a single background [CoroutineDispatcher] (if
+ * not sharing a [ThreadPool] between instances), and a few data structures for logging operations.
  *
- * [Builder.bufferCapacity], [Builder.bufferOverflow] and [Builder.minWaitOn] are `3` configuration
- * options which directly affect resources used for logging operations.
+ * [Builder.minWaitOn], [Builder.bufferCapacity], [Builder.bufferOverflow] and [Builder.thread]
+ * are `4` configuration options which directly affect resources used for logging operations.
  *
  * ### Log Rotation
  *
@@ -314,10 +316,17 @@ public class FileLog: Log {
          *
          * e.g.
          *
+         *     // Use the same thread since fileLogErrors is not going
+         *     // to be doing much work and that'd be wasteful.
+         *     //
+         *     // NOTE: Adjust nThreads to accommodate additional FileLog.
+         *     val pool = FileLog.ThreadPool.of(nThreads = 1)
+         *
          *     val fileLogErrors = FileLog.Builder(myLogDirectory)
          *         .fileName("file_log")
          *         .fileExtension("err")
          *         .min(Log.Level.Warn)
+         *         .thread(pool = pool)
          *
          *         // Allow ONLY logs from other FileLog instances.
          *         .whitelistDomain(FileLog.DOMAIN)
@@ -333,6 +342,8 @@ public class FileLog: Log {
          *         .build()
          *
          *     val fileLog1 = FileLog.Builder(myLogDirectory)
+         *         .thread(pool = pool)
+         *
          *         // Allow all logs, EXCEPT from other FileLog instances.
          *         .blacklistDomain(FileLog.DOMAIN)
          *         // configure further...
@@ -627,6 +638,51 @@ public class FileLog: Log {
     }
 
     /**
+     * A reference meant for instantiating multiple [FileLog] with such that they are able to share a
+     * single [CoroutineDispatcher] of [nThreads].
+     *
+     * **NOTE:** This class does not immediately allocate anything. [CoroutineDispatcher] allocation
+     * occurs upon [Log.Root.install] of the **first** [FileLog] instance using the [ThreadPool], and
+     * will be de-allocated upon [Log.Root.uninstall] of the **last** [FileLog] instance using the
+     * [ThreadPool].
+     *
+     * @see [of]
+     * @see [Builder.thread]
+     * */
+    public sealed class ThreadPool(
+
+        /**
+         * The number of threads to allocate. Will be between `1` and `8`.
+         * */
+        @JvmField
+        public val nThreads: Int,
+    ) {
+
+        public companion object {
+
+            /**
+             * Creates a new [ThreadPool] instance.
+             *
+             * @param [nThreads] The number of threads to allocate.
+             *
+             * @return The [ThreadPool]
+             *
+             * @throws [IllegalArgumentException] If [nThreads] is less than `1`, or greater than `8`.
+             * */
+            @JvmStatic
+            public fun of(nThreads: Int): ThreadPool = RealThreadPool(nThreads)
+        }
+
+        init {
+            // Why someone would need or dedicate 8 threads for logging is beyond me...
+            require(nThreads in 1..8) { "nThreads[$nThreads] !in 1..8" }
+        }
+
+        /** @suppress */
+        public override fun toString(): String = "ThreadPool[nThreads=$nThreads]@${hashCode()}"
+    }
+
+    /**
      * TODO
      * */
     public class Builder(
@@ -651,6 +707,7 @@ public class FileLog: Log {
         private var _minWaitOn = Level.Verbose
         private var _yieldOn: Byte = 2
         private var _fileLockTimeout = -1L
+        private var _threadPool: ThreadPool? = null
         private var _formatter = DEFAULT_FORMATTER
         private var _formatterOmitYear = true
         private val _blacklistDomain = mutableSetOf<String>()
@@ -878,6 +935,15 @@ public class FileLog: Log {
          * @return The [Builder]
          * */
         public fun fileLockTimeout(millis: Long): Builder = apply { _fileLockTimeout = millis }
+
+        /**
+         * DEFAULT: `null` (i.e. Use a single dedicated thread)
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun thread(pool: ThreadPool?): Builder = apply { _threadPool = pool }
 
         /**
          * DEFAULT: `null` (i.e. Use the default [Formatter])
@@ -1187,6 +1253,7 @@ public class FileLog: Log {
                 _bufferCapacity.coerceAtLeast(minimum)
             }
 
+            val threadPool = _threadPool as? RealThreadPool
             val yieldOn = _yieldOn.coerceIn(1, 10)
             val maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L) // 50kb
             val fileLockTimeout = _fileLockTimeout.let {
@@ -1216,6 +1283,7 @@ public class FileLog: Log {
                 minWaitOn = minWaitOn,
                 yieldOn = yieldOn,
                 fileLockTimeout = fileLockTimeout,
+                threadPool = threadPool,
                 formatter = _formatter,
                 formatterOmitYear = _formatterOmitYear,
                 blacklistDomain = blacklistDomain,
@@ -1251,7 +1319,8 @@ public class FileLog: Log {
     private val LOG: Logger
 
     private val scopeFileLog: ScopeFileLog
-    private val allocator: DispatcherAllocator
+    // Lazy, so nothing is initialized until time of onInstall
+    private val allocator: Lazy<DispatcherAllocator>
 
     private val checkIfLogRotationIsNeeded: LogAction.Rotation
 
@@ -1277,6 +1346,7 @@ public class FileLog: Log {
         minWaitOn: Level,
         yieldOn: Byte,
         fileLockTimeout: Long,
+        threadPool: RealThreadPool?,
         formatter: Formatter,
         formatterOmitYear: Boolean,
         blacklistDomain: Set<String>,
@@ -1338,10 +1408,12 @@ public class FileLog: Log {
             if (t is CancellationException) return@handler // Ignore...
             logE(t) { context }
         })
-        this.allocator = object : DispatcherAllocator(LOG) {
-            @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
-            override fun doAllocation(): CloseableCoroutineDispatcher = newSingleThreadContext(name = LOG.tag)
-            override fun debug(): Boolean = this@FileLog.debug
+        this.allocator = threadPool?.allocator ?: lazy {
+            object : DispatcherAllocator(LOG) {
+                @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+                override fun doAllocation(): CloseableCoroutineDispatcher = newSingleThreadContext(name = LOG.tag)
+                override fun debug(): Boolean = this@FileLog.debug
+            }
         }
         // For logLoop's RotateActionQueue
         this.checkIfLogRotationIsNeeded = LogAction.Rotation { _, _, sizeLog, processedWrites ->
@@ -1447,7 +1519,7 @@ public class FileLog: Log {
 
                 preprocessing.cancel()
                 logWait?.failure()
-                _pendingLogCount._decrement()
+                _pendingLogCount._decrementAndGet()
                 if (warn) logW {
                     "Dropped 1 log(s) >> ${_pendingLogCount._get()} log(s) are currently pending processing."
                 }
@@ -1485,7 +1557,7 @@ public class FileLog: Log {
                         }
                     }
 
-                    _pendingLogCount._decrement()
+                    _pendingLogCount._decrementAndGet()
                     logWait?.failure()
 
                     // threw will only ever be non-null when result == null
@@ -1543,7 +1615,7 @@ public class FileLog: Log {
                     }
                 }
 
-                _pendingLogCount._decrement()
+                _pendingLogCount._decrementAndGet()
                 threw?.let { t ->
                     logWait?.failure()
                     throw t
@@ -1582,7 +1654,7 @@ public class FileLog: Log {
             LogSend(scope, logBuffer, logAction)
         }
 
-        _pendingLogCount._increment()
+        _pendingLogCount._incrementAndGet()
         preprocessing.start()
 
         // If logWait is non-null, we do not care about logSend result because it will either
@@ -1649,7 +1721,7 @@ public class FileLog: Log {
         // CoroutineDispatcher of our own. If we were to use Dispatchers.IO for everything,
         // then it could result in a deadlock if caller is also using Dispatchers.IO whereby
         // thread starvation could occur and LogLoop is unable to yield or launch LogRotation.
-        val (dispatcher, dispatcherDeRef) = allocator.getOrAllocate()
+        val (dispatcher, dispatcherDeRef) = allocator.value.getOrAllocate()
 
         val logBuffer = LogBuffer(
             capacity = bufferCapacity,
@@ -2897,5 +2969,25 @@ public class FileLog: Log {
     ) {
         abstract override fun doAllocation(): CloseableCoroutineDispatcher
         final override fun CoroutineDispatcher.doDeallocation() { (this as CloseableCoroutineDispatcher).close() }
+    }
+
+    private class RealThreadPool(nThreads: Int): ThreadPool(nThreads) {
+
+        val allocator: Lazy<DispatcherAllocator> = lazy {
+            // Using Lazy such that if the FileLog is never installed at Log.Root,
+            // then N is never incremented nor Logger instantiated.
+            val logger = Logger.of(tag = "ThreadPool{${N._incrementAndGet()}}", domain = DOMAIN)
+
+            object : DispatcherAllocator(logger) {
+                @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+                override fun doAllocation(): CloseableCoroutineDispatcher {
+                    return newFixedThreadPoolContext(nThreads = nThreads, name = "FileLog." + logger.tag)
+                }
+            }
+        }
+
+        private companion object {
+            private val N = _atomic(initial = 0L)
+        }
     }
 }
