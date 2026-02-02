@@ -26,8 +26,8 @@ internal expect inline fun FileLog.Companion._atomic(initial: Long): AtomicLong
 internal expect inline fun <T> FileLog.Companion._atomicRef(initial: T): AtomicRef<T>
 
 internal expect inline fun AtomicLong._get(): Long
-internal expect inline fun AtomicLong._increment()
-internal expect inline fun AtomicLong._decrement()
+internal expect inline fun AtomicLong._incrementAndGet(): Long
+internal expect inline fun AtomicLong._decrementAndGet(): Long
 
 internal expect inline fun <T> AtomicRef<T>._get(): T
 internal expect inline fun <T> AtomicRef<T>._set(new: T)
