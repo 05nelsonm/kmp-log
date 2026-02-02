@@ -1244,7 +1244,7 @@ public class FileLog: Log {
     private val formatter: Formatter
     private val formatterOmitYear: Boolean
 
-    private val _blacklistDomain: Array<String?>
+    private val _blacklistDomain: Array<String>
     private val _whitelistDomain: Array<String>
     private val _whitelistTag: Array<String>
 
@@ -1378,22 +1378,21 @@ public class FileLog: Log {
     }
 
     override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
-        // Do not log to self, only to other Log instances (if installed).
-        if (domain == LOG.domain && tag == LOG.tag) return false
+        // domain
+        if (domain == null) {
+            if (!whitelistDomainNull) return false
+        } else {
+            // Do not log to self, only to other Log instances (if installed).
+            if (domain == DOMAIN && tag == LOG.tag) return false
 
-        if (_blacklistDomain.contains(domain)) return false
-        if (_whitelistDomain.isNotEmpty()) {
-            if (domain == null) {
-                if (!whitelistDomainNull) return false
-            } else {
-                if (!_whitelistDomain.contains(domain)) return false
-            }
+            if (_blacklistDomain.contains(domain)) return false
+            if (_whitelistDomain.isNotEmpty() && !_whitelistDomain.contains(domain)) return false
         }
-        if (_whitelistTag.isNotEmpty()) {
-            if (!_whitelistTag.contains(tag)) return false
-        }
-        val (_, scope) = _logHandle._get() ?: return false
-        return scope.supervisorJob.isActive
+
+        // tag
+        if (_whitelistTag.isNotEmpty() && !_whitelistTag.contains(tag)) return false
+
+        return _logHandle._get()?.second?.supervisorJob?.isActive ?: false
     }
 
     override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
