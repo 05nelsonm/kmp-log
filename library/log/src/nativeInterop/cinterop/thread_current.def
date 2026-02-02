@@ -1,0 +1,36 @@
+package = io.matthewnelson.kmp.log.internal
+---
+#ifdef _WIN32
+#include <processthreadsapi.h>
+#else
+#include <stdint.h>
+#include <pthread.h>
+#endif
+
+/**
+ * UNIX:
+ *   Returns an integer representing an id for the current thread.
+ *
+ *   NOTE: This is NOT to be mistaken for the tid.
+ *
+ * Windows:
+ *   Returns the current thread id.
+ **/
+#ifdef _WIN32
+DWORD
+#else
+uint32_t
+#endif
+kmp_log_thread_current_uid(void)
+{
+#ifdef _WIN32
+  return GetCurrentThreadId();
+#else
+  union {
+    pthread_t self;
+    uint32_t id;
+  } t;
+  t.self = pthread_self();
+  return t.id;
+#endif
+}

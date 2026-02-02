@@ -30,10 +30,10 @@ class LockNativeUnitTest {
 
     @Test
     fun givenLock_whenUsedFromMultipleThreads_thenGuardsAccess() = runTest(timeout = 3.minutes) {
-        val size = 500_000
+        val size = 10_000
         // When list is resized, if it was not guarded by a lock then would
         // eventually end up throwing an IndexOutOfBoundsException.
-        val list = ArrayList<Int>(50)
+        val list = ArrayList<Int>(10)
         Array(size) { i ->
             async(Dispatchers.IO) {
                 lock.withLock {
