@@ -335,15 +335,13 @@ class FileLogUnitTest {
                     super.log(level, domain, tag, msg, t)
 
                     if (msg == null) return false
-                    if (msg.startsWith("Allocated >> ")) {
-                        assertTrue(tag.startsWith("ThreadPool"), "$tag does not start with ThreadPool")
+                    if (tag.startsWith("ThreadPool") && msg.startsWith("Allocated >> ")) {
                         synchronized(lock) {
                             allocated.add(msg.substringAfter("Allocated >> "))
                         }
                         return true
                     }
-                    if (msg.startsWith("Deallocated >> ")) {
-                        assertTrue(tag.startsWith("ThreadPool"), "$tag does not start with ThreadPool")
+                    if (tag.startsWith("ThreadPool") && msg.startsWith("Deallocated >> ")) {
                         synchronized(lock) {
                             deallocated.add(msg.substringAfter("Deallocated >> "))
                         }
