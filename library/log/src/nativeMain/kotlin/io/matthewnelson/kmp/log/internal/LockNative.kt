@@ -13,81 +13,68 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING", "NOTHING_TO_INLINE", "WRONG_INVOCATION_KIND")
+@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING", "NOTHING_TO_INLINE")
 
 package io.matthewnelson.kmp.log.internal
 
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlin.concurrent.AtomicInt
+import kotlin.concurrent.AtomicLong
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
-import kotlin.experimental.ExperimentalNativeApi
-import kotlin.native.concurrent.ThreadLocal
 
-@ThreadLocal
-private object TLS { var owner: Any? = null }
-
-private const val UNLOCKED = 0
-
-@OptIn(ExperimentalNativeApi::class)
 internal actual class Lock {
-    private val lock = AtomicInt(UNLOCKED)
-    private val reentries = AtomicInt(UNLOCKED)
 
-    internal fun lock() {
-        if (TLS.owner == null) {
-            TLS.owner = Any()
-        }
-        val ownerId = TLS.owner.hashCode()
-        check(ownerId != UNLOCKED) { "ownerId == $UNLOCKED" }
+    private companion object {
+        // Using Long as it is out of the addressable space for threadUID (32-bit)
+        private const val UNLOCKED: Long = Long.MAX_VALUE
+    }
+
+    private val lock = AtomicLong(UNLOCKED)
+    private val reentries = AtomicInt(0)
+
+    @Deprecated("Use Lock.withLock", level = DeprecationLevel.ERROR)
+    internal fun lock(threadUID: Int) {
+        val threadUID64 = threadUID.toLong()
         while (true) {
-            val previous = lock.compareAndExchange(UNLOCKED, ownerId)
-            when (previous) {
-                ownerId -> {
+            when (lock.compareAndExchange(UNLOCKED, threadUID64)) {
+                threadUID64 -> {
                     reentries.incrementAndGet()
                     break
                 }
                 UNLOCKED -> {
-                    check(reentries.value == 0) { "reentries.value != 0" }
+                    reentries.value.let { check(it == 0) { "reentries.value[$it] != 0" } }
                     break
                 }
             }
         }
     }
 
-    internal fun unlock() {
-        check(TLS.owner != null) { "TLS.owner == null" }
+    @Deprecated("Use Lock.withLock", level = DeprecationLevel.ERROR)
+    internal fun unlock(threadUID: Int) {
+        val threadUID64 = threadUID.toLong()
+        lock.value.let { check(it == threadUID64) { "lock.value[$it] != threadUID[$threadUID]" } }
+
         if (reentries.value > 0) {
             reentries.decrementAndGet()
         } else {
-            val ownerId = TLS.owner.hashCode()
-            check(ownerId != UNLOCKED) { "ownerId == $UNLOCKED" }
-            val previous = lock.compareAndExchange(ownerId, UNLOCKED)
-            check(previous == ownerId) { "previous[$previous] != ownerId[$ownerId]" }
-            TLS.owner = null
+            val previous = lock.compareAndExchange(threadUID64, UNLOCKED)
+            check(previous == threadUID64) { "previous[$previous] != threadUID[$threadUID]" }
         }
     }
 }
 
 internal actual inline fun newLock(): Lock = Lock()
 
+@Suppress("DEPRECATION_ERROR")
 internal actual inline fun <R> Lock.withLockImpl(block: () -> R): R {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
-    // Native is weird in that it may cause a null pointer de-reference (sometimes
-    // experienced when using coroutines). Forcing localization seems to fix the
-    // issues.
-    val local = this
-    local.lock()
-    var threw: Throwable? = null
-    val ret = try {
-        block()
-    } catch (t: Throwable) {
-        threw = t
-        null
+    @OptIn(ExperimentalForeignApi::class)
+    val threadUID = kmp_log_thread_current_uid().toInt()
+    lock(threadUID)
+    try {
+        return block()
     } finally {
-        local.unlock()
+        unlock(threadUID)
     }
-    threw?.let { throw it }
-    local.hashCode()
-    @Suppress("UNCHECKED_CAST")
-    return ret as R
 }
