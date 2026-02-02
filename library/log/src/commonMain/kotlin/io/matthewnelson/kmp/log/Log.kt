@@ -132,12 +132,13 @@ public abstract class Log {
 
         /**
          * A well-defined domain (e.g. `kmp-log:log`), or `null`. [Log] implementations
-         * may use this for filtering purposes.
+         * may use this for filtering via [Log.isLoggable].
          *
-         * The intended purpose of the domain API is for libraries. This helps prevent
-         * tag clashes with end-user [Logger] instances, quicker identification of where
-         * a log originated from, and provides the end-user with the ability to control
-         * what (if any) logging occurs for a specific domain.
+         * The intended purpose of the domain API is for libraries, multi-system or
+         * multi-module codebases, etc. A domain helps prevent [tag] clashes with end-user
+         * [Logger] instances, aids with more quickly identifying the general area where
+         * logs originated from, and provides the end-user with more refined control over
+         * what (if any) logs are generated for a given domain.
          *
          * @see [checkDomain]
          * */
@@ -1221,9 +1222,10 @@ public abstract class Log {
     public val max: Level
 
     /**
-     * A unique identifier for this [Log] instance, such as a package name or
-     * a hash of a file path. [Root.install] uses this value to inhibit multiple
-     * instances from being installed.
+     * A unique identifier for this [Log] instance such as a package name, a
+     * hash of a file path, a combination of both, etc. [Root.install] uses this
+     * value to inhibit multiple [Log] instances with the same [uid] from being
+     * installed simultaneously.
      *
      * Will be non-empty and contain no whitespace.
      * */

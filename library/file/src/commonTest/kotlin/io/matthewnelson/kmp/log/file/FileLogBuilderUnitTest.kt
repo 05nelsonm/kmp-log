@@ -87,13 +87,13 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenBufferCapacity_whenMinWaitOnGreaterThanMinAndBufferOverflowDROPOLDESTButCapacityLessThan256_thenIs256() {
+    fun givenBufferCapacity_whenMinWaitOnGreaterThanMinAndBufferOverflowDROPOLDESTButCapacityLessThan32_thenIs32() {
         val log = newBuilder()
             .minWaitOn(Log.Level.Fatal)
             .bufferCapacity(2)
             .bufferOverflow(dropOldest = true)
             .build()
-        assertEquals(256, log.bufferCapacity)
+        assertEquals(32, log.bufferCapacity)
     }
 
     @Test

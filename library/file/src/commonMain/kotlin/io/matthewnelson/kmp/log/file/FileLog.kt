@@ -34,6 +34,7 @@ import io.matthewnelson.kmp.file.FileStream
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.OpenExcl
 import io.matthewnelson.kmp.file.canonicalFile2
+import io.matthewnelson.kmp.file.chmod2
 import io.matthewnelson.kmp.file.delete2
 import io.matthewnelson.kmp.file.mkdirs2
 import io.matthewnelson.kmp.file.name
@@ -126,7 +127,166 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * TODO
+ * A highly robust, performant and configurable [Log] implementation for logging to a [File].
+ *
+ * The [FileLog] implementation is designed with out-of-the-box defaults tuned for data
+ * integrity and durability. This, of course, may be modified via [Builder] to better suit
+ * application specific needs.
+ *
+ * Multiple [FileLog] instances may be installed at [Log.Root] simultaneously, but only `1`
+ * for a given [Builder.logDirectory] + [Builder.fileName] + [Builder.fileExtension]. This is
+ * enforced by hashing the canonical path of the resultant log [File] and using it in the
+ * [FileLog.uid].
+ *
+ * e.g.
+ *
+ *     println(myFileLog.logFiles0Hash)
+ *     // 2D1D601236B22EB68CDB9E1D
+ *     println(myFileLog.uid)
+ *     // io.matthewnelson.kmp.log.file.FileLog-2D1D601236B22EB68CDB9E1D
+ *
+ * **WARNING:** Logging to a [File] can *significantly* reduce application performance if not
+ * configured properly. It can become a bottleneck on throughput if, say a server experiences
+ * an unexpected 1000x increase in traffic, and thus its log production. Additionally, it has
+ * an inherent dependency on the underlying file system which, in some cases, can be one that
+ * is prohibitively slow (such as logging to a [File] located in a NFS (Network File System)
+ * mounted directory). As always, using an appropriate [Log.Level] and asking "does this data
+ * really need to be logged?" are great ways to minimize logging overhead. Thoroughly reading
+ * [Builder] documentation is **highly** recommended!
+ *
+ * ### Resources
+ *
+ * [FileLog] consumes as minimal resources as possible to get the job done. All resources are
+ * allocated at time of [Log.Root.install], and deallocated at time of [Log.Root.uninstall]
+ * (or upon experiencing an early shutdown due to an irrecoverable error).
+ *
+ * Each installed [FileLog] instance allocates a single `8192` byte array, `2` always-open [File]
+ * (the log [File] and its associated lock [File]), a single background [CoroutineDispatcher],
+ * and a few data structures for logging operations.
+ *
+ * [Builder.bufferCapacity], [Builder.bufferOverflow] and [Builder.minWaitOn] are `3` configuration
+ * options which directly affect resources used for logging operations.
+ *
+ * ### Log Rotation
+ *
+ * Once a log [File] reaches its specified maximum size, a log rotation is triggered. The log
+ * rotation implementation is designed with filesystem atomicity in mind such that **any**
+ * previously interrupted log rotation, either by process termination or error, can be detected
+ * and brought to completion. Checking for a previously interrupted log rotation is always the
+ * first thing [FileLog] does at time of [Log.Root.install].
+ *
+ * As soon as the log [File] reaches capacity, it is atomically copied to its reproducibly
+ * derived pre-archival location within the [logDirectory], then truncated to `0`. Execution of
+ * rotating log archives is then performed by a separate [Job], allowing for a prompt return to
+ * writing logs to the log [File]. This ensures, as much as the underlying file system permits,
+ * `0` log loss and an ability to detect previously interrupted log rotations (if the pre-archival
+ * [File] has not been moved to its final `{fileName}{.fileExtension}.001` location).
+ *
+ * [Builder.maxLogFileSize] and [Builder.maxLogFiles] are `2` configuration options which
+ * directly affect log rotations.
+ *
+ * ### Multi-Process Logging
+ *
+ * Using [FileLog] from multiple processes to write to the *same* log [File], without fear of
+ * data corruption, is built into the core of [FileLog]. It utilizes byte-range [File] locks to
+ * cooperatively interact with other processes when modifying the file system. `2` different
+ * byte-ranges are used when locking the lock [File] for coordinating work; a byte-range for
+ * writing logs to the log [File], and another byte-range for performing log rotations (as
+ * described above). Prior to releasing either of the aforementioned [File] lock byte-ranges,
+ * [FileLog] syncs all file system modifications it made pertaining to that byte-range, to disk.
+ *
+ * [Builder.yieldOn] and [Builder.fileLockTimeout] are `2` configuration options which directly
+ * affect how [FileLog] performs in multi-process application environments.
+ *
+ * ### File System Permissions (POSIX)
+ *
+ * [FileLog] supports the ability to define both directory and log [File] permissions. By default,
+ * directory permissions `700` and log [File] permissions `600` are used; permissions for `group`
+ * and `other` of each being configurable via [Builder].
+ *
+ * **NOTE:** Applications supporting multi-user installations **must** keep this in mind if
+ * logging to a shared directory or shared log [File] (or are planning to do so in the future).
+ *
+ * ### Log Filtering
+ *
+ * In addition to the general filtering provided by [Log.min] and [Log.max], [FileLog] provides
+ * further filtering configuration by way of blacklists and whitelists for both [Logger.domain]
+ * and/or [Logger.tag].
+ *
+ * [Builder.min], [Builder.max], [Builder.blacklistDomain], [Builder.whitelistDomain] and
+ * [Builder.whitelistTag] are `5` configuration options which directly affect how [FileLog]
+ * filters incoming logs.
+ *
+ * ### Log Formatting
+ *
+ * By default, logs are formatted with a space-delimited prefix for all lines of a log entry. The
+ * prefix includes:
+ * 1) The local date (year omitted)
+ * 2) The local time
+ * 3) The first character of the [Log.Level] name
+ * 4) The `0` prefixed 7-digit process id
+ * 5) The `0` prefixed 7-digit thread id
+ * 6) The concatenated [Logger.domain] (if non-null) and [Logger.tag]
+ *
+ * ```
+ * 01-01 01:59:01.850 D 0452849 0452849 [some.domain]SomeTag: {log line 1 of 3}
+ * 01-01 01:59:01.850 D 0452849 0452849 [some.domain]SomeTag: {log line 2 of 3}
+ * 01-01 01:59:01.850 D 0452849 0452849 [some.domain]SomeTag: {log line 3 of 3}
+ * 01-01 01:59:01.852 D 0452849 0452855 [some.domain]SomeTag: {log line 1 of 1}
+ * 01-01 01:59:01.853 D 0452849 0452855 [some.domain]SomeTag: {log line 1 of 2}
+ * 01-01 01:59:01.853 D 0452849 0452855 [some.domain]SomeTag: {log line 2 of 2}
+ * 01-01 01:59:01.853 D 0452849 0452855 SomeOtherTagNoDomain: {log line 1 of 1}
+ * 01-01 01:59:01.854 D 0452849 0452855 [some.domain]SomeTag: {log line 1 of 1}
+ * ```
+ *
+ * [Builder.format] and [Builder.formatOmitYear] are `2` configuration options which directly
+ * affect how logs are formatted before being written to the log [File].
+ *
+ * ### Blocking & Non-Blocking Logging
+ *
+ * [FileLog] supports configurable modes of operation for blocking, non-blocking, or a mixture
+ * of both. A limiting factor of [FileLog] data processing is how quickly the file system allows
+ * it to write to the log [File]. Because of this, the rate at which logs are produced could
+ * rapidly outpace the rate at which [FileLog] can process them. This can result in OOM (Out
+ * Of Memory) exceptions if no system(s) of control are in place.
+ *
+ * The default system of control [FileLog] employs is thread parking (i.e. blocking), restricting
+ * log production to the number of threads available. Once a log has been written to the log [File],
+ * the thread is unparked and [FileLog.log] returns its result. This, however, may be changed via
+ * [Builder] to better suit application needs.
+ *
+ * **NOTE:** One caveat to non-blocking configurations has to do with [Level.Fatal] log handling.
+ * There exists no way to achieve *fully* non-blocking behavior, while also accepting [Level.Fatal]
+ * logs. [FileLog.log] **must** block the thread until the [Level.Fatal] log is written to the log
+ * [File], **before** the process is aborted by [Log.AbortHandler].
+ *
+ * [Builder.minWaitOn], [Builder.bufferCapacity] and [Builder.bufferOverflow] are `3` configuration
+ * options which directly affect blocking and non-blocking modes of operation.
+ *
+ * ### Irrecoverable Errors
+ *
+ * The [FileLog] implementation is one that is **highly** redundant, but there are *some* scenarios
+ * in which it has no other choice but to shut itself down. Most irrecoverable errors are security
+ * related, attributed to potential malicious actors on the device doing things they should not.
+ *
+ * 1) Symbolic link hijacking: If between the time [Builder.build] is called and the resulting [FileLog]
+ *    instance is installed at [Log.Root], a symbolic link is created to alter the destination of
+ *    [FileLog.logDirectory], [FileLog] will error out and shut itself down. This is to prevent data
+ *    corruption due to the potential of multiple [FileLog] instances being installed, modifying the
+ *    *same* log [File].
+ * 2) Failure to open the log [File] or its associated lock [File]: [FileLog] tries its best with robust
+ *    [File] open logic, but if it is unable to open a [File], it will error out and shut itself down.
+ * 3) Failure to obtain a [File] lock: [FileLog] tries its best with robust lock acquisition logic (such
+ *    as closing and re-opening the lock [File] on certain failures). But, if unable to obtain a [File]
+ *    lock for the requested byte-range, or within the specified [fileLockTimeout], [FileLog] will error
+ *    out and shut itself down.
+ * 4) Failure to rotate logs: [FileLog] has many redundancies built into its log rotation implementation
+ *    to handle edge-cases, and will almost always attempt retries upon failure. But, to prevent itself
+ *    from looping infinitely on retries, [FileLog] will error out and shut itself down.
+ *
+ * Errors that [FileLog] experiences are always dispatched as [Level.Error] logs via its internally
+ * instantiated [Logger]. If the [Level.Error] log was not logged by another installed [Log] instance
+ * (i.e. [Logger.e] returned `0`), then [Throwable.printStackTrace] is used.
  *
  * @see [Builder]
  * @see [DOMAIN]
@@ -136,35 +296,38 @@ public class FileLog: Log {
     public companion object {
 
         /**
-         * [FileLog] itself utilizes a [Logger] instance to log [Level.Error] and
-         * [Level.Warn] logs, if and when it is necessary. For obvious reasons
-         * a [FileLog] instance can **never** log to itself as that would create
-         * a cyclical loop, but it *can* log to other installed [Log] instances
-         * (including other [FileLog]). This reference is for the [Logger.domain]
-         * used by all [FileLog] instance instantiated [Logger] for dispatching
-         * their [Level.Error] and [Level.Warn] logs (as well as [Level.Debug]
-         * logs if [FileLog.debug] is set to `true`).
+         * [FileLog] itself utilizes a [Logger] instance to log [Level.Error] and [Level.Warn] logs,
+         * if and when it is necessary. For obvious reasons a [FileLog] instance will **never** log
+         * to itself as that would create a cyclical loop, but it *can* log to other installed [Log]
+         * instances (including other [FileLog]). This reference is for the [Logger.domain] used by
+         * all [FileLog] instance instantiated [Logger] for dispatching their [Level.Error] and
+         * [Level.Warn] logs (as well as [Level.Debug] logs if [FileLog.debug] is set to `true`).
          *
-         * This reference is meant to be used with [Builder.blacklistDomain] and
-         * [Builder.whitelistDomain] to configure a set of [FileLog] instances
-         * for a cooperative logging experience. All logs generated by [FileLog]
-         * instances can be centralized to a single [FileLog] instance (or other
-         * [Log] implementation), while all *other* [FileLog] instances can be
-         * configured to reject logs for the [DOMAIN].
+         * This reference is meant to be used with [Builder.blacklistDomain] and [Builder.whitelistDomain]
+         * to configure a set of [FileLog] instances for a cooperative logging experience. All logs
+         * generated by [FileLog] instances can be centralized to a single [FileLog] instance (or other
+         * [Log] implementation), while all *other* [FileLog] instances can be configured to reject
+         * logs for the [DOMAIN].
          *
-         * **NOTE:** This [Logger.domain] should **not** be utilized for your own
-         * [Logger] instances; it is reserved for [FileLog] use only.
+         * **NOTE:** This [Logger.domain] should not be utilized for your own [Logger] instances; it
+         * is reserved for [FileLog] use **only**.
          *
          * e.g.
          *
          *     val fileLogErrors = FileLog.Builder(myLogDirectory)
+         *         .fileName("file_log")
+         *         .fileExtension("err")
+         *         .min(Log.Level.Warn)
+         *
          *         // Allow ONLY logs from other FileLog instances.
          *         .whitelistDomain(FileLog.DOMAIN)
          *         .whitelistDomainNull(allow = false)
          *
-         *         .fileName("file_log")
-         *         .fileExtension("err")
-         *         .min(Log.Level.Warn)
+         *         // Configure a rolling buffer with maximum capacity.
+         *         .minWaitOn(Level.Fatal)
+         *         .bufferCapacity(nLogs = 32)
+         *         .bufferOverflow(dropOldest = true)
+         *
          *         .maxLogFileSize(0) // Will default to the minimum
          *         .maxLogFiles(0) // Will default to the minimum
          *         .build()
@@ -196,126 +359,197 @@ public class FileLog: Log {
     }
 
     /**
-     * TODO
+     * The canonical path of the directory for which this [FileLog] instance operates in.
+     *
+     * @see [Builder.logDirectory]
      * */
     @JvmField
     public val logDirectory: String
 
     /**
-     * TODO
+     * A list of all log [File]; element `0` being the active log, and all other elements
+     * being archive logs. Will **always** contain *at least* `2` elements.
+     *
+     * e.g.
+     *
+     *     myFileLog.logFiles.forEach(::println)
+     *     // /path/to/some/directory/logs/my_log
+     *     // /path/to/some/directory/logs/my_log.001
+     *     // /path/to/some/directory/logs/my_log.002
+     *     // /path/to/some/directory/logs/my_log.003
+     *
+     * @see [Builder.fileName]
+     * @see [Builder.fileExtension]
+     * @see [Builder.maxLogFiles]
      * */
     @JvmField
     public val logFiles: List<String>
 
     /**
-     * TODO
+     * A `24` character, base 16 (hex) encoded, double hash of the canonical path of the active
+     * log [File] (i.e. element `0` of [logFiles]).
+     *
+     * **NOTE:** This value is device specific and should not be utilized as a stable reference
+     * externally of said device.
      * */
     @JvmField
     public val logFiles0Hash: String
 
     /**
-     * TODO
+     * The maximum byte size the active log [File] can reach before a log rotation is triggered.
+     *
+     * @see [Builder.maxLogFileSize]
      * */
     @JvmField
     public val maxLogFileSize: Long
 
     /**
-     * TODO
+     * The permissions to use for [File.mkdirs2] when creating [logDirectory].
+     *
+     * @see [File.chmod2]
+     * @see [Builder.directoryGroupReadable]
+     * @see [Builder.directoryGroupWritable]
+     * @see [Builder.directoryOtherReadable]
+     * @see [Builder.directoryOtherWritable]
      * */
     @JvmField
     public val modeDirectory: String
 
     /**
-     * TODO
+     * The permissions to use for [OpenExcl.MaybeCreate] when opening log files.
+     *
+     * @see [File.chmod2]
+     * @see [Builder.fileGroupReadable]
+     * @see [Builder.fileGroupWritable]
+     * @see [Builder.fileOtherReadable]
+     * @see [Builder.fileOtherWritable]
      * */
     @JvmField
     public val modeFile: String
 
     /**
-     * TODO
+     * The capacity of the [Channel] backing this [FileLog] instance.
+     *
+     * **NOTE:** If [minWaitOn] is equal to [min], this will **always** be [Channel.UNLIMITED].
+     *
+     * @see [Builder.bufferCapacity]
      * */
     @JvmField
     public val bufferCapacity: Int
 
     /**
-     * TODO
+     * The overflow behavior of the [Channel] backing this [FileLog] instance. If `true`,
+     * [BufferOverflow.DROP_OLDEST], otherwise [BufferOverflow.SUSPEND].
+     *
+     * **NOTE:** If [minWaitOn] is equal to [min], this wil **always** be `false`.
+     *
+     * @see [Builder.bufferOverflow]
      * */
     public val bufferOverflowDropOldest: Boolean
 
     /**
-     * TODO
+     * The minimum [Level] for which [FileLog.log] will block on when processing incoming
+     * logs. Will **always** be greater than or equal to [min].
+     *
+     * @see [Builder.minWaitOn]
      * */
     @JvmField
     public val minWaitOn: Level
 
     /**
-     * TODO
+     * The number of logs to batch process before calling [FileStream.sync] and yielding
+     * the [File] lock to another process.
+     *
+     * @see [Builder.yieldOn]
      * */
     @JvmField
     public val yieldOn: Byte
 
     /**
-     * TODO
+     * The timeout, in milliseconds, to use when acquiring a [File] lock.
+     *
+     * @see [Builder.fileLockTimeout]
      * */
     @JvmField
     public val fileLockTimeout: Long
 
     /**
-     * TODO
+     * The [Logger.domain] to deny logs from. If empty, no [Logger.domain] are denied.
+     *
+     * @see [Builder.blacklistDomain]
      * */
     @JvmField
     public val blacklistDomain: Set<String>
 
     /**
-     * TODO
+     * The [Logger.domain] to allow logs from. If empty, all [Logger.domain] are allowed.
+     *
+     * @see [Builder.whitelistDomain]
      * */
     @JvmField
     public val whitelistDomain: Set<String>
 
     /**
-     * TODO
+     * If [Logger.domain] `null` (i.e. no domain) is allowed.
+     *
+     * **NOTE:** If [whitelistDomain] is empty, this will **always** be `true`.
+     *
+     * @see [Builder.whitelistDomainNull]
      * */
     @JvmField
     public val whitelistDomainNull: Boolean
 
     /**
-     * TODO
+     * The [Logger.tag] to allow logs from. If empty, all [Logger.tag] are allowed.
+     *
+     * @see [Builder.whitelistTag]
      * */
     @JvmField
     public val whitelistTag: Set<String>
 
     /**
-     * TODO
+     * Enable/Disable [Level.Debug] logs [FileLog] generates pertaining to its internal operations.
+     *
+     * @see [DOMAIN]
+     * @see [Builder.debug]
      * */
     @JvmField
     @Volatile
     public var debug: Boolean
 
     /**
-     * TODO
+     * Enable/Disable [Level.Warn] logs [FileLog] generates pertaining to its internal operations.
+     *
+     * @see [DOMAIN]
+     * @see [Builder.warn]
      * */
     @JvmField
     @Volatile
     public var warn: Boolean
 
     /**
-     * TODO
+     * Checks [Job.isActive] of the job launched by [FileLog.onInstall].
      * */
     @get:JvmName("isActive")
     public val isActive: Boolean get() = _logJob?.isActive ?: false
 
     /**
-     * TODO
+     * The number of logs that are pending processing.
      * */
     @get:JvmName("pendingLogCount")
     public val pendingLogCount: Long get() = _pendingLogCount._get()
 
     /**
-     * TODO
+     * Uninstalls the [FileLog] instance from [Log.Root], and then waits for the underlying
+     * [Job] to finish any of its remaining work.
      *
+     * @return `true` if the instance (or an instance with the same [uid]) was
+     * uninstalled. `false` otherwise.
+     *
+     * @see [Log.Root.uninstallAndGet]
      * @see [uninstallAndAwaitSync]
      *
-     * @throws [ClassCastException]
+     * @throws [ClassCastException] If the instance uninstalled using [uid] was not a [FileLog].
      * */
     public suspend fun uninstallAndAwaitAsync(): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
@@ -324,11 +558,16 @@ public class FileLog: Log {
     }
 
     /**
-     * TODO
+     * Uninstalls the [FileLog] instance from [Log.Root], and then waits for the underlying
+     * [Job] to finish any of its remaining work.
      *
+     * @return `true` if the instance (or an instance with the same [uid]) was uninstalled.
+     * `false` otherwise.
+     *
+     * @see [Log.Root.uninstallAndGet]
      * @see [uninstallAndAwaitAsync]
      *
-     * @throws [ClassCastException]
+     * @throws [ClassCastException] If the instance uninstalled using [uid] was not a [FileLog].
      * */
     public fun uninstallAndAwaitSync(): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
@@ -348,12 +587,32 @@ public class FileLog: Log {
     }
 
     /**
-     * TODO
+     * A callback for formatting log entries.
+     *
+     * @see [Builder.format]
+     * @see [Builder.formatOmitYear]
      * */
     public fun interface Formatter {
 
         /**
-         * TODO
+         * Format the log entry. Must be thread-safe, fast, non-blocking, and not throw
+         * exception. This will **always** be called from the background thread [FileLog]
+         * is operating on.
+         *
+         * @param [time] The local date/time recorded when [FileLog.log] was invoked.
+         *   If [Builder.formatOmitYear] was `true`, will be in the format of `MM-dd HH:mm:ss.SSS`,
+         *   otherwise will be in the format of `yyyy-MM-dd HH:mm:ss.SSS`.
+         * @param [pid] The process id. Can be `-1` on Jvm if was unable to obtain it.
+         * @param [tid] The thread id recorded when [FileLog.log] was invoked.
+         * @param [level] The [Log.Level] of the log.
+         * @param [domain] The [Logger.domain]
+         * @param [tag] The [Logger.tag]
+         * @param [msg] The log message. Will be `null` or non-empty, never empty.
+         * @param [t] The exception or `null`
+         *
+         * @return The formatted log to write, or `null` no log needs to be written.
+         *
+         * @see [Log.log]
          * */
         public fun format(
             time: CharSequence,
@@ -373,7 +632,7 @@ public class FileLog: Log {
     public class Builder(
 
         /**
-         * The directory where log files are to be kept.
+         * TODO
          * */
         @JvmField
         public val logDirectory: String,
@@ -924,7 +1183,7 @@ public class FileLog: Log {
                 // If DROP_OLDEST is configured we cannot use Channel.RENDEZVOUS as
                 // the minimum. Otherwise, with Channel.trySend always succeeding,
                 // logs will almost always be dropped.
-                val minimum = if (bufferOverflowDropOldest) 256 else Channel.RENDEZVOUS
+                val minimum = if (bufferOverflowDropOldest) 32 else Channel.RENDEZVOUS
                 _bufferCapacity.coerceAtLeast(minimum)
             }
 
