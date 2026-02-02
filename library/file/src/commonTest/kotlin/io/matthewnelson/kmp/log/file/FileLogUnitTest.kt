@@ -164,7 +164,7 @@ class FileLogUnitTest {
             val opened = mutableListOf<String>()
             val closed = mutableListOf<String>()
 
-            val closeChecker = object : AbstractTestLog(uid = "CloseChecker") {
+            val checker = object : AbstractTestLog(uid = "CloseChecker") {
 
                 private val lock = SynchronizedLock()
 
@@ -205,10 +205,10 @@ class FileLogUnitTest {
                 }
             }
 
-            Log.installOrThrow(closeChecker)
+            Log.installOrThrow(checker)
             try {
                 log.installAndTest(deallocateDispatcherDelay = Duration.ZERO) {
-                    val logger = Log.Logger.of("CloseChecker")
+                    val logger = Log.Logger.of(checker.uid)
                     logger.i("Testing1...")
                     assertTrue(log.uninstallAndAwaitAsync())
 
@@ -222,7 +222,7 @@ class FileLogUnitTest {
                 // to be reported via debug log.
                 withContext(Dispatchers.IO) { delay(750.milliseconds) }
             } finally {
-                Log.uninstall(closeChecker)
+                Log.uninstall(checker)
             }
 
             println("ALLOCATED  $allocated")
@@ -312,6 +312,70 @@ class FileLogUnitTest {
             }
 
             assertEquals(0, log.pendingLogCount)
+        }
+    }
+
+    @Test
+    fun givenThreadPool_whenSharedBetweenFileLog_thenAllocatesAsExpected() = runTest {
+        withTmpFile { tmp ->
+            val b = FileLog.Builder(tmp.path)
+                .thread(pool = FileLog.ThreadPool.of(nThreads = 1))
+                .debug(enable = true)
+
+            val log1 = b.fileName("log1").build()
+            val log2 = b.fileName("log2").build()
+
+            val allocated = mutableListOf<String>()
+            val deallocated = mutableListOf<String>()
+            val checker = object : AbstractTestLog("AllocationChecker") {
+
+                private val lock = SynchronizedLock()
+
+                override fun log(level: Level, domain: String?, tag: String, msg: String?, t: Throwable?): Boolean {
+                    super.log(level, domain, tag, msg, t)
+
+                    if (msg == null) return false
+                    if (msg.startsWith("Allocated >> ")) {
+                        assertTrue(tag.startsWith("ThreadPool"), "$tag does not start with ThreadPool")
+                        synchronized(lock) {
+                            allocated.add(msg.substringAfter("Allocated >> "))
+                        }
+                        return true
+                    }
+                    if (msg.startsWith("Deallocated >> ")) {
+                        assertTrue(tag.startsWith("ThreadPool"), "$tag does not start with ThreadPool")
+                        synchronized(lock) {
+                            deallocated.add(msg.substringAfter("Deallocated >> "))
+                        }
+                        return true
+                    }
+                    return false
+                }
+            }
+
+            Log.installOrThrow(checker)
+            try {
+                log1.installAndTest(deallocateDispatcherDelay = Duration.ZERO) {
+                    log2.installAndTest(deallocateDispatcherDelay = Duration.ZERO) {
+                        Log.Logger.of(checker.uid).w("Testing...")
+                    }
+                }
+
+                // Wait for lazy closure of allocated CloseableCoroutineDispatcher
+                withContext(Dispatchers.IO) { delay(750.milliseconds) }
+            } finally {
+                Log.uninstall(checker)
+            }
+
+            println("ALLOCATED  $allocated")
+            println("DEALLOCATED$deallocated")
+
+            assertEquals(1, allocated.size)
+            assertEquals(allocated.size, deallocated.size)
+
+            allocated.forEach { resource ->
+                assertTrue(deallocated.contains(resource))
+            }
         }
     }
 }
