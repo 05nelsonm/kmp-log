@@ -67,7 +67,11 @@ kmpConfiguration {
                 .resolve("cinterop")
 
             targets.filterIsInstance<KotlinNativeTarget>().forEach { target ->
-                target.compilations["main"].cinterops.create("local_date_time") {
+                val cinterop = target.compilations["main"].cinterops
+                cinterop.create("local_date_time") {
+                    definitionFile.set(cinteropDir.resolve("$name.def"))
+                }
+                cinterop.create("thread_current") {
                     definitionFile.set(cinteropDir.resolve("$name.def"))
                 }
             }
