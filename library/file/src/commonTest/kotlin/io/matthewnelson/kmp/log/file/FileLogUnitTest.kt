@@ -19,6 +19,7 @@ import io.matthewnelson.kmp.file.path
 import io.matthewnelson.kmp.file.readUtf8
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.Log.Level
+import io.matthewnelson.kmp.log.annotation.ExperimentalLogApi
 import io.matthewnelson.kmp.log.file.internal.SynchronizedLock
 import io.matthewnelson.kmp.log.file.internal.synchronized
 import kotlinx.coroutines.Dispatchers
@@ -318,6 +319,7 @@ class FileLogUnitTest {
     @Test
     fun givenThreadPool_whenSharedBetweenFileLog_thenAllocatesAsExpected() = runTest {
         withTmpFile { tmp ->
+            @OptIn(ExperimentalLogApi::class)
             val b = FileLog.Builder(tmp.path)
                 .thread(pool = FileLog.ThreadPool.of(nThreads = 1))
                 .debug(enable = true)

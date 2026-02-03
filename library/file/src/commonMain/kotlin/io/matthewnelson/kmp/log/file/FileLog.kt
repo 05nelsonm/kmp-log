@@ -45,6 +45,7 @@ import io.matthewnelson.kmp.file.resolve
 import io.matthewnelson.kmp.file.toFile
 import io.matthewnelson.kmp.file.use
 import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.annotation.ExperimentalLogApi
 import io.matthewnelson.kmp.log.file.internal.CurrentThread
 import io.matthewnelson.kmp.log.file.internal.FILE_LOCK_POS_LOG
 import io.matthewnelson.kmp.log.file.internal.FILE_LOCK_POS_ROTATE
@@ -322,6 +323,7 @@ public class FileLog: Log {
          *     // to be doing much work and that'd be wasteful.
          *     //
          *     // NOTE: Adjust nThreads to accommodate additional FileLog.
+         *     @OptIn(ExperimentalLogApi::class)
          *     val pool = FileLog.ThreadPool.of(nThreads = 1)
          *
          *     val fileLogErrors = FileLog.Builder(myLogDirectory)
@@ -757,6 +759,7 @@ public class FileLog: Log {
              * @throws [IllegalArgumentException] If [nThreads] is less than `1`, or greater than `8`.
              * */
             @JvmStatic
+            @ExperimentalLogApi
             public fun of(nThreads: Int): ThreadPool = RealThreadPool(nThreads)
         }
 
