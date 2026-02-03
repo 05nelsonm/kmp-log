@@ -572,8 +572,8 @@ public class FileLog: Log {
      * @see [uninstallAndAwaitSync]
      *
      * @throws [CancellationException]
-     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
-     *   an instance of [FileLog] (highly unlikely, but possible).
+     * @throws [ClassCastException] If the [Log] returned by [Log.Root.uninstallAndGet] using [uid]
+     *   was non-`null`, but not an instance of [FileLog] (highly unlikely, but possible).
      * */
     public suspend inline fun uninstallAndAwaitAsync(): Boolean {
         return uninstallAndAwaitAsync(timeout = Duration.INFINITE)
@@ -603,8 +603,8 @@ public class FileLog: Log {
      * @see [uninstallAndAwaitSync]
      *
      * @throws [CancellationException]
-     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
-     *   an instance of [FileLog] (highly unlikely, but possible).
+     * @throws [ClassCastException] If the [Log] returned by [Log.Root.uninstallAndGet] using [uid]
+     *   was non-`null`, but not an instance of [FileLog] (highly unlikely, but possible).
      * */
     public suspend fun uninstallAndAwaitAsync(timeout: Duration): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
@@ -642,8 +642,8 @@ public class FileLog: Log {
      * @see [Log.Root.uninstallAndGet]
      * @see [uninstallAndAwaitAsync]
      *
-     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
-     *   an instance of [FileLog] (highly unlikely, but possible).
+     * @throws [ClassCastException] If the [Log] returned by [Log.Root.uninstallAndGet] using [uid]
+     *   was non-`null`, but not an instance of [FileLog] (highly unlikely, but possible).
      * */
     public inline fun uninstallAndAwaitSync(): Boolean {
         return uninstallAndAwaitSync(timeoutMillis = Duration.INFINITE.inWholeMilliseconds)
@@ -667,8 +667,8 @@ public class FileLog: Log {
      * @see [Log.Root.uninstallAndGet]
      * @see [uninstallAndAwaitAsync]
      *
-     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
-     *   an instance of [FileLog] (highly unlikely, but possible).
+     * @throws [ClassCastException] If the [Log] returned by [Log.Root.uninstallAndGet] using [uid]
+     *   was non-`null`, but not an instance of [FileLog] (highly unlikely, but possible).
      * */
     public fun uninstallAndAwaitSync(timeoutMillis: Long): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
