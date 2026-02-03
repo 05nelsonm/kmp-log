@@ -288,7 +288,15 @@ class FileLogBuilderUnitTest {
 
     @Test
     fun givenFileLockTimeout_whenLessThan1_thenUsesCalculatedValue() {
-        val fileLockTimeout = newBuilder().fileLockTimeout(-1L).build().fileLockTimeout
+        val fileLockTimeout = newBuilder()
+            // isDesktop defaults
+            .maxLogFileSize(10L * 1024L * 1024L)
+            // isDesktop defaults
+            .maxLogFiles(5)
+            .fileLockTimeout(-1L)
+            .build()
+            .fileLockTimeout
+
         val expectedMin = 2_000L
         val expectedMax = 3_000L
         assertTrue(
