@@ -6,6 +6,10 @@
 // - Show declarations: true
 
 // Library unique name: <io.matthewnelson.kmp-log:log>
+open annotation class io.matthewnelson.kmp.log.annotation/ExperimentalLogApi : kotlin/Annotation { // io.matthewnelson.kmp.log.annotation/ExperimentalLogApi|null[0]
+    constructor <init>() // io.matthewnelson.kmp.log.annotation/ExperimentalLogApi.<init>|<init>(){}[0]
+}
+
 abstract class io.matthewnelson.kmp.log/Log { // io.matthewnelson.kmp.log/Log|null[0]
     constructor <init>(kotlin/String, io.matthewnelson.kmp.log/Log.Level) // io.matthewnelson.kmp.log/Log.<init>|<init>(kotlin.String;io.matthewnelson.kmp.log.Log.Level){}[0]
     constructor <init>(kotlin/String, io.matthewnelson.kmp.log/Log.Level, io.matthewnelson.kmp.log/Log.Level) // io.matthewnelson.kmp.log/Log.<init>|<init>(kotlin.String;io.matthewnelson.kmp.log.Log.Level;io.matthewnelson.kmp.log.Log.Level){}[0]

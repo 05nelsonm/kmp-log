@@ -140,3 +140,6 @@ public final class io/matthewnelson/kmp/log/LogJvm {
 	public static final fun wtf (Lio/matthewnelson/kmp/log/Log$Logger;Ljava/lang/Throwable;Ljava/lang/String;[Ljava/lang/Object;)I
 }
 
+public abstract interface annotation class io/matthewnelson/kmp/log/annotation/ExperimentalLogApi : java/lang/annotation/Annotation {
+}
+
