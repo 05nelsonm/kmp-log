@@ -49,8 +49,10 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         final fun <get-warn>(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.warn.<get-warn>|<get-warn>(){}[0]
         final fun <set-warn>(kotlin/Boolean) // io.matthewnelson.kmp.log.file/FileLog.warn.<set-warn>|<set-warn>(kotlin.Boolean){}[0]
 
-    final fun uninstallAndAwaitSync(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.uninstallAndAwaitSync|uninstallAndAwaitSync(){}[0]
-    final suspend fun uninstallAndAwaitAsync(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.uninstallAndAwaitAsync|uninstallAndAwaitAsync(){}[0]
+    final fun uninstallAndAwaitSync(kotlin/Long): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.uninstallAndAwaitSync|uninstallAndAwaitSync(kotlin.Long){}[0]
+    final inline fun uninstallAndAwaitSync(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.uninstallAndAwaitSync|uninstallAndAwaitSync(){}[0]
+    final suspend fun uninstallAndAwaitAsync(kotlin.time/Duration): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.uninstallAndAwaitAsync|uninstallAndAwaitAsync(kotlin.time.Duration){}[0]
+    final suspend inline fun uninstallAndAwaitAsync(): kotlin/Boolean // io.matthewnelson.kmp.log.file/FileLog.uninstallAndAwaitAsync|uninstallAndAwaitAsync(){}[0]
 
     abstract fun interface Formatter { // io.matthewnelson.kmp.log.file/FileLog.Formatter|null[0]
         abstract fun format(kotlin/CharSequence, kotlin/Int, kotlin/Long, io.matthewnelson.kmp.log/Log.Level, kotlin/String?, kotlin/String, kotlin/String?, kotlin/Throwable?): kotlin/CharSequence? // io.matthewnelson.kmp.log.file/FileLog.Formatter.format|format(kotlin.CharSequence;kotlin.Int;kotlin.Long;io.matthewnelson.kmp.log.Log.Level;kotlin.String?;kotlin.String;kotlin.String?;kotlin.Throwable?){}[0]

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("LocalVariableName", "PrivatePropertyName")
+@file:Suppress("LocalVariableName", "NOTHING_TO_INLINE", "PrivatePropertyName")
 
 package io.matthewnelson.kmp.log.file
 
@@ -76,6 +76,7 @@ import io.matthewnelson.kmp.log.file.internal._getAndSet
 import io.matthewnelson.kmp.log.file.internal._incrementAndGet
 import io.matthewnelson.kmp.log.file.internal._set
 import io.matthewnelson.kmp.log.file.internal.async
+import io.matthewnelson.kmp.log.file.internal.awaitAndCancel
 import io.matthewnelson.kmp.log.file.internal.deleteOrMoveToRandomIfNonEmptyDirectory
 import io.matthewnelson.kmp.log.file.internal.exists2Robustly
 import io.matthewnelson.kmp.log.file.internal.format
@@ -114,12 +115,14 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newFixedThreadPoolContext
 import kotlinx.coroutines.newSingleThreadContext
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.kotlincrypto.hash.blake2.BLAKE2s
 import kotlin.concurrent.Volatile
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
+import kotlin.coroutines.ContinuationInterceptor
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.jvm.JvmField
 import kotlin.jvm.JvmName
@@ -520,7 +523,7 @@ public class FileLog: Log {
     public val whitelistTag: Set<String>
 
     /**
-     * Enable/Disable [Level.Debug] logs [FileLog] generates pertaining to its internal operations.
+     * Enable/Disable [Level.Debug] logs this instance generates pertaining to its internal operations.
      *
      * @see [DOMAIN]
      * @see [Builder.debug]
@@ -530,7 +533,7 @@ public class FileLog: Log {
     public var debug: Boolean
 
     /**
-     * Enable/Disable [Level.Warn] logs [FileLog] generates pertaining to its internal operations.
+     * Enable/Disable [Level.Warn] logs this instance generates pertaining to its internal operations.
      *
      * @see [DOMAIN]
      * @see [Builder.warn]
@@ -540,7 +543,7 @@ public class FileLog: Log {
     public var warn: Boolean
 
     /**
-     * Checks [Job.isActive] of the job launched by [FileLog.onInstall].
+     * Checks [Job.isActive] of the underlying log job launched by [FileLog.onInstall].
      * */
     @get:JvmName("isActive")
     public val isActive: Boolean get() = _logJob?.isActive ?: false
@@ -552,43 +555,128 @@ public class FileLog: Log {
     public val pendingLogCount: Long get() = _pendingLogCount._get()
 
     /**
-     * Uninstalls the [FileLog] instance from [Log.Root], and then waits for the underlying
-     * [Job] to finish any of its remaining work.
+     * Uninstalls the [FileLog] instance from [Log.Root], then waits for the underlying log [Job]
+     * to finish any of its remaining work.
      *
-     * @return `true` if the instance (or an instance with the same [uid]) was
-     * uninstalled. `false` otherwise.
+     * **NOTE:** If the calling coroutine's [Job] is in a canceled state, or is canceled while waiting,
+     * this function will re-throw the [CancellationException] *after* first cancelling the underlying
+     * log [Job]. The result of this function, either by return or by cancellation, is that the [FileLog]
+     * instance is in an "off" state.
+     *
+     * @return `false` if the instance was not installed at [Log.Root]. Otherwise, `true` (i.e. the
+     *   instance, or an instance with the same [uid], was uninstalled from [Log.Root] and it is now
+     *   in an "off" state).
      *
      * @see [Log.Root.uninstallAndGet]
      * @see [uninstallAndAwaitSync]
      *
-     * @throws [ClassCastException] If the instance uninstalled using [uid] was not a [FileLog].
+     * @throws [CancellationException]
+     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
+     *   an instance of [FileLog] (highly unlikely, but possible).
      * */
-    public suspend fun uninstallAndAwaitAsync(): Boolean {
+    public suspend inline fun uninstallAndAwaitAsync(): Boolean {
+        return uninstallAndAwaitAsync(timeout = Duration.INFINITE)
+    }
+
+    /**
+     * Uninstalls the [FileLog] instance from [Log.Root], then waits for the underlying log [Job]
+     * to finish any of its remaining work for the specified [timeout]. If [timeout] is exceeded,
+     * then the underlying log [Job] is canceled with any unfinished work being dropped. If the
+     * specified [timeout] is less than or equal to [Duration.ZERO], the underlying log [Job] is
+     * canceled with immediate effect.
+     *
+     * **NOTE:** If the calling coroutine's [Job] is in a canceled state, or is canceled while waiting
+     * for the specified [timeout], this function will re-throw the [CancellationException] *after*
+     * first cancelling the underlying log [Job]. The result of this function, either by return or by
+     * cancellation, is that the [FileLog] instance is in an "off" state.
+     *
+     * @param [timeout] A maximum [Duration] to wait for the underlying log [Job] to finish any of its
+     *   remaining work. If less than or equal to [Duration.ZERO], the underlying log [Job] is canceled
+     *   immediately.
+     *
+     * @return `false` if the instance was not installed at [Log.Root]. Otherwise, `true` (i.e. the
+     *   instance, or an instance with the same [uid], was uninstalled from [Log.Root] and it is now
+     *   in an "off" state).
+     *
+     * @see [Log.Root.uninstallAndGet]
+     * @see [uninstallAndAwaitSync]
+     *
+     * @throws [CancellationException]
+     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
+     *   an instance of [FileLog] (highly unlikely, but possible).
+     * */
+    public suspend fun uninstallAndAwaitAsync(timeout: Duration): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
-        (instance as FileLog)._logJob?.join() ?: return false
+        val logJob = (instance as FileLog)._logJob ?: return false
+
+        run {
+            val dispatcher = currentCoroutineContext()[ContinuationInterceptor] ?: return@run
+            val qn = dispatcher::class.qualifiedName ?: return@run
+            if (!qn.startsWith("kotlinx.coroutines.test")) return@run
+
+            // Dispatchers.Unconfined because test dispatcher may fast-forward which we do NOT want.
+            try {
+                withContext(Dispatchers.Unconfined) {
+                    awaitAndCancel(logJob, timeout, canceledBy = { "uninstallAndAwaitAsync" })
+                }
+            } finally {
+                // withContext can throw CancellationException, so ensure logJob is ALWAYS complete.
+                if (logJob.isActive) logJob.cancel("Canceled by uninstallAndAwaitAsync")
+            }
+            return true
+        }
+
+        awaitAndCancel(logJob, timeout, canceledBy = { "uninstallAndAwaitAsync" })
         return true
     }
 
     /**
-     * Uninstalls the [FileLog] instance from [Log.Root], and then waits for the underlying
-     * [Job] to finish any of its remaining work.
+     * Uninstalls the [FileLog] instance from [Log.Root], then waits for the underlying log [Job]
+     * to finish any of its remaining work.
      *
-     * @return `true` if the instance (or an instance with the same [uid]) was uninstalled.
-     * `false` otherwise.
+     * @return `false` if the instance was not installed at [Log.Root]. Otherwise, `true` (i.e. the
+     *   instance, or an instance with the same [uid], was uninstalled from [Log.Root] and it is now
+     *   in an "off" state).
      *
      * @see [Log.Root.uninstallAndGet]
      * @see [uninstallAndAwaitAsync]
      *
-     * @throws [ClassCastException] If the instance uninstalled using [uid] was not a [FileLog].
+     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
+     *   an instance of [FileLog] (highly unlikely, but possible).
      * */
-    public fun uninstallAndAwaitSync(): Boolean {
+    public inline fun uninstallAndAwaitSync(): Boolean {
+        return uninstallAndAwaitSync(timeoutMillis = Duration.INFINITE.inWholeMilliseconds)
+    }
+
+    /**
+     * Uninstalls the [FileLog] instance from [Log.Root], then waits for the underlying log [Job]
+     * to finish any of its remaining work for the specified [timeoutMillis]. If [timeoutMillis]
+     * is exceeded, then the underlying log [Job] is canceled with any unfinished work being dropped.
+     * If the specified [timeoutMillis] is less than or equal to `0`, the underlying log [Job] is
+     * canceled with immediate effect.
+     *
+     * @param [timeoutMillis] A maximum duration, in milliseconds, to wait for the underlying log
+     *   [Job] to finish any of its remaining work. If less than or equal to `0`, the underlying
+     *   log [Job] is canceled immediately.
+     *
+     * @return `false` if the instance was not installed at [Log.Root]. Otherwise, `true` (i.e. the
+     *   instance, or an instance with the same [uid], was uninstalled from [Log.Root] and it is now
+     *   in an "off" state).
+     *
+     * @see [Log.Root.uninstallAndGet]
+     * @see [uninstallAndAwaitAsync]
+     *
+     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
+     *   an instance of [FileLog] (highly unlikely, but possible).
+     * */
+    public fun uninstallAndAwaitSync(timeoutMillis: Long): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
-        val job = (instance as FileLog)._logJob ?: return false
+        val logJob = (instance as FileLog)._logJob ?: return false
         val context = instance.scopeFileLog.handler + Dispatchers.IO
-        while (job.isActive) {
+        while (logJob.isActive) {
             try {
                 CurrentThread.uninterruptedRunBlocking(context) {
-                    job.join()
+                    awaitAndCancel(logJob, timeoutMillis.milliseconds, canceledBy = { "uninstallAndAwaitSync" })
                 }
             } catch (_: Throwable) {
                 // InterruptedException (Jvm/Android)
@@ -1740,8 +1828,7 @@ public class FileLog: Log {
                     if (!previousLogJob.isActive) null
                     else "Cancelling and waiting for previous $LOG_JOB to complete >> $previousLogJob"
                 }
-                previousLogJob.cancel("Cancelled by new $LOG_JOB >> $logJob")
-                previousLogJob.join()
+                awaitAndCancel(previousLogJob, timeout = 25.milliseconds, canceledBy = { "new $LOG_JOB >> $logJob" })
             }
 
             directory.mkdirs2(mode = modeDirectory, mustCreate = false)

@@ -22,7 +22,9 @@ public final class io/matthewnelson/kmp/log/file/FileLog : io/matthewnelson/kmp/
 	public final fun isActive ()Z
 	public final fun pendingLogCount ()J
 	public final fun uninstallAndAwaitAsync (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun uninstallAndAwaitAsync-VtjQ1oo (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun uninstallAndAwaitSync ()Z
+	public final fun uninstallAndAwaitSync (J)Z
 }
 
 public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
