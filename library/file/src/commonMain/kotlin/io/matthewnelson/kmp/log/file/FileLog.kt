@@ -45,6 +45,7 @@ import io.matthewnelson.kmp.file.resolve
 import io.matthewnelson.kmp.file.toFile
 import io.matthewnelson.kmp.file.use
 import io.matthewnelson.kmp.log.Log
+import io.matthewnelson.kmp.log.annotation.ExperimentalLogApi
 import io.matthewnelson.kmp.log.file.internal.CurrentThread
 import io.matthewnelson.kmp.log.file.internal.FILE_LOCK_POS_LOG
 import io.matthewnelson.kmp.log.file.internal.FILE_LOCK_POS_ROTATE
@@ -58,15 +59,17 @@ import io.matthewnelson.kmp.log.file.internal.LogAction.Companion.MAX_RETRIES
 import io.matthewnelson.kmp.log.file.internal.LogAction.Companion.drop
 import io.matthewnelson.kmp.log.file.internal.LogAction.Rotation.Companion.CONSUME_AND_IGNORE
 import io.matthewnelson.kmp.log.file.internal.LogBuffer
+import io.matthewnelson.kmp.log.file.internal.LogDispatcher
+import io.matthewnelson.kmp.log.file.internal.LogDispatcherAllocator
 import io.matthewnelson.kmp.log.file.internal.LogSend
 import io.matthewnelson.kmp.log.file.internal.LogWait
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
+import io.matthewnelson.kmp.log.file.internal.RealThreadPool
 import io.matthewnelson.kmp.log.file.internal.RotateActionQueue
 import io.matthewnelson.kmp.log.file.internal.ScopeFileLog
 import io.matthewnelson.kmp.log.file.internal.ScopeLogHandle
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop.Companion.scopeLogLoop
-import io.matthewnelson.kmp.log.file.internal.SharedResourceAllocator
 import io.matthewnelson.kmp.log.file.internal._atomic
 import io.matthewnelson.kmp.log.file.internal._atomicRef
 import io.matthewnelson.kmp.log.file.internal._compareAndSet
@@ -85,13 +88,13 @@ import io.matthewnelson.kmp.log.file.internal.isDesktop
 import io.matthewnelson.kmp.log.file.internal.launch
 import io.matthewnelson.kmp.log.file.internal.lockNonBlock
 import io.matthewnelson.kmp.log.file.internal.moveLogTo
+import io.matthewnelson.kmp.log.file.internal.newLogDispatcher
 import io.matthewnelson.kmp.log.file.internal.now
 import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
 import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
 import io.matthewnelson.kmp.log.file.internal.pid
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
 import io.matthewnelson.kmp.log.file.internal.uninterruptedRunBlocking
-import kotlinx.coroutines.CloseableCoroutineDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
@@ -100,7 +103,6 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.DisposableHandle
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
@@ -113,8 +115,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.newFixedThreadPoolContext
-import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.kotlincrypto.hash.blake2.BLAKE2s
@@ -324,13 +324,14 @@ public class FileLog: Log {
          *     // to be doing much work and that'd be wasteful.
          *     //
          *     // NOTE: Adjust nThreads to accommodate additional FileLog.
+         *     @OptIn(ExperimentalLogApi::class)
          *     val pool = FileLog.ThreadPool.of(nThreads = 1)
          *
          *     val fileLogErrors = FileLog.Builder(myLogDirectory)
          *         .fileName("file_log")
          *         .fileExtension("err")
          *         .min(Log.Level.Warn)
-         *         .thread(pool = pool)
+         *         .thread(pool)
          *
          *         // Allow ONLY logs from other FileLog instances.
          *         .whitelistDomain(FileLog.DOMAIN)
@@ -346,7 +347,7 @@ public class FileLog: Log {
          *         .build()
          *
          *     val fileLog1 = FileLog.Builder(myLogDirectory)
-         *         .thread(pool = pool)
+         *         .thread(pool)
          *
          *         // Allow all logs, EXCEPT from other FileLog instances.
          *         .blacklistDomain(FileLog.DOMAIN)
@@ -738,13 +739,14 @@ public class FileLog: Log {
      * @see [of]
      * @see [Builder.thread]
      * */
-    public sealed class ThreadPool(
+    public abstract class ThreadPool internal constructor(
 
         /**
          * The number of threads to allocate. Will be between `1` and `8`.
          * */
         @JvmField
         public val nThreads: Int,
+        init: Any,
     ) {
 
         public companion object {
@@ -754,17 +756,21 @@ public class FileLog: Log {
              *
              * @param [nThreads] The number of threads to allocate.
              *
-             * @return The [ThreadPool]
+             * @return The new [ThreadPool]
              *
              * @throws [IllegalArgumentException] If [nThreads] is less than `1`, or greater than `8`.
              * */
             @JvmStatic
-            public fun of(nThreads: Int): ThreadPool = RealThreadPool(nThreads)
+            @ExperimentalLogApi
+            public fun of(nThreads: Int): ThreadPool = RealThreadPool.of(nThreads, INIT)
+
+            private val INIT = Any()
         }
 
         init {
             // Why someone would need or dedicate 8 threads for logging is beyond me...
             require(nThreads in 1..8) { "nThreads[$nThreads] !in 1..8" }
+            check(init == INIT) { "FileLog.ThreadPool cannot be extended. Use FileLog.ThreadPool.of" }
         }
 
         /** @suppress */
@@ -1409,7 +1415,7 @@ public class FileLog: Log {
 
     private val scopeFileLog: ScopeFileLog
     // Lazy, so nothing is initialized until time of onInstall
-    private val allocator: Lazy<DispatcherAllocator>
+    private val allocator: Lazy<LogDispatcherAllocator>
 
     private val checkIfLogRotationIsNeeded: LogAction.Rotation
 
@@ -1498,9 +1504,8 @@ public class FileLog: Log {
             logE(t) { context }
         })
         this.allocator = threadPool?.allocator ?: lazy {
-            object : DispatcherAllocator(LOG) {
-                @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
-                override fun doAllocation(): CloseableCoroutineDispatcher = newSingleThreadContext(name = LOG.tag)
+            object : LogDispatcherAllocator(LOG) {
+                override fun doAllocation(): LogDispatcher = newLogDispatcher(nThreads = 1, name = LOG.tag)
                 override fun debug(): Boolean = this@FileLog.debug
             }
         }
@@ -1802,7 +1807,6 @@ public class FileLog: Log {
         return logWait.isSuccess()
     }
 
-    @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
     override fun onInstall() {
         _onInstallInvocations++
 
@@ -1818,6 +1822,7 @@ public class FileLog: Log {
         )
         val previousLogJob = _logJob
 
+        @OptIn(DelicateCoroutinesApi::class)
         scopeFileLog.launch(dispatcher, start = CoroutineStart.ATOMIC) {
             val logJob = currentCoroutineContext().job
             logJob.invokeOnCompletion { logD { "$LOG_JOB Stopped >> $logJob" } }
@@ -3037,38 +3042,6 @@ public class FileLog: Log {
             // No other Log instances installed, or none
             // accepted Level.Error for this Log.Logger.
             t?.printStackTrace()
-        }
-    }
-
-    @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
-    private abstract class DispatcherAllocator(
-        LOG: Logger?,
-    ): SharedResourceAllocator<CoroutineDispatcher>(
-        LOG,
-        deallocationDelay = 250.milliseconds,
-        deallocationDispatcher = Dispatchers.IO,
-    ) {
-        abstract override fun doAllocation(): CloseableCoroutineDispatcher
-        final override fun CoroutineDispatcher.doDeallocation() { (this as CloseableCoroutineDispatcher).close() }
-    }
-
-    private class RealThreadPool(nThreads: Int): ThreadPool(nThreads) {
-
-        val allocator: Lazy<DispatcherAllocator> = lazy {
-            // Using Lazy such that if the FileLog is never installed at Log.Root,
-            // then N is never incremented nor Logger instantiated.
-            val logger = Logger.of(tag = "ThreadPool{${N._incrementAndGet()}}", domain = DOMAIN)
-
-            object : DispatcherAllocator(logger) {
-                @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
-                override fun doAllocation(): CloseableCoroutineDispatcher {
-                    return newFixedThreadPoolContext(nThreads = nThreads, name = "FileLog." + logger.tag)
-                }
-            }
-        }
-
-        private companion object {
-            private val N = _atomic(initial = 0L)
         }
     }
 }
