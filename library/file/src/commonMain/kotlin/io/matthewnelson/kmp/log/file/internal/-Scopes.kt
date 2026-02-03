@@ -19,7 +19,6 @@ package io.matthewnelson.kmp.log.file.internal
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableJob
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -31,7 +30,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.supervisorScope
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
@@ -111,7 +109,7 @@ internal value class ScopeLogHandle private constructor(
         logJob: Job,
         scope: ScopeFileLog,
         onInstallInvocations: Long,
-        dispatcher: CoroutineDispatcher,
+        dispatcher: LogDispatcher,
         dispatcherDeRef: SharedResourceAllocator.DeRefHandle,
     ): this(scopeLogHandle = CoroutineScope(context =
         CoroutineName(scope.coroutineName.name + "-Handle{$onInstallInvocations}")
@@ -139,9 +137,9 @@ internal value class ScopeLogHandle private constructor(
         supervisorJob.invokeOnCompletion { dispatcherDeRef.invoke() }
     }
 
-    internal inline val dispatcher: CoroutineDispatcher get() {
+    internal inline val dispatcher: LogDispatcher get() {
         @Suppress("DEPRECATION_ERROR")
-        return scopeLogHandle.coroutineContext[ContinuationInterceptor] as CoroutineDispatcher
+        return scopeLogHandle.coroutineContext[ContinuationInterceptor] as LogDispatcher
     }
 
     internal inline val supervisorJob: CompletableJob get() {
@@ -152,7 +150,7 @@ internal value class ScopeLogHandle private constructor(
 
 // Intentionally does not define defaults to force declarations
 internal inline fun ScopeFileLog.launch(
-    dispatcher: CoroutineDispatcher,
+    dispatcher: LogDispatcher,
     start: CoroutineStart,
     noinline block: suspend CoroutineScope.() -> Unit,
 ): Job {
