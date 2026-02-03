@@ -26,19 +26,17 @@ import kotlin.contracts.contract
 internal actual class Lock {
 
     private companion object {
-        // Using Long as it is out of the addressable space for threadUID (32-bit)
+        // Using Long (64-bit) as it is out of the addressable space for kmp_log_thread_current_uid (32-bit)
         private const val UNLOCKED: Long = Long.MAX_VALUE
     }
 
     private val lock = AtomicLong(UNLOCKED)
     private val reentries = AtomicInt(0)
 
-    @Deprecated("Use Lock.withLock", level = DeprecationLevel.ERROR)
-    internal fun lock(threadUID: Int) {
-        val threadUID64 = threadUID.toLong()
+    internal fun lock(threadUID: ThreadUID) {
         while (true) {
-            when (lock.compareAndExchange(UNLOCKED, threadUID64)) {
-                threadUID64 -> {
+            when (lock.compareAndExchange(UNLOCKED, threadUID.value)) {
+                threadUID.value -> {
                     reentries.incrementAndGet()
                     break
                 }
@@ -50,27 +48,28 @@ internal actual class Lock {
         }
     }
 
-    @Deprecated("Use Lock.withLock", level = DeprecationLevel.ERROR)
-    internal fun unlock(threadUID: Int) {
-        val threadUID64 = threadUID.toLong()
-        lock.value.let { check(it == threadUID64) { "lock.value[$it] != threadUID[$threadUID]" } }
+    internal fun unlock(threadUID: ThreadUID) {
+        lock.value.let { check(it == threadUID.value) { "lock.value[$it] != threadUID[${threadUID.value}]" } }
 
         if (reentries.value > 0) {
             reentries.decrementAndGet()
         } else {
-            val previous = lock.compareAndExchange(threadUID64, UNLOCKED)
-            check(previous == threadUID64) { "previous[$previous] != threadUID[$threadUID]" }
+            val previous = lock.compareAndExchange(threadUID.value, UNLOCKED)
+            check(previous == threadUID.value) { "previous[$previous] != threadUID[${threadUID.value}]" }
         }
+    }
+
+    internal value class ThreadUID private constructor(internal val value: Long) {
+        @OptIn(ExperimentalForeignApi::class)
+        internal constructor(): this(kmp_log_thread_current_uid().toLong())
     }
 }
 
 internal actual inline fun newLock(): Lock = Lock()
 
-@Suppress("DEPRECATION_ERROR")
 internal actual inline fun <R> Lock.withLockImpl(block: () -> R): R {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
-    @OptIn(ExperimentalForeignApi::class)
-    val threadUID = kmp_log_thread_current_uid().toInt()
+    val threadUID = Lock.ThreadUID()
     lock(threadUID)
     try {
         return block()
