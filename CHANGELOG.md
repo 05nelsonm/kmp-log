@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## Version 0.1.2 (2026-02-03)
+ - Fixes race condition in Kotlin/Native `Lock` implementation [[#114]][114] [[#116]][116]
+ - Adds `Log.Root.uninstallAndGet` API [[#55]][55]
+ - Documentation improvements [[#79]][79] [[#117]][117]
+
 ## Version 0.1.1 (2025-12-23)
  - Mitigate unnecessary `List` allocations when `Log.Root.installed` is called by persisting 
    and returning an immutable one [[#36]][36]
@@ -32,3 +37,8 @@
 [40]: https://github.com/05nelsonm/kmp-log/pull/40
 [41]: https://github.com/05nelsonm/kmp-log/pull/41
 [43]: https://github.com/05nelsonm/kmp-log/pull/43
+[55]: https://github.com/05nelsonm/kmp-log/pull/55
+[79]: https://github.com/05nelsonm/kmp-log/pull/79
+[114]: https://github.com/05nelsonm/kmp-log/pull/114
+[116]: https://github.com/05nelsonm/kmp-log/pull/116
+[117]: https://github.com/05nelsonm/kmp-log/pull/117
