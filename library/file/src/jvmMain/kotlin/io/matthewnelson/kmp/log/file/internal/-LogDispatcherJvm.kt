@@ -39,8 +39,7 @@ internal actual inline fun LogDispatcherAllocator.Companion.newLogDispatcher(nTh
     return Executors.unconfigurableScheduledExecutorService(executor).asCoroutineDispatcher()
 }
 
+@Throws(SecurityException::class)
 internal actual inline fun LogDispatcher.destroy() {
-    try {
-        (this as? ExecutorCoroutineDispatcher)?.close()
-    } catch (_: SecurityException) {}
+    (this as? ExecutorCoroutineDispatcher)?.close()
 }
