@@ -17,13 +17,12 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
-import io.matthewnelson.kmp.log.file.FileLog
 import kotlinx.coroutines.CloseableCoroutineDispatcher
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.newFixedThreadPoolContext
 
 @Throws(IllegalArgumentException::class)
-internal actual inline fun FileLog.Companion.newLogDispatcher(nThreads: Int, name: String): LogDispatcher {
+internal actual inline fun LogDispatcherAllocator.Companion.newLogDispatcher(nThreads: Int, name: String): LogDispatcher {
     @OptIn(DelicateCoroutinesApi::class)
     return newFixedThreadPoolContext(nThreads, name)
 }

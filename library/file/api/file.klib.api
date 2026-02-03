@@ -58,6 +58,17 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         abstract fun format(kotlin/CharSequence, kotlin/Int, kotlin/Long, io.matthewnelson.kmp.log/Log.Level, kotlin/String?, kotlin/String, kotlin/String?, kotlin/Throwable?): kotlin/CharSequence? // io.matthewnelson.kmp.log.file/FileLog.Formatter.format|format(kotlin.CharSequence;kotlin.Int;kotlin.Long;io.matthewnelson.kmp.log.Log.Level;kotlin.String?;kotlin.String;kotlin.String?;kotlin.Throwable?){}[0]
     }
 
+    abstract class ThreadPool { // io.matthewnelson.kmp.log.file/FileLog.ThreadPool|null[0]
+        final val nThreads // io.matthewnelson.kmp.log.file/FileLog.ThreadPool.nThreads|{}nThreads[0]
+            final fun <get-nThreads>(): kotlin/Int // io.matthewnelson.kmp.log.file/FileLog.ThreadPool.nThreads.<get-nThreads>|<get-nThreads>(){}[0]
+
+        open fun toString(): kotlin/String // io.matthewnelson.kmp.log.file/FileLog.ThreadPool.toString|toString(){}[0]
+
+        final object Companion { // io.matthewnelson.kmp.log.file/FileLog.ThreadPool.Companion|null[0]
+            final fun of(kotlin/Int): io.matthewnelson.kmp.log.file/FileLog.ThreadPool // io.matthewnelson.kmp.log.file/FileLog.ThreadPool.Companion.of|of(kotlin.Int){}[0]
+        }
+    }
+
     final class Builder { // io.matthewnelson.kmp.log.file/FileLog.Builder|null[0]
         constructor <init>(kotlin/String) // io.matthewnelson.kmp.log.file/FileLog.Builder.<init>|<init>(kotlin.String){}[0]
 
@@ -102,17 +113,6 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         final fun whitelistTag(kotlin/String): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistTag|whitelistTag(kotlin.String){}[0]
         final fun whitelistTagReset(): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.whitelistTagReset|whitelistTagReset(){}[0]
         final fun yieldOn(kotlin/Byte): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.yieldOn|yieldOn(kotlin.Byte){}[0]
-    }
-
-    sealed class ThreadPool { // io.matthewnelson.kmp.log.file/FileLog.ThreadPool|null[0]
-        final val nThreads // io.matthewnelson.kmp.log.file/FileLog.ThreadPool.nThreads|{}nThreads[0]
-            final fun <get-nThreads>(): kotlin/Int // io.matthewnelson.kmp.log.file/FileLog.ThreadPool.nThreads.<get-nThreads>|<get-nThreads>(){}[0]
-
-        open fun toString(): kotlin/String // io.matthewnelson.kmp.log.file/FileLog.ThreadPool.toString|toString(){}[0]
-
-        final object Companion { // io.matthewnelson.kmp.log.file/FileLog.ThreadPool.Companion|null[0]
-            final fun of(kotlin/Int): io.matthewnelson.kmp.log.file/FileLog.ThreadPool // io.matthewnelson.kmp.log.file/FileLog.ThreadPool.Companion.of|of(kotlin.Int){}[0]
-        }
     }
 
     final object Companion { // io.matthewnelson.kmp.log.file/FileLog.Companion|null[0]

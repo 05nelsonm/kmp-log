@@ -19,9 +19,11 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.log.Log.Logger
 import io.matthewnelson.kmp.log.file.FileLog
+import io.matthewnelson.kmp.log.file.FileLog.Companion.DOMAIN
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlin.jvm.JvmSynthetic
 import kotlin.time.Duration.Companion.milliseconds
 
 // Jvm: ExecutorCoroutineDispatcher
@@ -29,7 +31,7 @@ import kotlin.time.Duration.Companion.milliseconds
 internal typealias LogDispatcher = CoroutineDispatcher
 
 @Throws(IllegalArgumentException::class)
-internal expect inline fun FileLog.Companion.newLogDispatcher(nThreads: Int, name: String): LogDispatcher
+internal expect inline fun LogDispatcherAllocator.Companion.newLogDispatcher(nThreads: Int, name: String): LogDispatcher
 
 internal expect inline fun LogDispatcher.destroy()
 
@@ -42,4 +44,29 @@ internal abstract class LogDispatcherAllocator protected constructor(
 ) {
     abstract override fun doAllocation(): LogDispatcher
     final override fun LogDispatcher.doDeallocation() { destroy() }
+
+    @Suppress("RemoveEmptyClassBody")
+    internal companion object {}
+}
+
+internal class RealThreadPool private constructor(nThreads: Int, init: Any): FileLog.ThreadPool(nThreads, init) {
+
+    // Using Lazy such that if the FileLog is never installed at Log.Root,
+    // then N is never incremented nor Logger instantiated.
+    val allocator: Lazy<LogDispatcherAllocator> = lazy {
+        val logger = Logger.of(tag = "ThreadPool{${N._incrementAndGet()}}", domain = DOMAIN)
+        val name = "FileLog.${logger.tag}"
+        object : LogDispatcherAllocator(logger) {
+            override fun doAllocation(): LogDispatcher = newLogDispatcher(nThreads = nThreads, name = name)
+        }
+    }
+
+    internal companion object {
+
+        @JvmSynthetic
+        @Throws(IllegalArgumentException::class, IllegalStateException::class)
+        internal fun of(nThreads: Int, init: Any) = RealThreadPool(nThreads, init)
+
+        private val N = FileLog._atomic(initial = 0L)
+    }
 }

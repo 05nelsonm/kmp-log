@@ -17,16 +17,15 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
-import io.matthewnelson.kmp.log.file.FileLog
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
 import java.util.concurrent.Executors
 import kotlin.Throws
 
 @Throws(IllegalArgumentException::class)
-internal actual inline fun FileLog.Companion.newLogDispatcher(nThreads: Int, name: String): LogDispatcher {
+internal actual inline fun LogDispatcherAllocator.Companion.newLogDispatcher(nThreads: Int, name: String): LogDispatcher {
     require(nThreads >= 1) { "nThreads[$nThreads] < 1" }
-    val threadNo = if (nThreads > 1) _atomic(0L) else null
+    val threadNo = if (nThreads > 1) AtomicLong(0L) else null
     val executor = Executors.newScheduledThreadPool(nThreads) { task ->
         val t = Thread(task)
         t.isDaemon = true

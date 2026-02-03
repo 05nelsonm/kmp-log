@@ -64,6 +64,7 @@ import io.matthewnelson.kmp.log.file.internal.LogDispatcherAllocator
 import io.matthewnelson.kmp.log.file.internal.LogSend
 import io.matthewnelson.kmp.log.file.internal.LogWait
 import io.matthewnelson.kmp.log.file.internal.ModeBuilder
+import io.matthewnelson.kmp.log.file.internal.RealThreadPool
 import io.matthewnelson.kmp.log.file.internal.RotateActionQueue
 import io.matthewnelson.kmp.log.file.internal.ScopeFileLog
 import io.matthewnelson.kmp.log.file.internal.ScopeLogHandle
@@ -738,13 +739,14 @@ public class FileLog: Log {
      * @see [of]
      * @see [Builder.thread]
      * */
-    public sealed class ThreadPool(
+    public abstract class ThreadPool internal constructor(
 
         /**
          * The number of threads to allocate. Will be between `1` and `8`.
          * */
         @JvmField
         public val nThreads: Int,
+        init: Any,
     ) {
 
         public companion object {
@@ -760,12 +762,15 @@ public class FileLog: Log {
              * */
             @JvmStatic
             @ExperimentalLogApi
-            public fun of(nThreads: Int): ThreadPool = RealThreadPool(nThreads)
+            public fun of(nThreads: Int): ThreadPool = RealThreadPool.of(nThreads, INIT)
+
+            private val INIT = Any()
         }
 
         init {
             // Why someone would need or dedicate 8 threads for logging is beyond me...
             require(nThreads in 1..8) { "nThreads[$nThreads] !in 1..8" }
+            check(init == INIT) { "FileLog.ThreadPool cannot be extended. Use FileLog.ThreadPool.of" }
         }
 
         /** @suppress */
@@ -3037,23 +3042,6 @@ public class FileLog: Log {
             // No other Log instances installed, or none
             // accepted Level.Error for this Log.Logger.
             t?.printStackTrace()
-        }
-    }
-
-    private class RealThreadPool(nThreads: Int): ThreadPool(nThreads) {
-
-        val allocator: Lazy<LogDispatcherAllocator> = lazy {
-            // Using Lazy such that if the FileLog is never installed at Log.Root,
-            // then N is never incremented nor Logger instantiated.
-            val logger = Logger.of(tag = "ThreadPool{${N._incrementAndGet()}}", domain = DOMAIN)
-            val name = "FileLog.${logger.tag}"
-            object : LogDispatcherAllocator(logger) {
-                override fun doAllocation(): LogDispatcher = newLogDispatcher(nThreads = nThreads, name = name)
-            }
-        }
-
-        private companion object {
-            private val N = _atomic(initial = 0L)
         }
     }
 }
