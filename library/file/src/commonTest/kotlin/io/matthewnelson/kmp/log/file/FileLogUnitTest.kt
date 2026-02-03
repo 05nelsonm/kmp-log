@@ -335,19 +335,26 @@ class FileLogUnitTest {
                     super.log(level, domain, tag, msg, t)
 
                     if (msg == null) return false
-                    if (tag.startsWith("ThreadPool") && msg.startsWith("Allocated >> ")) {
+                    if (msg.startsWith("Allocated >> ")) {
                         synchronized(lock) {
                             allocated.add(msg.substringAfter("Allocated >> "))
                         }
                         return true
                     }
-                    if (tag.startsWith("ThreadPool") && msg.startsWith("Deallocated >> ")) {
+                    if (msg.startsWith("Deallocated >> ")) {
                         synchronized(lock) {
                             deallocated.add(msg.substringAfter("Deallocated >> "))
                         }
                         return true
                     }
                     return false
+                }
+
+                override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
+                    if (!super.isLoggable(level, domain, tag)) return false
+                    if (tag.startsWith("ThreadPool")) return true
+                    if (log1.uid.endsWith(tag)) return true
+                    return log2.uid.endsWith(tag)
                 }
             }
 

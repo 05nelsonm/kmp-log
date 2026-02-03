@@ -103,6 +103,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
@@ -1737,10 +1738,9 @@ public class FileLog: Log {
             if (previousLogJob != null) {
                 logD {
                     if (!previousLogJob.isActive) null
-                    else "Waiting for previous $LOG_JOB to complete >> $previousLogJob"
+                    else "Cancelling and waiting for previous $LOG_JOB to complete >> $previousLogJob"
                 }
-                // TODO: If it is not processing jobs, cancel it. It could
-                //  be stuck waiting for a FileLock or something.
+                previousLogJob.cancel("Cancelled by new $LOG_JOB >> $logJob")
                 previousLogJob.join()
             }
 
@@ -1811,7 +1811,6 @@ public class FileLog: Log {
                         logAction.drop(warn = false)
                     }
                 } finally {
-                    // Paranoia; if drop throws exception which it "shouldn't".
                     logBuffer.channel.cancel()
                 }
                 if (count > 0L) logW(t) { "Dropped $count log(s)" }
@@ -2187,11 +2186,6 @@ public class FileLog: Log {
             if (retryAction._get() == null && lockLog.isValid()) try {
                 lockLog.release()
                 logD { "Released lock on ${dotLockFile.name} >> $lockLog" }
-
-                // Slight delay after releasing the lock such that any other
-                // processes waiting on it have a chance to acquire it before
-                // we jump back to the top of the loop.
-                delay(2.milliseconds)
             } catch (e: IOException) {
                 // If a log rotation is currently underway, we must wait for it
                 // so that we do not invalidate its lockRotate inadvertently.
