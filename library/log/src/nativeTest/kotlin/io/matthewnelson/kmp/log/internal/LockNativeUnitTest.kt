@@ -22,11 +22,22 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.time.Duration.Companion.minutes
 
 class LockNativeUnitTest {
 
     private val lock = newLock()
+
+    @Test
+    fun givenLockThreadUID_whenCurrentThread_thenLockThreadUIDFromBGThreadDoesNotEqual() = runTest {
+        val cur = Lock.ThreadUID()
+        Array(128) {
+            async(Dispatchers.IO) {
+                assertNotEquals(cur, Lock.ThreadUID())
+            }
+        }.toList().awaitAll()
+    }
 
     @Test
     fun givenLock_whenUsedFromMultipleThreads_thenGuardsAccess() = runTest(timeout = 3.minutes) {
