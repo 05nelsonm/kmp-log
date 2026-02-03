@@ -3,6 +3,10 @@
 ## Version 0.1.2 (2026-02-03)
  - Fixes race condition in Kotlin/Native `Lock` implementation [[#114]][114] [[#116]][116]
  - Adds `Log.Root.uninstallAndGet` API [[#55]][55]
+ - Mitigate unnecessary memory over-allocation in `SysLog` for `Wasi` when `UTF-8` encoding 
+   is one-shot [[#47]][47]
+ - Mitigate unnecessary boxing in `SysLog` for `Android`/`AndroidNative` by returning a default 
+   instead of `null` [[#98]][98]
  - Documentation improvements [[#79]][79] [[#117]][117]
 
 ## Version 0.1.1 (2025-12-23)
@@ -37,8 +41,10 @@
 [40]: https://github.com/05nelsonm/kmp-log/pull/40
 [41]: https://github.com/05nelsonm/kmp-log/pull/41
 [43]: https://github.com/05nelsonm/kmp-log/pull/43
+[47]: https://github.com/05nelsonm/kmp-log/pull/47
 [55]: https://github.com/05nelsonm/kmp-log/pull/55
 [79]: https://github.com/05nelsonm/kmp-log/pull/79
+[98]: https://github.com/05nelsonm/kmp-log/pull/98
 [114]: https://github.com/05nelsonm/kmp-log/pull/114
 [116]: https://github.com/05nelsonm/kmp-log/pull/116
 [117]: https://github.com/05nelsonm/kmp-log/pull/117
