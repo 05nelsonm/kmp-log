@@ -19,7 +19,6 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.log.Log.Logger
 import io.matthewnelson.kmp.log.file.FileLog
-import io.matthewnelson.kmp.log.file.FileLog.Companion.DOMAIN
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -53,8 +52,9 @@ internal class RealThreadPool private constructor(nThreads: Int, init: Any): Fil
 
     // Using Lazy such that if the FileLog is never installed at Log.Root,
     // then N is never incremented nor Logger instantiated.
-    val allocator: Lazy<LogDispatcherAllocator> = lazy {
-        val logger = Logger.of(tag = "ThreadPool{${N._incrementAndGet()}}", domain = DOMAIN)
+    @get:JvmSynthetic
+    internal val allocator: Lazy<LogDispatcherAllocator> = lazy {
+        val logger = Logger.of(tag = "ThreadPool{${N._incrementAndGet()}}", domain = FileLog.DOMAIN)
         val name = "FileLog.${logger.tag}"
         object : LogDispatcherAllocator(logger) {
             override fun doAllocation(): LogDispatcher = newLogDispatcher(nThreads = nThreads, name = name)

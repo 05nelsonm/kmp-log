@@ -288,10 +288,17 @@ class FileLogBuilderUnitTest {
 
     @Test
     fun givenFileLockTimeout_whenLessThan1_thenUsesCalculatedValue() {
-        val fileLockTimeout = newBuilder().fileLockTimeout(-1L).build().fileLockTimeout
-        // TODO: Hone into place
-        val expectedMin = 1L
-        val expectedMax = 10_000L
+        val fileLockTimeout = newBuilder()
+            // isDesktop defaults
+            .maxLogFileSize(10L * 1024L * 1024L)
+            // isDesktop defaults
+            .maxLogFiles(5)
+            .fileLockTimeout(-1L)
+            .build()
+            .fileLockTimeout
+
+        val expectedMin = 2_000L
+        val expectedMax = 3_000L
         assertTrue(
             fileLockTimeout in expectedMin..expectedMax,
             "fileLockTimeout[$fileLockTimeout] !in $expectedMin..$expectedMax"
@@ -299,8 +306,8 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenFileLockTimeout_whenGreaterThan1LessThanDurationINFINITE_thenUsesValue() {
-        assertEquals(15L, newBuilder().fileLockTimeout(15L).build().fileLockTimeout)
+    fun givenFileLockTimeout_whenGreaterThan1LessThan375_thenUses375() {
+        assertEquals(375L, newBuilder().fileLockTimeout(15L).build().fileLockTimeout)
     }
 
     @Test

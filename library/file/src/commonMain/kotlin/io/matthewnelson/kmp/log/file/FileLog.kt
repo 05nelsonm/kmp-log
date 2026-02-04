@@ -572,8 +572,8 @@ public class FileLog: Log {
      * @see [uninstallAndAwaitSync]
      *
      * @throws [CancellationException]
-     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
-     *   an instance of [FileLog] (highly unlikely, but possible).
+     * @throws [ClassCastException] If the [Log] returned by [Log.Root.uninstallAndGet] using [uid]
+     *   was non-`null`, but not an instance of [FileLog] (highly unlikely, but possible).
      * */
     public suspend inline fun uninstallAndAwaitAsync(): Boolean {
         return uninstallAndAwaitAsync(timeout = Duration.INFINITE)
@@ -603,8 +603,8 @@ public class FileLog: Log {
      * @see [uninstallAndAwaitSync]
      *
      * @throws [CancellationException]
-     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
-     *   an instance of [FileLog] (highly unlikely, but possible).
+     * @throws [ClassCastException] If the [Log] returned by [Log.Root.uninstallAndGet] using [uid]
+     *   was non-`null`, but not an instance of [FileLog] (highly unlikely, but possible).
      * */
     public suspend fun uninstallAndAwaitAsync(timeout: Duration): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
@@ -642,8 +642,8 @@ public class FileLog: Log {
      * @see [Log.Root.uninstallAndGet]
      * @see [uninstallAndAwaitAsync]
      *
-     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
-     *   an instance of [FileLog] (highly unlikely, but possible).
+     * @throws [ClassCastException] If the [Log] returned by [Log.Root.uninstallAndGet] using [uid]
+     *   was non-`null`, but not an instance of [FileLog] (highly unlikely, but possible).
      * */
     public inline fun uninstallAndAwaitSync(): Boolean {
         return uninstallAndAwaitSync(timeoutMillis = Duration.INFINITE.inWholeMilliseconds)
@@ -667,8 +667,8 @@ public class FileLog: Log {
      * @see [Log.Root.uninstallAndGet]
      * @see [uninstallAndAwaitAsync]
      *
-     * @throws [ClassCastException] If the instance uninstalled from [Log.Root] using [uid] was not
-     *   an instance of [FileLog] (highly unlikely, but possible).
+     * @throws [ClassCastException] If the [Log] returned by [Log.Root.uninstallAndGet] using [uid]
+     *   was non-`null`, but not an instance of [FileLog] (highly unlikely, but possible).
      * */
     public fun uninstallAndAwaitSync(timeoutMillis: Long): Boolean {
         val instance = uninstallAndGet(uid) ?: return false
@@ -1023,7 +1023,7 @@ public class FileLog: Log {
         public fun yieldOn(nLogs: Byte): Builder = apply { _yieldOn = nLogs }
 
         /**
-         * DEFAULT: `-1` (i.e. TODO)
+         * DEFAULT: `-1` (i.e. Calculate a generous timeout based on other settings)
          *
          * TODO
          *
@@ -1348,21 +1348,30 @@ public class FileLog: Log {
                 _bufferCapacity.coerceAtLeast(minimum)
             }
 
-            val threadPool = _threadPool as? RealThreadPool
             val yieldOn = _yieldOn.coerceIn(1, 10)
             val maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L) // 50kb
-            val fileLockTimeout = _fileLockTimeout.let {
-                when {
-                    it < 1L -> {
-                        // TODO: Calculate based on yieldOn and maxLogFileSize
-                        //  maybe even take into consideration bufferOverflowDropOldest
-                        //  and bufferCapacity < Channel.UNLIMITED?
-                        125L
-                    }
-                    it >= Duration.INFINITE.inWholeMilliseconds -> Duration.INFINITE.inWholeMilliseconds
-                    else -> it
-                }
-            }
+            val fileLockTimeout = if (_fileLockTimeout > 0L) _fileLockTimeout else {
+                // Values below are total guesstimates, complete fiction.
+                //
+                // With all Builder defaults, comes out to ~2500ms
+                var process = 2L                // Millis to process 1 LogAction.Write
+                process *= yieldOn              // Number of LogAction.Write other Process may do before yielding
+                process += 10L                  // Millis post-processing FileStream.sync might take
+
+                var rotate = maxLogFileSize
+                rotate /= DEFAULT_BUFFER_SIZE   // Number of FileStream.{read/write} to atomically copy log file
+                rotate *= 2L                    // Millis to complete each FileStream.{read/write}
+                rotate += 10L                   // Millis to FileStream.sync .tmp (before closing)
+                rotate += 2L                    // Millis to move from .tmp -> .next
+                rotate += 5L                    // Millis to FileStream.sync log file truncation
+                rotate += 10L                   // Rotation logic overhead
+
+                var move = files.size.toLong()
+                move *= 2L                      // Millis to move 1 archived log
+                move += 10L                     // Move logic overhead
+
+                process + rotate + move
+            }.coerceIn(375L, Duration.INFINITE.inWholeMilliseconds)
 
             return FileLog(
                 min = min,
@@ -1378,7 +1387,7 @@ public class FileLog: Log {
                 minWaitOn = minWaitOn,
                 yieldOn = yieldOn,
                 fileLockTimeout = fileLockTimeout,
-                threadPool = threadPool,
+                threadPool = _threadPool as? RealThreadPool,
                 formatter = _formatter,
                 formatterOmitYear = _formatterOmitYear,
                 blacklistDomain = blacklistDomain,
