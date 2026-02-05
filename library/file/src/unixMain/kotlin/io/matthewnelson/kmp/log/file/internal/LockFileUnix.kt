@@ -169,17 +169,17 @@ internal actual object StubLockFile: LockFile() {
 
     override fun lock(position: Long, size: Long, blocking: Boolean): FileLock {
         if (size == FILE_LOCK_SIZE) {
-            if (position == FILE_LOCK_POS_LOG) return StubLockLog
-            if (position == FILE_LOCK_POS_ROTATE) return StubLockRotate
+            if (position == FILE_LOCK_POS_LOG) return LockLog
+            if (position == FILE_LOCK_POS_ROTATE) return LockRotate
         }
         return StubFileLock(position, size)
     }
 
-    internal actual val StubLockLog by lazy {
+    private val LockLog by lazy {
         StubFileLock(FILE_LOCK_POS_LOG, FILE_LOCK_SIZE)
     }
 
-    private val StubLockRotate by lazy {
+    private val LockRotate by lazy {
         StubFileLock(FILE_LOCK_POS_ROTATE, FILE_LOCK_SIZE)
     }
 

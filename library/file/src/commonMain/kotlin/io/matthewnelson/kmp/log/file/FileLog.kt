@@ -2028,7 +2028,7 @@ public class FileLog: Log {
 
         logD { "$LOG_LOOP Started >> $jobLogLoop" }
 
-        var lockLog = if (lockFile == StubLockFile) StubLockFile.StubLockLog else InvalidFileLock
+        var lockLog: FileLock = InvalidFileLock
 
         // The main loop
         while (true) {
@@ -2121,7 +2121,7 @@ public class FileLog: Log {
                             else "Closed >> $lockFile"
                         }
                         jobLogLoop.ensureActive()
-                        lockFile = if (lockFile == StubLockFile) StubLockFile else dotLockFile.openLockFileRobustly()
+                        lockFile = if (lockFile == StubLockFile) lockFile else dotLockFile.openLockFileRobustly()
                         lockFileCompletion = jobLogLoop.closeOnCompletion(lockFile)
                         lockFile.lockNonBlock(
                             position = FILE_LOCK_POS_LOG,

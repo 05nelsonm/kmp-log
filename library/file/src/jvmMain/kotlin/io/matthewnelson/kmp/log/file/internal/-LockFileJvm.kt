@@ -86,8 +86,8 @@ internal actual object StubLockFile: LockFile() {
     override fun map(p0: MapMode?, p1: Long, p2: Long): MappedByteBuffer? = error("unused")
     override fun lock(p0: Long, p1: Long, p2: Boolean): FileLock {
         if (p1 == FILE_LOCK_SIZE && !p2) {
-            if (p0 == FILE_LOCK_POS_LOG) return StubLockLog
-            if (p0 == FILE_LOCK_POS_ROTATE) return StubLockRotate
+            if (p0 == FILE_LOCK_POS_LOG) return LockLog
+            if (p0 == FILE_LOCK_POS_ROTATE) return LockRotate
         }
         return StubFileLock(p0, p1, p2)
     }
@@ -96,11 +96,11 @@ internal actual object StubLockFile: LockFile() {
     override fun implCloseChannel() {}
     actual override fun toString(): String = "StubLockFile"
 
-    internal actual val StubLockLog by lazy {
+    private val LockLog by lazy {
         StubFileLock(FILE_LOCK_POS_LOG, FILE_LOCK_SIZE, false)
     }
 
-    private val StubLockRotate by lazy {
+    private val LockRotate by lazy {
         StubFileLock(FILE_LOCK_POS_ROTATE, FILE_LOCK_SIZE, false)
     }
 

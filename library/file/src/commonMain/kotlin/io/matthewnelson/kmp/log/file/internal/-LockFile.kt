@@ -134,5 +134,4 @@ internal expect abstract class LockFile: Closeable {
 // A stub which always returns StubFileLock.
 internal expect object StubLockFile: LockFile {
     override fun toString(): String
-    internal val StubLockLog: StubFileLock
 }
