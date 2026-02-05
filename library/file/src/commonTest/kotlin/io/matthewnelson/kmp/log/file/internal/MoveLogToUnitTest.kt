@@ -195,7 +195,7 @@ class MoveLogToUnitTest {
         val subDirTmp = tmp.resolve("sub_directory").mkdirs2(mode = null)
         var moved: File? = null
         try {
-            moved = tmp.deleteOrMoveToRandomIfNonEmptyDirectory(ByteArray(32), maxNewNameLen)
+            moved = tmp.deleteOrMoveToRandomIfNonEmptyDirectory(buf = null, maxNewNameLen)
             assertNotNull(moved)
             assertFalse(tmp.exists2(), "tmp.exists2")
             assertTrue(moved.resolve(subDirTmp.name).exists2(), "moved(sub_directory).exists2")

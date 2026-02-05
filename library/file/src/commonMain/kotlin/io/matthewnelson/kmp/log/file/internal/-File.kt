@@ -55,24 +55,29 @@ internal fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite = try 
 }
 
 // NOTE: Do NOT use on FileLog.dotLockFile
-internal fun File.exists2Robustly(): Boolean {
+internal fun File.exists2Robustly(): Boolean = try {
+    exists2()
+} catch (_: IOException) {
+    var s: FileStream.Read? = null
     try {
-        if (exists2()) return true
-    } catch (_: IOException) {
-        var s: FileStream.Read? = null
-        return try {
-            // Must exist to open O_RDONLY.
-            s = openRead()
-            true
-        } catch (t: Throwable) {
-            t.message?.contains("Is a directory", ignoreCase = true) == true
-        } finally {
-            try {
-                s?.close()
-            } catch (_: Throwable) {}
+        // Must exist to open O_RDONLY.
+        s = openRead()
+        true
+    } catch (e: IOException) {
+        if (e !is FileSystemException) false else {
+            val r = e.reason
+            when {
+                r == null -> false
+                r.contains("EISDIR") -> true
+                r.contains("Is a directory") -> true
+                else -> false
+            }
         }
+    } finally {
+        try {
+            s?.close()
+        } catch (_: Throwable) {}
     }
-    return false
 }
 
 /**
@@ -83,7 +88,7 @@ internal fun File.exists2Robustly(): Boolean {
  * **NOTE:** This should **only** be utilized on files that should NOT exist on
  * the filesystem.
  *
- * @param [buf] The array to use for creating a random name.
+ * @param [buf] The array to use for creating a random name, or `null`.
  * @param [maxNewNameLen] The maximum length for a new file name.
  *
  * @return The [File] for the directory it was moved to, or `null` if [File.delete2]
@@ -98,7 +103,7 @@ internal fun File.exists2Robustly(): Boolean {
  * */
 @Throws(IllegalArgumentException::class, DirectoryNotEmptyException::class)
 internal fun File.deleteOrMoveToRandomIfNonEmptyDirectory(
-    buf: ByteArray,
+    buf: ByteArray?,
     maxNewNameLen: Int,
 ): File? {
     require(isAbsolute()) { "isAbsolute[false]" }
@@ -106,7 +111,7 @@ internal fun File.deleteOrMoveToRandomIfNonEmptyDirectory(
     val minBufSize = 32 // must be at LEAST 32 bytes for BLAKE2s digestInto
     require(maxNewNameLen >= 7) { "maxNewNameLen[$maxNewNameLen] < 7" }
     require(parent != null) { "parent directory must not be null" }
-    require(buf.size >= minBufSize) { "buf.size[${buf.size}] < $minBufSize" }
+    if (buf != null) require(buf.size >= minBufSize) { "buf.size[${buf.size}] < $minBufSize" }
 
     val e: DirectoryNotEmptyException = try {
         delete2(ignoreReadOnly = true, mustExist = false)
@@ -123,19 +128,22 @@ internal fun File.deleteOrMoveToRandomIfNonEmptyDirectory(
         BLAKE2s(bitStrength.coerceAtMost(256))
     }
 
-    Random.nextBytes(buf, 0, minBufSize)
-    blake2.update(buf, 0, minBufSize)
-    val len = blake2.digestInto(buf, destOffset = 0)
+    @Suppress("LocalVariableName")
+    val _buf = buf ?: ByteArray(minBufSize)
+    Random.nextBytes(_buf, 0, minBufSize)
+    blake2.update(_buf, 0, minBufSize)
+    val len = blake2.digestInto(_buf, destOffset = 0)
 
     // Base16 encoder will NOT insert its line break because maximum digest
     // byte size of BLAKE2s is 32, so max 64 characters when Base16 encoded
     // which is what Base16.config.lineBreakInterval is configured with (i.e.
     // the 65th character gets prefixed with a new line).
-    val randomHidden = '.' + buf.encodeToString(Base16, 0, len)
+    val randomHidden = '.' + _buf.encodeToString(Base16, 0, len)
     val dest = parent.resolve(randomHidden)
 
     try {
         moveLogTo(dest)
+        // TODO: write a notice file of previous directory name???
         return dest
     } catch (ee: IOException) {
         if (ee is FileNotFoundException) return null

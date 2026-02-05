@@ -17,6 +17,7 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
+import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.FileStream
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -37,6 +38,8 @@ internal sealed interface LogAction {
      * An action related to log rotation. No actual write functionality is had;
      * it is simply for weaving into the loop. Should always return `0`, or
      * [EXECUTE_ROTATE_LOGS].
+     *
+     * @see [newCheckAction]
      * */
     fun interface Rotation: LogAction {
 
@@ -47,6 +50,26 @@ internal sealed interface LogAction {
             // a LockFile due to FileLock release failure, the negative value will
             // not trigger a FileStream.sync call.
             internal const val CONSUME_AND_IGNORE = -615
+
+            // Special return value for a rotation check to indicate it is not needed
+            internal const val ROTATION_NOT_NEEDED = -615L
+
+            internal fun newCheckAction(
+                maxLogFileSize: Long,
+                dotRotateFile: File,
+            ): Rotation = Rotation { _, _, sizeLog, processedWrites ->
+                if (processedWrites == CONSUME_AND_IGNORE) return@Rotation 0L
+
+                if (sizeLog >= maxLogFileSize) return@Rotation EXECUTE_ROTATE_LOGS
+
+                // Moving dotRotateFile -> *.001 is the final move that gets executed in the
+                // log rotation process, so its existence indicates that a log rotation was
+                // previously interrupted, either by process termination or error/cancellation.
+                if (dotRotateFile.exists2Robustly()) return@Rotation EXECUTE_ROTATE_LOGS
+
+                // Good to go; do nothing.
+                ROTATION_NOT_NEEDED
+            }
         }
     }
 
