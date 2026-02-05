@@ -143,6 +143,7 @@ internal fun File.deleteOrMoveToRandomIfNonEmptyDirectory(
 
     try {
         moveLogTo(dest)
+        // TODO: write a notice file of previous directory name???
         return dest
     } catch (ee: IOException) {
         if (ee is FileNotFoundException) return null

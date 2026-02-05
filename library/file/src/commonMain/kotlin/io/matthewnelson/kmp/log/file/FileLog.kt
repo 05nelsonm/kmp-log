@@ -26,11 +26,13 @@ import io.matthewnelson.encoding.utf8.UTF8
 import io.matthewnelson.encoding.utf8.UTF8.CharPreProcessor.Companion.sizeUTF8
 import io.matthewnelson.immutable.collections.toImmutableList
 import io.matthewnelson.immutable.collections.toImmutableSet
+import io.matthewnelson.kmp.file.AccessDeniedException
 import io.matthewnelson.kmp.file.Closeable
 import io.matthewnelson.kmp.file.DirectoryNotEmptyException
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.FileStream
+import io.matthewnelson.kmp.file.FileSystemException
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.NotDirectoryException
 import io.matthewnelson.kmp.file.OpenExcl
@@ -1533,7 +1535,7 @@ public class FileLog: Log {
             logD { "$LOG_ROTATION not needed" }
 
             // Good to go; do nothing.
-            0L
+            0L // TODO: return magic number to reset RotationState
         }
 
         this.logDirectory = directory.path
@@ -2874,8 +2876,32 @@ public class FileLog: Log {
 
         if (threw == null) return
 
-        if (dotStream == null) {
-            // TODO: openRead failed. Why...
+        // dotRotateFile.openRead failed. Why...
+        if (dotStream == null) when (threw) {
+
+            // Permissions? Try fixing them.
+            is AccessDeniedException -> try {
+                dotRotateFile.chmod2(mode = modeFile)
+            } catch (e: IOException) {
+                threw.addSuppressed(e)
+            }
+
+            // Is it a directory? Try deleting it.
+            is FileSystemException -> run {
+                val r = threw.reason ?: return@run
+                if (r.contains("EISDIR") || r.contains("Is a directory")) try {
+                    // dotRotateFile is a directory... It should NOT be one.
+                    val moved = dotRotateFile.deleteOrMoveToRandomIfNonEmptyDirectory(
+                        buf = null,
+                        maxNewNameLen = dotLockFile.name.length,
+                    )
+                    if (moved != null) logW(threw) {
+                        "Moved non-empty directory (which should NOT be there) ${dotRotateFile.name} >> ${moved.name}"
+                    }
+                } catch (e: IOException) {
+                    threw.addSuppressed(e)
+                }
+            }
         }
 
         if (state.comparisonFailures++ > 2) {
