@@ -18,6 +18,10 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.ANDROID
+import io.matthewnelson.kmp.file.SysDirSep
+import io.matthewnelson.kmp.file.canonicalFile2
+import io.matthewnelson.kmp.file.exists2
+import io.matthewnelson.kmp.file.toFile
 import io.matthewnelson.kmp.log.file.FileLog
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -35,12 +39,21 @@ internal actual fun FileLog.Companion.pid(): Int = JVM_PID
 private val LOG_TIME_FORMAT_YEAR_NO = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
 private val LOG_TIME_FORMAT_YEAR_YES = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
 
+private const val PID_UNKNOWN = -1
+private const val PROCFS_SELF = "/proc/self"
+
 // https://github.com/05nelsonm/kmp-process/blob/master/library/process/src/jvmMain/kotlin/io/matthewnelson/kmp/process/internal/-PID.kt
 private val JVM_PID: Int by lazy {
-    if (ANDROID.SDK_INT != null) {
-        return@lazy Class.forName("android.os.Process")
+    if (ANDROID.SDK_INT != null) return@lazy try {
+        Class.forName("android.os.Process")
             .getMethod("myPid")
             .invoke(null) as Int
+    } catch (_: Throwable) {
+        try {
+            PROCFS_SELF.toFile().canonicalFile2().name.toInt()
+        } catch (_: Throwable) {
+            PID_UNKNOWN
+        }
     }
 
     // Java 9
@@ -76,6 +89,12 @@ private val JVM_PID: Int by lazy {
             .toInt()
     } catch (_: Throwable) {}
 
+    // Last resort.
+    if (SysDirSep == '/') try {
+        val procfs = PROCFS_SELF.toFile()
+        if (procfs.exists2()) return@lazy procfs.canonicalFile2().name.toInt()
+    } catch (_: Throwable) {}
+
     // Unknown
-    -1
+    PID_UNKNOWN
 }
