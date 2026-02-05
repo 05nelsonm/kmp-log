@@ -32,6 +32,7 @@ import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.FileStream
 import io.matthewnelson.kmp.file.IOException
+import io.matthewnelson.kmp.file.NotDirectoryException
 import io.matthewnelson.kmp.file.OpenExcl
 import io.matthewnelson.kmp.file.canonicalFile2
 import io.matthewnelson.kmp.file.chmod2
@@ -1979,6 +1980,11 @@ public class FileLog: Log {
         // that needs to be finished off firstly.
         rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
 
+        // For tracking failures across successive rotations such that errors can be
+        // raised to shut down exceptionally after a certain number, instead of just
+        // infinitely looping.
+        val state = RotationState()
+
         // If a write operation for a log entry would end up causing the log file to
         // exceed the configured maxLogFileSize, it is cached here and retried after
         // a log rotation is performed. This allows us to not drop lockLog and perform
@@ -2267,6 +2273,7 @@ public class FileLog: Log {
                 if (lockLog.isValid()) {
                     CurrentThread.uninterrupted {
                         rotateLogs(
+                            state = state,
                             rotateActionQueue = rotateActionQueue,
                             logStream = logStream,
                             lockFile = lockFile,
@@ -2317,6 +2324,7 @@ public class FileLog: Log {
     * */
     @Throws(CancellationException::class, DirectoryNotEmptyException::class)
     private suspend fun ScopeLogLoop.rotateLogs(
+        state: RotationState,
         rotateActionQueue: RotateActionQueue,
         logStream: FileStream.ReadWrite,
         lockFile: LockFile,
@@ -2408,7 +2416,7 @@ public class FileLog: Log {
         if (dotRotateFile.exists2Robustly()) {
             // Picking up a previously interrupted log file rotation (moving
             // dotRotateFile -> *.001 is the last move that gets executed).
-            prepareLogRotationInterrupted(logStream, buf, moves)
+            prepareLogRotationInterrupted(state, logStream, buf, moves)
 
             // If was successful (moves is populated), logStream may not have
             // been truncated and may still need to have another full log rotation
@@ -2468,7 +2476,7 @@ public class FileLog: Log {
                 return
             }
 
-            prepareLogRotationFull(logStream, buf, moves)
+            prepareLogRotationFull(state, logStream, buf, moves)
         }
 
         if (moves.isEmpty()) {
@@ -2497,7 +2505,11 @@ public class FileLog: Log {
             return
         }
 
-        executeLogRotationMoves(rotateActionQueue, moves).invokeOnCompletion {
+        // Success. Reset.
+        state.atomicCopyFailures = 0
+        state.comparisonFailures = 0
+
+        executeLogRotationMoves(state, rotateActionQueue, moves).invokeOnCompletion {
             if (lockRotate.isValid()) try {
                 lockRotate.release()
                 logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
@@ -2565,8 +2577,9 @@ public class FileLog: Log {
     * If moves is left unpopulated after returning, an error has occurred and
     * an immediate retry should be scheduled.
     * */
-    @Throws(DirectoryNotEmptyException::class)
+    @Throws(IOException::class)
     private fun prepareLogRotationFull(
+        state: RotationState,
         logStream: FileStream.ReadWrite,
         buf: ByteArray,
         moves: ArrayDeque<Pair<File, File>>,
@@ -2595,8 +2608,8 @@ public class FileLog: Log {
         }
 
         try {
-            // Shouldn't exist, but just in case using openWrite instead of
-            // openLogFileRobustly to ensure it gets truncated if it does.
+            // Shouldn't exist, but just in case using openWrite instead of openLogFileRobustly to ensure it
+            // gets truncated if it does.
             dotRotateTmpFile.openWrite(excl = OpenExcl.MaybeCreate.of(modeFile)).use { tmpStream ->
                 var position = 0L
                 while (true) {
@@ -2611,8 +2624,6 @@ public class FileLog: Log {
 
             // Move into its final location.
             dotRotateTmpFile.moveLogTo(dotRotateFile)
-
-            // TODO: fsync directory???
 
             logD { "Atomically copied ${files[0].name} >> ${dotRotateFile.name}" }
         } catch (e: IOException) {
@@ -2630,9 +2641,19 @@ public class FileLog: Log {
                 e.addSuppressed(ee)
             }
 
+            if (state.atomicCopyFailures++ > 2) {
+                throw state.failureIOException(
+                    attempts = state.atomicCopyFailures,
+                    reason = "atomically copy ${files[0].name} >> ${dotRotateFile.name}",
+                    cause = e,
+                )
+            }
+
             logW(e) { "Failed to atomically copy ${files[0].name} >> ${dotRotateFile.name}. Retrying $LOG_ROTATION." }
             return
         }
+
+        // TODO: fsync directory (Issue #93)
 
         truncate0AndSync(logStream, file = files[0])
 
@@ -2658,8 +2679,10 @@ public class FileLog: Log {
     * If moves is left unpopulated after returning, an error has occurred and
     * an immediate retry should be scheduled.
     * */
+    @Throws(IOException::class)
     @Suppress("UnnecessaryVariable")
     private fun prepareLogRotationInterrupted(
+        state: RotationState,
         logStream: FileStream.ReadWrite,
         buf: ByteArray,
         moves: ArrayDeque<Pair<File, File>>,
@@ -2742,8 +2765,8 @@ public class FileLog: Log {
             return
         }
 
-        // Shouldn't be the case because of maxLogFileSize min, but just in case leave
-        // it alone if it's too small.
+        // Shouldn't be the case because of maxLogFileSize minimum, but just in case
+        // leave it alone if it's too small.
         //
         // buf.size == DEFAULT_BUFFER_SIZE == (8 * 1024)
         (buf.size * 2).let { minimum ->
@@ -2757,7 +2780,7 @@ public class FileLog: Log {
         }
 
         var dotStream: FileStream.Read? = null
-        var threw: Throwable? = null
+        var threw: IOException? = null
         try {
             dotStream = dotRotateFile.openRead()
             logD { "Opened >> $dotStream" }
@@ -2795,8 +2818,8 @@ public class FileLog: Log {
                 }
 
                 // Negative, or not enough bytes read to make a comparison
-                // valuable enough (that I would be safe with) to determine
-                // the need for truncation.
+                // valuable enough, or one that I would be comfortable with,
+                // to determine the need for truncation.
                 (bufLog.size / 4).let { minimum ->
                     if (readLog >= minimum) return@let
 
@@ -2850,6 +2873,18 @@ public class FileLog: Log {
         }
 
         if (threw == null) return
+
+        if (dotStream == null) {
+            // TODO: openRead failed. Why...
+        }
+
+        if (state.comparisonFailures++ > 2) {
+            throw state.failureIOException(
+                attempts = state.comparisonFailures,
+                reason = "compare ${files[0].name} with ${dotRotateFile.name}",
+                cause = threw,
+            )
+        }
 
         logW(threw) { "Failed to compare ${files[0].name} with ${dotRotateFile.name}. Retrying $LOG_ROTATION." }
 
@@ -2947,6 +2982,7 @@ public class FileLog: Log {
     * via completion handler.
     * */
     private fun ScopeLogLoop.executeLogRotationMoves(
+        state: RotationState,
         rotateActionQueue: RotateActionQueue,
         moves: ArrayDeque<Pair<File, File>>,
     ): Job = scopeLogLoop.launch(context = CoroutineName(LOG.tag + "-$LOG_ROTATION")) {
@@ -2955,8 +2991,10 @@ public class FileLog: Log {
         logD { "$LOG_ROTATION Started >> $thisJob" }
 
 //        val startSize = moves.size
+        var threw: IOException? = null
         while (moves.isNotEmpty()) {
-            val (source, dest) = moves.removeFirst()
+            val move = moves.removeFirst()
+            val (source, dest) = move
 
             try {
                 source.moveLogTo(dest)
@@ -2969,27 +3007,85 @@ public class FileLog: Log {
                 // rotation we were interrupted.
                 yield()
             } catch (e: IOException) {
-                // Source file did not exist, ignore.
+                // Source file did not exist. Ignore.
                 if (e is FileNotFoundException) continue
 
-                // TODO: Figure out what happened and attempt to recover.
+                // Dest is an existing non-empty directory.
+                if (e is DirectoryNotEmptyException) try {
+                    // Dest is something like {logDirectory}/{fileName}{.fileExtension}.001
+                    // and should NOT be a directory... Deletion should fail and end up
+                    // moving it to a randomly named directory within logDirectory.
+                    val moved = dest.deleteOrMoveToRandomIfNonEmptyDirectory(
+                        buf = null,
+                        maxNewNameLen = dotLockFile.name.length,
+                    )
+                    if (moved != null) logW(e) {
+                        "Moved non-empty directory (which should NOT be there) ${dest.name} >> ${moved.name}"
+                    }
+                    if (moved != null || !dest.exists2Robustly()) {
+                        // Successfully cleared the obstacle. Retry moving the log archive.
+                        moves.addFirst(move)
+                        continue
+                    }/* else {
+                        // Fall through and cache the exception via threw
+                    }*/
+                } catch (ee: IOException) {
+                    e.addSuppressed(ee)
+                }
 
-                // TODO: Track rotation failures and abort if there have been
-                //  too many. If someone swapped out a log file for a non-empty
-                //  directory or something, we could end up retrying forever.
+                // Source is an existing directory, dest exists and is NOT a directory.
+                if (e is NotDirectoryException) try {
+                    // Not the final move. Skip and let the next iteration deal with it.
+                    if (moves.isNotEmpty()) continue
 
-                logW(e) { "$LOG_ROTATION failure. TODO..." }
+                    // Final move. dotRotateFile is a directory and should NOT be one...
+                    val moved = source.deleteOrMoveToRandomIfNonEmptyDirectory(
+                        buf = null,
+                        maxNewNameLen = dotLockFile.name.length,
+                    )
+                    if (moved != null) logW(e) {
+                        "Moved non-empty directory (which should NOT be there) ${source.name} >> ${moved.name}"
+                    }
+                    if (moved != null || !source.exists2Robustly()) {
+                        continue
+                    }/* else {
+                        // Fall through and cache the exception via threw
+                    }*/
+                } catch (ee: IOException) {
+                    e.addSuppressed(ee)
+                }
 
-                // Trigger an immediate retry. If another process is also
-                // logging, it may finish off the log rotation for us, so.
-                rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
-                break
+                threw?.addSuppressed(e) ?: run { threw = e }
             }
         }
 
 //        if (moves.size != startSize) {
-//            // TODO: fsync directory???
+//            // TODO: fsync directory (Issue #93)
 //        }
+
+        if (threw == null) {
+            state.moveFailures = 0
+            return@launch
+        }
+
+        if (!dotRotateFile.exists2Robustly()) {
+            state.moveFailures = 0
+            logW(threw) {
+                "$LOG_ROTATION experienced failure(s), but successfully moved ${dotRotateFile.name} >> ${files[1].name}"
+            }
+            return@launch
+        }
+
+        if (state.moveFailures++ > 2) {
+            throw state.failureIOException(
+                attempts = state.moveFailures,
+                reason = "move ${dotRotateFile.name} >> ${files[1].name}",
+                cause = threw,
+            )
+        }
+
+        logW(threw) { "Failed to move ${dotRotateFile.name} >> ${files[1].name}. Retrying $LOG_ROTATION." }
+        rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
     }
 
     @Throws(CancellationException::class)
@@ -3000,6 +3096,20 @@ public class FileLog: Log {
                 else "Waiting for $LOG_ROTATION to complete >> $child"
             }
             child.join()
+        }
+    }
+
+    private class RotationState {
+
+        @Volatile
+        var atomicCopyFailures: Int = 0
+        @Volatile
+        var comparisonFailures: Int = 0
+        @Volatile
+        var moveFailures: Int = 0
+
+        fun failureIOException(attempts: Int, reason: String, cause: Throwable?): IOException {
+            return IOException("$LOG_ROTATION failure. Failed $attempts times to $reason", cause)
         }
     }
 
