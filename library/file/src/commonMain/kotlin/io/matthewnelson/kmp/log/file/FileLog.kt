@@ -61,6 +61,7 @@ import io.matthewnelson.kmp.log.file.internal.LogAction.Companion.EXECUTE_ROTATE
 import io.matthewnelson.kmp.log.file.internal.LogAction.Companion.MAX_RETRIES
 import io.matthewnelson.kmp.log.file.internal.LogAction.Companion.drop
 import io.matthewnelson.kmp.log.file.internal.LogAction.Rotation.Companion.CONSUME_AND_IGNORE
+import io.matthewnelson.kmp.log.file.internal.LogAction.Rotation.Companion.ROTATION_NOT_NEEDED
 import io.matthewnelson.kmp.log.file.internal.LogBuffer
 import io.matthewnelson.kmp.log.file.internal.LogDispatcher
 import io.matthewnelson.kmp.log.file.internal.LogDispatcherAllocator
@@ -1522,21 +1523,7 @@ public class FileLog: Log {
             }
         }
         // For logLoop's RotateActionQueue
-        this.checkIfLogRotationIsNeeded = LogAction.Rotation { _, _, sizeLog, processedWrites ->
-            if (processedWrites == CONSUME_AND_IGNORE) return@Rotation 0L
-
-            if (sizeLog >= maxLogFileSize) return@Rotation EXECUTE_ROTATE_LOGS
-
-            // Moving dotRotateFile -> *.001 is the final move that gets executed in the
-            // log rotation process, so its existence indicates that a log rotation was
-            // previously interrupted, either by process termination or error/cancellation.
-            if (dotRotateFile.exists2Robustly()) return@Rotation EXECUTE_ROTATE_LOGS
-
-            logD { "$LOG_ROTATION not needed" }
-
-            // Good to go; do nothing.
-            0L // TODO: return magic number to reset RotationState
-        }
+        this.checkIfLogRotationIsNeeded = LogAction.Rotation.newCheckAction(maxLogFileSize, dotRotateFile)
 
         this.logDirectory = directory.path
         this.logFiles = files.map { it.path }.toImmutableList()
@@ -1985,7 +1972,7 @@ public class FileLog: Log {
         // For tracking failures across successive rotations such that errors can be
         // raised to shut down exceptionally after a certain number, instead of just
         // infinitely looping.
-        val state = RotationState()
+        val rotationState = RotationState()
 
         // If a write operation for a log entry would end up causing the log file to
         // exceed the configured maxLogFileSize, it is cached here and retried after
@@ -2197,21 +2184,24 @@ public class FileLog: Log {
                         processedWrites++
                         size += written
                         logD { "Wrote $written bytes to ${files[0].name}" }
-                    } else {
-                        // Check "special" negative return value
-                        if (written == EXECUTE_ROTATE_LOGS) {
+                    } else when (written) { // Check special negative return values.
+                        EXECUTE_ROTATE_LOGS -> run {
                             size = maxLogFileSize // Force a log rotation
+                            if (action !is LogAction.Write) return@run
 
-                            if (action is LogAction.Write) {
-                                val previous = retryAction._getAndSet(new = action)
-                                if (previous != null) {
-                                    previous.drop(warn = true)
-                                    // HARD fail.... There should ONLY ever be 1 retryAction.
-                                    throw IllegalStateException("retryAction's previous value was non-null")
-                                }
-
-                                logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after $LOG_ROTATION." }
+                            val previous = retryAction._getAndSet(new = action)
+                            if (previous != null) {
+                                previous.drop(warn = true)
+                                // HARD fail.... There should ONLY ever be 1 retryAction.
+                                throw IllegalStateException("retryAction's previous value was non-null")
                             }
+                            logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after $LOG_ROTATION." }
+                        }
+                        ROTATION_NOT_NEEDED -> {
+                            rotationState.atomicCopyFailures = 0
+                            rotationState.comparisonFailures = 0
+                            rotationState.moveFailures = 0
+                            logD { "$LOG_ROTATION not needed" }
                         }
                     }
 
@@ -2275,7 +2265,7 @@ public class FileLog: Log {
                 if (lockLog.isValid()) {
                     CurrentThread.uninterrupted {
                         rotateLogs(
-                            state = state,
+                            state = rotationState,
                             rotateActionQueue = rotateActionQueue,
                             logStream = logStream,
                             lockFile = lockFile,
