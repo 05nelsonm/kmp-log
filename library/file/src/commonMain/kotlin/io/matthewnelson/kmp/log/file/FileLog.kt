@@ -74,6 +74,8 @@ import io.matthewnelson.kmp.log.file.internal.ScopeFileLog
 import io.matthewnelson.kmp.log.file.internal.ScopeLogHandle
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop.Companion.scopeLogLoop
+import io.matthewnelson.kmp.log.file.internal.StubFileLock
+import io.matthewnelson.kmp.log.file.internal.StubLockFile
 import io.matthewnelson.kmp.log.file.internal._atomic
 import io.matthewnelson.kmp.log.file.internal._atomicRef
 import io.matthewnelson.kmp.log.file.internal._compareAndSet
@@ -1866,6 +1868,7 @@ public class FileLog: Log {
             }
 
             logJob.ensureActive()
+            // TODO: If disabled, use StubLockFile
             val lockFile = dotLockFile.openLockFileRobustly()
             val lockFileCompletion = logJob.closeOnCompletion(lockFile)
 
@@ -2000,7 +2003,7 @@ public class FileLog: Log {
 
         logD { "$LOG_LOOP Started >> $jobLogLoop" }
 
-        var lockLog: FileLock = InvalidFileLock
+        var lockLog = if (lockFile == StubLockFile) StubLockFile.StubLockLog else InvalidFileLock
 
         // The main loop
         while (true) {
@@ -2031,8 +2034,9 @@ public class FileLog: Log {
 
             // Obtain a FileLock for writing to logStream
             //
-            // Will be valid if and only if it was not released due to retryAction
-            // containing a cached LogAction.
+            // Will be valid if it was not released due to retryAction containing a
+            // cached LogAction.Write, or if it's a StubFileLock because file locking
+            // has been disabled (StubFileLock is always valid).
             lockLog = if (lockLog.isValid()) lockLog else CurrentThread.uninterrupted {
                 try {
                     lockFile.lockNonBlock(
@@ -2086,9 +2090,13 @@ public class FileLog: Log {
                     }
 
                     try {
-                        logD(ee) { "Closed >> $lockFile" }
+                        // Should NEVER be a StubLockFile, but just in case...
+                        logD(ee) {
+                            if (lockFile == StubLockFile) null
+                            else "Closed >> $lockFile"
+                        }
                         jobLogLoop.ensureActive()
-                        lockFile = dotLockFile.openLockFileRobustly()
+                        lockFile = if (lockFile == StubLockFile) StubLockFile else dotLockFile.openLockFileRobustly()
                         lockFileCompletion = jobLogLoop.closeOnCompletion(lockFile)
                         lockFile.lockNonBlock(
                             position = FILE_LOCK_POS_LOG,
@@ -2282,8 +2290,7 @@ public class FileLog: Log {
             // on writes to logStream (unless there are LogAction present in the
             // rotateActionQueue which come first).
             if (retryAction._get() == null && lockLog.isValid()) try {
-                lockLog.release()
-                logD { "Released lock on ${dotLockFile.name} >> $lockLog" }
+                lockLog.doRelease()
             } catch (e: IOException) {
                 // If a log rotation is currently underway, we must wait for it
                 // so that we do not invalidate its lockRotate inadvertently.
@@ -2389,7 +2396,10 @@ public class FileLog: Log {
             return
         }
 
-        logD { "Acquired lock on ${dotLockFile.name} >> $lockRotate" }
+        logD {
+            if (lockRotate is StubFileLock) null
+            else "Acquired lock on ${dotLockFile.name} >> $lockRotate"
+        }
 
         // There exists a potential here that another process was mid-rotation
         // when this process' LogJob was started, whereby the dotRotateFile
@@ -2447,8 +2457,7 @@ public class FileLog: Log {
 
             if (size < maxLogFileSize) {
                 if (lockRotate.isValid()) try {
-                    lockRotate.release()
-                    logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
+                    lockRotate.doRelease()
                 } catch (e: IOException) {
                     try {
                         // Close the lock file (if not already). Next logLoop iteration
@@ -2473,8 +2482,7 @@ public class FileLog: Log {
             // An error occurred in prepareLogRotation{Full/Interrupted}
 
             if (lockRotate.isValid()) try {
-                lockRotate.release()
-                logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
+                lockRotate.doRelease()
             } catch (e: IOException) {
                 try {
                     // Close the lock file (if not already). Next logLoop iteration
@@ -2501,8 +2509,7 @@ public class FileLog: Log {
 
         executeLogRotationMoves(state, rotateActionQueue, moves).invokeOnCompletion {
             if (lockRotate.isValid()) try {
-                lockRotate.release()
-                logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
+                lockRotate.doRelease()
             } catch (e: IOException) {
                 logW(e) { "Lock release failure >> $lockRotate" }
 
@@ -3127,7 +3134,19 @@ public class FileLog: Log {
         }
     }
 
+    @Throws(IOException::class)
+    private inline fun FileLock.doRelease() {
+        release()
+        logD {
+            if (this is StubFileLock) null
+            else "Released lock on ${dotLockFile.name} >> $this"
+        }
+    }
+
+    private object NoOpDisposableHandle: DisposableHandle { override fun dispose() {} }
+
     private fun Job.closeOnCompletion(closeable: Closeable, logOpen: Boolean = true): DisposableHandle {
+        if (closeable == StubLockFile) return NoOpDisposableHandle
         if (logOpen) logD { "Opened >> $closeable" }
 
         return invokeOnCompletion { t ->
