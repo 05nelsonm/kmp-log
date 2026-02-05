@@ -60,7 +60,9 @@ internal actual inline fun LockFile.tryLock(position: Long, size: Long): FileLoc
     return lock(position, size, blocking = false)
 }
 
-internal actual abstract class LockFile private constructor(h: HANDLE): Closeable {
+internal actual abstract class LockFile private constructor(h: HANDLE?): Closeable {
+
+    internal constructor(): this(h = null)
 
     @Volatile
     private var _h: HANDLE? = h
@@ -69,7 +71,7 @@ internal actual abstract class LockFile private constructor(h: HANDLE): Closeabl
     internal actual fun isOpen(): Boolean = _h != null
 
     @Throws(IllegalArgumentException::class, IOException::class)
-    internal fun lock(position: Long, size: Long, blocking: Boolean): FileLock? {
+    internal open fun lock(position: Long, size: Long, blocking: Boolean): FileLock? {
         val h = _h ?: throw ClosedException()
         val ret = kmp_log_file_setlk(
             h = h,
@@ -160,4 +162,25 @@ internal actual abstract class LockFile private constructor(h: HANDLE): Closeabl
     }
 
     override fun toString(): String = "LockFile@" + hashCode()
+}
+
+internal actual object StubLockFile: LockFile() {
+
+    override fun lock(position: Long, size: Long, blocking: Boolean): FileLock {
+        if (size == FILE_LOCK_SIZE) {
+            if (position == FILE_LOCK_POS_LOG) return LockLog
+            if (position == FILE_LOCK_POS_ROTATE) return LockRotate
+        }
+        return StubFileLock(position, size)
+    }
+
+    private val LockLog by lazy {
+        StubFileLock(FILE_LOCK_POS_LOG, FILE_LOCK_SIZE)
+    }
+
+    private val LockRotate by lazy {
+        StubFileLock(FILE_LOCK_POS_ROTATE, FILE_LOCK_SIZE)
+    }
+
+    actual override fun toString(): String = "StubLockFile"
 }

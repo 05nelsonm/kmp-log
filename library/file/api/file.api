@@ -45,6 +45,7 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 	public final fun fileExtension (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun fileGroupReadable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun fileGroupWritable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
+	public final fun fileLock (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun fileLockTimeout (J)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun fileName (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun fileOtherReadable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;

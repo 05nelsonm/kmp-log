@@ -318,6 +318,11 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
+    fun givenFileLock_whenDisabled_thenFileLockTimeoutIsNegative1() {
+        assertEquals(-1L, newBuilder().fileLock(enable = false).build().fileLockTimeout)
+    }
+
+    @Test
     fun givenLogFiles_whenCastAsMutable_thenThrowsClassCastException() {
         assertFailsWith<ClassCastException> {
             newBuilder().build().logFiles as MutableList<String>

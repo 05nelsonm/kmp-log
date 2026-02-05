@@ -41,6 +41,14 @@ internal actual abstract class FileLock protected constructor(private val _posit
     }
 }
 
+internal actual class StubFileLock internal constructor(position: Long, size: Long): FileLock(
+    _position = position,
+    _size = size,
+) {
+    actual override fun isValid(): Boolean = true
+    actual override fun release() {}
+}
+
 internal actual object InvalidFileLock: FileLock(
     _position = FILE_LOCK_POS_LOG,
     _size = FILE_LOCK_SIZE,

@@ -74,6 +74,8 @@ import io.matthewnelson.kmp.log.file.internal.ScopeFileLog
 import io.matthewnelson.kmp.log.file.internal.ScopeLogHandle
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop
 import io.matthewnelson.kmp.log.file.internal.ScopeLogLoop.Companion.scopeLogLoop
+import io.matthewnelson.kmp.log.file.internal.StubFileLock
+import io.matthewnelson.kmp.log.file.internal.StubLockFile
 import io.matthewnelson.kmp.log.file.internal._atomic
 import io.matthewnelson.kmp.log.file.internal._atomicRef
 import io.matthewnelson.kmp.log.file.internal._compareAndSet
@@ -171,11 +173,13 @@ import kotlin.time.Duration.Companion.milliseconds
  * (or upon experiencing an early shutdown due to an irrecoverable error).
  *
  * Each installed [FileLog] instance allocates a single `8192` byte array, `2` always-open [File]
- * (the log [File] and its associated lock [File]), a single background [CoroutineDispatcher] (if
- * not sharing a [ThreadPool] between instances), and a few data structures for logging operations.
+ * (the log [File] and its associated lock [File] if not disabled via [Builder.fileLock]), a single
+ * background [CoroutineDispatcher] (if not sharing a [ThreadPool] between instances), and a few
+ * data structures for logging operations.
  *
- * [Builder.minWaitOn], [Builder.bufferCapacity], [Builder.bufferOverflow] and [Builder.thread]
- * are `4` configuration options which directly affect resources used for logging operations.
+ * [Builder.minWaitOn], [Builder.bufferCapacity], [Builder.bufferOverflow], [Builder.thread] and
+ * [Builder.fileLock] are `5` configuration options which directly affect resources used for
+ * logging operations.
  *
  * ### Log Rotation
  *
@@ -205,8 +209,8 @@ import kotlin.time.Duration.Companion.milliseconds
  * described above). Prior to releasing either of the aforementioned [File] lock byte-ranges,
  * [FileLog] syncs all file system modifications it made pertaining to that byte-range, to disk.
  *
- * [Builder.yieldOn] and [Builder.fileLockTimeout] are `2` configuration options which directly
- * affect how [FileLog] performs in multi-process application environments.
+ * [Builder.yieldOn], [Builder.fileLock] and [Builder.fileLockTimeout] are `3` configuration
+ * options which directly affect how [FileLog] performs in multi-process application environments.
  *
  * ### File System Permissions (POSIX)
  *
@@ -375,6 +379,10 @@ public class FileLog: Log {
         private const val LOG_LOOP: String = "LogLoop"
         private const val LOG_ROTATION: String = "LogRotation"
 
+        // Used for fileLockTimeout to indicate that Builder.fileLock was set
+        // to false (disable use of file locking).
+        private const val FILE_LOCK_DISABLED = -1L
+
         private val DEFAULT_FORMATTER: Formatter = Formatter(::format)
     }
 
@@ -488,6 +496,10 @@ public class FileLog: Log {
     /**
      * The timeout, in milliseconds, to use when acquiring a [File] lock.
      *
+     * **NOTE:** If `-1`, [File] lock use was disabled via [Builder.fileLock], otherwise
+     * will be between `375` and [Duration.INFINITE].
+     *
+     * @see [Builder.fileLock]
      * @see [Builder.fileLockTimeout]
      * */
     @JvmField
@@ -805,6 +817,7 @@ public class FileLog: Log {
         private var _bufferOverflowDropOldest = false
         private var _minWaitOn = Level.Verbose
         private var _yieldOn: Byte = 2
+        private var _fileLockEnable = true
         private var _fileLockTimeout = -1L
         private var _threadPool: ThreadPool? = null
         private var _formatter = DEFAULT_FORMATTER
@@ -1025,6 +1038,15 @@ public class FileLog: Log {
          * @return The [Builder]
          * */
         public fun yieldOn(nLogs: Byte): Builder = apply { _yieldOn = nLogs }
+
+        /**
+         * DEFAULT: `true` (i.e. Use [File] locks)
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun fileLock(enable: Boolean): Builder = apply { _fileLockEnable = enable }
 
         /**
          * DEFAULT: `-1` (i.e. Calculate a generous timeout based on other settings)
@@ -1354,7 +1376,9 @@ public class FileLog: Log {
 
             val yieldOn = _yieldOn.coerceIn(1, 10)
             val maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L) // 50kb
-            val fileLockTimeout = if (_fileLockTimeout > 0L) _fileLockTimeout else {
+
+            var fileLockTimeout = _fileLockTimeout
+            if (fileLockTimeout <= 0L) fileLockTimeout = run {
                 // Values below are total guesstimates, complete fiction.
                 //
                 // With all Builder defaults, comes out to ~2500ms
@@ -1375,7 +1399,11 @@ public class FileLog: Log {
                 move += 10L                     // Move logic overhead
 
                 process + rotate + move
-            }.coerceIn(375L, Duration.INFINITE.inWholeMilliseconds)
+            }
+
+            fileLockTimeout = if (!_fileLockEnable) FILE_LOCK_DISABLED else {
+                fileLockTimeout.coerceIn(375L, Duration.INFINITE.inWholeMilliseconds)
+            }
 
             return FileLog(
                 min = min,
@@ -1866,7 +1894,7 @@ public class FileLog: Log {
             }
 
             logJob.ensureActive()
-            val lockFile = dotLockFile.openLockFileRobustly()
+            val lockFile = if (fileLockTimeout == FILE_LOCK_DISABLED) StubLockFile else dotLockFile.openLockFileRobustly()
             val lockFileCompletion = logJob.closeOnCompletion(lockFile)
 
             try {
@@ -2031,8 +2059,9 @@ public class FileLog: Log {
 
             // Obtain a FileLock for writing to logStream
             //
-            // Will be valid if and only if it was not released due to retryAction
-            // containing a cached LogAction.
+            // Will be valid if it was not released due to retryAction containing a
+            // cached LogAction.Write, or if it's a StubFileLock because file locking
+            // has been disabled (StubFileLock is always valid).
             lockLog = if (lockLog.isValid()) lockLog else CurrentThread.uninterrupted {
                 try {
                     lockFile.lockNonBlock(
@@ -2086,9 +2115,13 @@ public class FileLog: Log {
                     }
 
                     try {
-                        logD(ee) { "Closed >> $lockFile" }
+                        // Should NEVER be a StubLockFile, but just in case...
+                        logD(ee) {
+                            if (lockFile == StubLockFile) null
+                            else "Closed >> $lockFile"
+                        }
                         jobLogLoop.ensureActive()
-                        lockFile = dotLockFile.openLockFileRobustly()
+                        lockFile = if (lockFile == StubLockFile) lockFile else dotLockFile.openLockFileRobustly()
                         lockFileCompletion = jobLogLoop.closeOnCompletion(lockFile)
                         lockFile.lockNonBlock(
                             position = FILE_LOCK_POS_LOG,
@@ -2104,7 +2137,10 @@ public class FileLog: Log {
                         throw t
                     }
                 }.also { lock ->
-                    logD { "Acquired lock on ${dotLockFile.name} >> $lock" }
+                    logD {
+                        if (lock is StubFileLock) null
+                        else "Acquired lock on ${dotLockFile.name} >> $lock"
+                    }
                 }
             }
 
@@ -2282,8 +2318,7 @@ public class FileLog: Log {
             // on writes to logStream (unless there are LogAction present in the
             // rotateActionQueue which come first).
             if (retryAction._get() == null && lockLog.isValid()) try {
-                lockLog.release()
-                logD { "Released lock on ${dotLockFile.name} >> $lockLog" }
+                lockLog.doRelease()
             } catch (e: IOException) {
                 // If a log rotation is currently underway, we must wait for it
                 // so that we do not invalidate its lockRotate inadvertently.
@@ -2389,7 +2424,10 @@ public class FileLog: Log {
             return
         }
 
-        logD { "Acquired lock on ${dotLockFile.name} >> $lockRotate" }
+        logD {
+            if (lockRotate is StubFileLock) null
+            else "Acquired lock on ${dotLockFile.name} >> $lockRotate"
+        }
 
         // There exists a potential here that another process was mid-rotation
         // when this process' LogJob was started, whereby the dotRotateFile
@@ -2447,8 +2485,7 @@ public class FileLog: Log {
 
             if (size < maxLogFileSize) {
                 if (lockRotate.isValid()) try {
-                    lockRotate.release()
-                    logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
+                    lockRotate.doRelease()
                 } catch (e: IOException) {
                     try {
                         // Close the lock file (if not already). Next logLoop iteration
@@ -2473,8 +2510,7 @@ public class FileLog: Log {
             // An error occurred in prepareLogRotation{Full/Interrupted}
 
             if (lockRotate.isValid()) try {
-                lockRotate.release()
-                logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
+                lockRotate.doRelease()
             } catch (e: IOException) {
                 try {
                     // Close the lock file (if not already). Next logLoop iteration
@@ -2501,8 +2537,7 @@ public class FileLog: Log {
 
         executeLogRotationMoves(state, rotateActionQueue, moves).invokeOnCompletion {
             if (lockRotate.isValid()) try {
-                lockRotate.release()
-                logD { "Released lock on ${dotLockFile.name} >> $lockRotate" }
+                lockRotate.doRelease()
             } catch (e: IOException) {
                 logW(e) { "Lock release failure >> $lockRotate" }
 
@@ -3127,7 +3162,19 @@ public class FileLog: Log {
         }
     }
 
+    @Throws(IOException::class)
+    private inline fun FileLock.doRelease() {
+        release()
+        logD {
+            if (this is StubFileLock) null
+            else "Released lock on ${dotLockFile.name} >> $this"
+        }
+    }
+
+    private object NoOpDisposableHandle: DisposableHandle { override fun dispose() {} }
+
     private fun Job.closeOnCompletion(closeable: Closeable, logOpen: Boolean = true): DisposableHandle {
+        if (closeable == StubLockFile) return NoOpDisposableHandle
         if (logOpen) logD { "Opened >> $closeable" }
 
         return invokeOnCompletion { t ->
