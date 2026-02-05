@@ -2137,7 +2137,10 @@ public class FileLog: Log {
                         throw t
                     }
                 }.also { lock ->
-                    logD { "Acquired lock on ${dotLockFile.name} >> $lock" }
+                    logD {
+                        if (lock is StubFileLock) null
+                        else "Acquired lock on ${dotLockFile.name} >> $lock"
+                    }
                 }
             }
 
