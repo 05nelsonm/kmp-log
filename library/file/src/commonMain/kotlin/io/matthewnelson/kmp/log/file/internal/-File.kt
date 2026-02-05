@@ -55,24 +55,29 @@ internal fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite = try 
 }
 
 // NOTE: Do NOT use on FileLog.dotLockFile
-internal fun File.exists2Robustly(): Boolean {
+internal fun File.exists2Robustly(): Boolean = try {
+    exists2()
+} catch (_: IOException) {
+    var s: FileStream.Read? = null
     try {
-        if (exists2()) return true
-    } catch (_: IOException) {
-        var s: FileStream.Read? = null
-        return try {
-            // Must exist to open O_RDONLY.
-            s = openRead()
-            true
-        } catch (t: Throwable) {
-            t.message?.contains("Is a directory", ignoreCase = true) == true
-        } finally {
-            try {
-                s?.close()
-            } catch (_: Throwable) {}
+        // Must exist to open O_RDONLY.
+        s = openRead()
+        true
+    } catch (e: IOException) {
+        if (e !is FileSystemException) false else {
+            val r = e.reason
+            when {
+                r == null -> false
+                r.contains("EISDIR") -> true
+                r.contains("Is a directory") -> true
+                else -> false
+            }
         }
+    } finally {
+        try {
+            s?.close()
+        } catch (_: Throwable) {}
     }
-    return false
 }
 
 /**
