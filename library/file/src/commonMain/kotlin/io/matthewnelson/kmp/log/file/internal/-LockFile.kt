@@ -114,6 +114,13 @@ internal expect abstract class FileLock {
     final override fun toString(): String
 }
 
+// An always valid FileLock
+internal expect class StubFileLock: FileLock {
+    override fun isValid(): Boolean
+    override fun release()
+}
+
+// An always invalid FileLock
 internal expect object InvalidFileLock: FileLock {
     override fun isValid(): Boolean
     override fun release()
@@ -122,4 +129,10 @@ internal expect object InvalidFileLock: FileLock {
 internal expect abstract class LockFile: Closeable {
     internal fun isOpen(): Boolean
     final override fun close()
+}
+
+// A stub which always returns StubFileLock.
+internal expect object StubLockFile: LockFile {
+    override fun toString(): String
+    internal val StubLockLog: StubFileLock
 }

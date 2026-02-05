@@ -20,6 +20,7 @@ import io.matthewnelson.kmp.log.file.withTmpFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -71,5 +72,65 @@ class FileLockUnitTest {
             lockRotate?.release()
             assertEquals(false, lockRotate?.isValid(), "lockRotate3")
         }
+    }
+
+    @Test
+    fun givenInvalidFileLock_whenIsValid_thenFileLockIsAlwaysInvalid() {
+        assertFalse(InvalidFileLock.isValid())
+    }
+
+    @Test
+    fun givenInvalidFileLock_whenRelease_thenDoesNotThrowException() {
+        InvalidFileLock.release()
+    }
+
+    @Test
+    fun givenStub_whenIsOpen_thenEqualsFalse() {
+        assertFalse(StubLockFile.isOpen())
+    }
+
+    @Test
+    fun givenStub_whenToString_thenReturnsStubLockFile() {
+        assertEquals("StubLockFile", StubLockFile.toString())
+    }
+
+    @Test
+    fun givenStub_whenLock_thenReturnsStubFileLock() {
+        val lock = StubLockFile.lock(2, 3)
+        assertNotNull(lock)
+        assertIs<StubFileLock>(lock)
+    }
+
+    @Test
+    fun givenStub_whenTryLock_thenReturnsStubFileLock() {
+        val lock = StubLockFile.tryLock(2, 3)
+        assertNotNull(lock)
+        assertIs<StubFileLock>(lock)
+    }
+
+    @Test
+    fun givenStub_whenLockPosLog_thenReturnsSameStubFileLockInstance() {
+        val lock1 = StubLockFile.lock(FILE_LOCK_POS_LOG, FILE_LOCK_SIZE)
+        val lock2 = StubLockFile.lock(FILE_LOCK_POS_LOG, FILE_LOCK_SIZE)
+        assertEquals(lock1, lock2)
+        assertEquals(FILE_LOCK_POS_LOG, lock1.position())
+        assertEquals(FILE_LOCK_SIZE, lock1.size())
+    }
+
+    @Test
+    fun givenStub_whenLockPosRotate_thenReturnsSameStubFileLockInstance() {
+        val lock1 = StubLockFile.lock(FILE_LOCK_POS_ROTATE, FILE_LOCK_SIZE)
+        val lock2 = StubLockFile.lock(FILE_LOCK_POS_ROTATE, FILE_LOCK_SIZE)
+        assertEquals(lock1, lock2)
+        assertEquals(FILE_LOCK_POS_ROTATE, lock1.position())
+        assertEquals(FILE_LOCK_SIZE, lock1.size())
+    }
+
+    @Test
+    fun givenStub_whenLock_thenStubFileLockIsAlwaysValid() {
+        val lock = StubLockFile.lock(0, 1)
+        assertTrue(lock.isValid(), "lock.isValid 1")
+        lock.release()
+        assertTrue(lock.isValid(), "lock.isValid 2")
     }
 }

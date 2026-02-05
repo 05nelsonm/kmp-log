@@ -69,7 +69,7 @@ internal fun File.openNioFileChannel(): LockFile  = try {
 // java.nio.channels.FileLock requires non-null FileChannel
 // for first parameter. This satisfies that requirement...
 @Suppress("RedundantNullableReturnType")
-private object InvalidLockFile: LockFile() {
+internal actual object StubLockFile: LockFile() {
     override fun read(p0: ByteBuffer?): Int = error("unused")
     override fun read(p0: Array<out ByteBuffer?>?, p1: Int, p2: Int): Long = error("unused")
     override fun write(p0: ByteBuffer?): Int = error("unused")
@@ -84,24 +84,49 @@ private object InvalidLockFile: LockFile() {
     override fun read(p0: ByteBuffer?, p1: Long): Int = error("unused")
     override fun write(p0: ByteBuffer?, p1: Long): Int = error("unused")
     override fun map(p0: MapMode?, p1: Long, p2: Long): MappedByteBuffer? = error("unused")
-    override fun lock(p0: Long, p1: Long, p2: Boolean): FileLock? = error("unused")
-    override fun tryLock(p0: Long, p1: Long, p2: Boolean): FileLock? = error("unused")
+    override fun lock(p0: Long, p1: Long, p2: Boolean): FileLock {
+        if (p1 == FILE_LOCK_SIZE && !p2) {
+            if (p0 == FILE_LOCK_POS_LOG) return StubLockLog
+            if (p0 == FILE_LOCK_POS_ROTATE) return StubLockRotate
+        }
+        return StubFileLock(p0, p1, p2)
+    }
+    override fun tryLock(p0: Long, p1: Long, p2: Boolean): FileLock? = lock(p0, p1, p2)
+
     override fun implCloseChannel() {}
+    actual override fun toString(): String = "StubLockFile"
+
+    internal actual val StubLockLog by lazy {
+        StubFileLock(FILE_LOCK_POS_LOG, FILE_LOCK_SIZE, false)
+    }
+
+    private val StubLockRotate by lazy {
+        StubFileLock(FILE_LOCK_POS_ROTATE, FILE_LOCK_SIZE, false)
+    }
+
+    init {
+        try {
+            close()
+        } catch (_: Throwable) {}
+    }
+}
+
+internal actual class StubFileLock internal constructor(position: Long, size: Long, shared: Boolean): FileLock(
+    /* channel = */ StubLockFile,
+    /* position = */ position,
+    /* size = */ size,
+    /* shared = */ shared,
+) {
+    actual override fun isValid(): Boolean = true
+    actual override fun release() {}
 }
 
 internal actual object InvalidFileLock: FileLock(
-    /* channel = */ InvalidLockFile,
+    /* channel = */ StubLockFile,
     /* position = */ FILE_LOCK_POS_LOG,
     /* size = */ FILE_LOCK_SIZE,
     /* shared = */ false,
 ) {
-
     actual override fun isValid(): Boolean = false
     actual override fun release() {}
-
-    init {
-        try {
-            channel()?.close()
-        } catch (_: Throwable) {}
-    }
 }
