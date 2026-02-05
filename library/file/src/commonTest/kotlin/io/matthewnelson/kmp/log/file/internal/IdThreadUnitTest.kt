@@ -23,17 +23,23 @@ import kotlin.test.Test
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
-class CurrentThreadUnitTest {
+class IdThreadUnitTest {
 
     @Test
-    fun givenCurrentThread_whenId_thenIsGreaterThan0() = runTest {
+    fun givenCurrentThread_whenGetId_thenIsGreaterThan0() {
+        val tid = CurrentThread.id()
+        assertTrue(tid > 0L, "tid[$tid]")
+    }
+
+    @Test
+    fun givenDifferentThreads_whenGetId_thenAreBothGreaterThan0AndDifferent() = runTest {
         val tid1 = CurrentThread.id()
-        assertTrue(tid1 > 0L)
+        assertTrue(tid1 > 0L, "tid1[$tid1]")
 
         val tid2 = withContext(Dispatchers.IO) { CurrentThread.id() }
-        assertTrue(tid2 > 0L)
+        assertTrue(tid2 > 0L, "tid2[$tid2]")
 
+        println("tid1[$tid1] - tid2[$tid2]")
         assertNotEquals(tid1, tid2)
-        println("tid1=$tid1, tid2=$tid2")
     }
 }
