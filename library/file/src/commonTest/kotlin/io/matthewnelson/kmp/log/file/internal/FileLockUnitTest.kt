@@ -17,12 +17,14 @@ package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.use
 import io.matthewnelson.kmp.log.file.withTmpFile
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 class FileLockUnitTest {
 
@@ -132,5 +134,13 @@ class FileLockUnitTest {
         assertTrue(lock.isValid(), "lock.isValid 1")
         lock.release()
         assertTrue(lock.isValid(), "lock.isValid 2")
+    }
+
+    @Test
+    fun givenStub_whenLockNonBlockAndNegativeTimeout_thenAlwaysSucceeds() = runTest {
+        val timeout = (-1L).milliseconds
+        assertTrue(timeout.isNegative())
+        val lock = StubLockFile.lockNonBlock(0, 1, timeout)
+        assertIs<StubFileLock>(lock)
     }
 }

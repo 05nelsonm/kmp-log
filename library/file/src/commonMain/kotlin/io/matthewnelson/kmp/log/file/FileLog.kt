@@ -173,11 +173,13 @@ import kotlin.time.Duration.Companion.milliseconds
  * (or upon experiencing an early shutdown due to an irrecoverable error).
  *
  * Each installed [FileLog] instance allocates a single `8192` byte array, `2` always-open [File]
- * (the log [File] and its associated lock [File]), a single background [CoroutineDispatcher] (if
- * not sharing a [ThreadPool] between instances), and a few data structures for logging operations.
+ * (the log [File] and its associated lock [File] if not disabled via [Builder.fileLock]), a single
+ * background [CoroutineDispatcher] (if not sharing a [ThreadPool] between instances), and a few
+ * data structures for logging operations.
  *
- * [Builder.minWaitOn], [Builder.bufferCapacity], [Builder.bufferOverflow] and [Builder.thread]
- * are `4` configuration options which directly affect resources used for logging operations.
+ * [Builder.minWaitOn], [Builder.bufferCapacity], [Builder.bufferOverflow], [Builder.thread] and
+ * [Builder.fileLock] are `5` configuration options which directly affect resources used for
+ * logging operations.
  *
  * ### Log Rotation
  *
@@ -207,8 +209,8 @@ import kotlin.time.Duration.Companion.milliseconds
  * described above). Prior to releasing either of the aforementioned [File] lock byte-ranges,
  * [FileLog] syncs all file system modifications it made pertaining to that byte-range, to disk.
  *
- * [Builder.yieldOn] and [Builder.fileLockTimeout] are `2` configuration options which directly
- * affect how [FileLog] performs in multi-process application environments.
+ * [Builder.yieldOn], [Builder.fileLock] and [Builder.fileLockTimeout] are `3` configuration
+ * options which directly affect how [FileLog] performs in multi-process application environments.
  *
  * ### File System Permissions (POSIX)
  *
@@ -377,6 +379,10 @@ public class FileLog: Log {
         private const val LOG_LOOP: String = "LogLoop"
         private const val LOG_ROTATION: String = "LogRotation"
 
+        // Used for fileLockTimeout to indicate that Builder.fileLock was set
+        // to false (disable use of file locking).
+        private const val FILE_LOCK_DISABLED = -1L
+
         private val DEFAULT_FORMATTER: Formatter = Formatter(::format)
     }
 
@@ -490,6 +496,10 @@ public class FileLog: Log {
     /**
      * The timeout, in milliseconds, to use when acquiring a [File] lock.
      *
+     * **NOTE:** If `-1`, [File] lock use was disabled via [Builder.fileLock], otherwise
+     * will be between `375` and [Duration.INFINITE].
+     *
+     * @see [Builder.fileLock]
      * @see [Builder.fileLockTimeout]
      * */
     @JvmField
@@ -807,6 +817,7 @@ public class FileLog: Log {
         private var _bufferOverflowDropOldest = false
         private var _minWaitOn = Level.Verbose
         private var _yieldOn: Byte = 2
+        private var _fileLockEnable = true
         private var _fileLockTimeout = -1L
         private var _threadPool: ThreadPool? = null
         private var _formatter = DEFAULT_FORMATTER
@@ -1027,6 +1038,15 @@ public class FileLog: Log {
          * @return The [Builder]
          * */
         public fun yieldOn(nLogs: Byte): Builder = apply { _yieldOn = nLogs }
+
+        /**
+         * DEFAULT: `true` (i.e. Use [File] locks)
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun fileLock(enable: Boolean): Builder = apply { _fileLockEnable = enable }
 
         /**
          * DEFAULT: `-1` (i.e. Calculate a generous timeout based on other settings)
@@ -1356,7 +1376,9 @@ public class FileLog: Log {
 
             val yieldOn = _yieldOn.coerceIn(1, 10)
             val maxLogFileSize = _maxLogFileSize.coerceAtLeast(50L * 1024L) // 50kb
-            val fileLockTimeout = if (_fileLockTimeout > 0L) _fileLockTimeout else {
+
+            var fileLockTimeout = _fileLockTimeout
+            if (fileLockTimeout <= 0L) fileLockTimeout = run {
                 // Values below are total guesstimates, complete fiction.
                 //
                 // With all Builder defaults, comes out to ~2500ms
@@ -1377,7 +1399,11 @@ public class FileLog: Log {
                 move += 10L                     // Move logic overhead
 
                 process + rotate + move
-            }.coerceIn(375L, Duration.INFINITE.inWholeMilliseconds)
+            }
+
+            fileLockTimeout = if (!_fileLockEnable) FILE_LOCK_DISABLED else {
+                fileLockTimeout.coerceIn(375L, Duration.INFINITE.inWholeMilliseconds)
+            }
 
             return FileLog(
                 min = min,
@@ -1868,8 +1894,7 @@ public class FileLog: Log {
             }
 
             logJob.ensureActive()
-            // TODO: If disabled, use StubLockFile
-            val lockFile = dotLockFile.openLockFileRobustly()
+            val lockFile = if (fileLockTimeout == FILE_LOCK_DISABLED) StubLockFile else dotLockFile.openLockFileRobustly()
             val lockFileCompletion = logJob.closeOnCompletion(lockFile)
 
             try {

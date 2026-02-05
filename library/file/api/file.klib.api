@@ -90,6 +90,7 @@ final class io.matthewnelson.kmp.log.file/FileLog : io.matthewnelson.kmp.log/Log
         final fun fileExtension(kotlin/String): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.fileExtension|fileExtension(kotlin.String){}[0]
         final fun fileGroupReadable(kotlin/Boolean): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.fileGroupReadable|fileGroupReadable(kotlin.Boolean){}[0]
         final fun fileGroupWritable(kotlin/Boolean): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.fileGroupWritable|fileGroupWritable(kotlin.Boolean){}[0]
+        final fun fileLock(kotlin/Boolean): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.fileLock|fileLock(kotlin.Boolean){}[0]
         final fun fileLockTimeout(kotlin/Long): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.fileLockTimeout|fileLockTimeout(kotlin.Long){}[0]
         final fun fileName(kotlin/String): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.fileName|fileName(kotlin.String){}[0]
         final fun fileOtherReadable(kotlin/Boolean): io.matthewnelson.kmp.log.file/FileLog.Builder // io.matthewnelson.kmp.log.file/FileLog.Builder.fileOtherReadable|fileOtherReadable(kotlin.Boolean){}[0]
