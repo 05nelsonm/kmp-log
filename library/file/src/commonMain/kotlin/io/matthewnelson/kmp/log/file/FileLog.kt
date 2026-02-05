@@ -2155,83 +2155,83 @@ public class FileLog: Log {
             }
 
             var processedWrites = 0
-            CurrentThread.uninterrupted {
 
-                // The inner loop
-                while (true) {
-                    val action = logAction ?: break
+            // The inner loop
+            while (true) {
+                val action = logAction ?: break
 
-                    val written = try {
+                val written = try {
+                    CurrentThread.uninterrupted {
                         action.invoke(logStream, buf, size, processedWrites)
-                    } catch (t: Throwable) {
-                        if (t is CancellationException) {
-                            // preprocessing.await() threw. We're about to die. Nothing was written,
-                            // so no need to do anything here. Alternatively, Formatter.format threw
-                            // a CancellationException attempting to F with the loop. In either case,
-                            // IGNORE; Will be handled in a moment when yield hits.
-                        } else {
-                            logE(t) { "Failed to write log entry to ${files[0].name}" }
-                            // TODO:
-                            //  - Check for InterruptedIOException.bytesTransferred???
-                            //  - Truncate to size to wipe out any partially written logs???
-                            //  - Increment processed to ensure a sync occurs???
-                            //  - Handle these errors in FileLog.log created LogAction???
-                        }
-                        0L
                     }
-
-                    if (written > 0L) {
-                        processedWrites++
-                        size += written
-                        logD { "Wrote $written bytes to ${files[0].name}" }
-                    } else when (written) { // Check special negative return values.
-                        EXECUTE_ROTATE_LOGS -> run {
-                            size = maxLogFileSize // Force a log rotation
-                            if (action !is LogAction.Write) return@run
-
-                            val previous = retryAction._getAndSet(new = action)
-                            if (previous != null) {
-                                previous.drop(warn = true)
-                                // HARD fail.... There should ONLY ever be 1 retryAction.
-                                throw IllegalStateException("retryAction's previous value was non-null")
-                            }
-                            logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after $LOG_ROTATION." }
-                        }
-                        ROTATION_NOT_NEEDED -> {
-                            rotationState.atomicCopyFailures = 0
-                            rotationState.comparisonFailures = 0
-                            rotationState.moveFailures = 0
-                            logD { "$LOG_ROTATION not needed" }
-                        }
+                } catch (t: Throwable) {
+                    if (t is CancellationException) {
+                        // preprocessing.await() threw. We're about to die. Nothing was written,
+                        // so no need to do anything here. Alternatively, Formatter.format threw
+                        // a CancellationException attempting to F with the loop. In either case,
+                        // IGNORE; Will be handled in a moment when yield hits.
+                    } else {
+                        logE(t) { "Failed to write log entry to ${files[0].name}" }
+                        // TODO:
+                        //  - Check for InterruptedIOException.bytesTransferred???
+                        //  - Truncate to size to wipe out any partially written logs???
+                        //  - Increment processed to ensure a sync occurs???
+                        //  - Handle these errors in FileLog.log created LogAction???
                     }
+                    0L
+                }
 
-                    // Rip through some more LogAction (if able) while we hold a lock.
-                    logAction = when {
-                        // We lost our lock
-                        !lockLog.isValid() -> null
-                        // We lost our logStream
-                        !logStream.isOpen() -> null
-                        // Log rotation is needed
-                        size >= maxLogFileSize -> null
-                        // Yield to another process (potentially)
-                        processedWrites >= yieldOn -> null
-                        // Job cancellation
-                        !jobLogLoop.isActive -> null
+                if (written > 0L) {
+                    processedWrites++
+                    size += written
+                    logD { "Wrote $written bytes to ${files[0].name}" }
+                } else when (written) { // Check special negative return values.
+                    EXECUTE_ROTATE_LOGS -> run {
+                        size = maxLogFileSize // Force a log rotation
+                        if (action !is LogAction.Write) return@run
 
-                        // Dequeue next LogAction (if available)
-                        else -> try {
-                            // Share the thread.
-                            yield()
-
-                            rotateActionQueue.dequeueOrNull()
-                                ?: retryAction._getAndSet(new = null)
-                                ?: channel.tryReceive().getOrNull()
-                        } catch (_: CancellationException) {
-                            // Shouldn't happen b/c just checked isActive, but if so
-                            // we want to ensure we pop out for logStream.sync. The
-                            // main loop will re-throw the exception when it yields.
-                            null
+                        val previous = retryAction._getAndSet(new = action)
+                        if (previous != null) {
+                            previous.drop(warn = true)
+                            // HARD fail.... There should ONLY ever be 1 retryAction.
+                            throw IllegalStateException("retryAction's previous value was non-null")
                         }
+                        logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after $LOG_ROTATION." }
+                    }
+                    ROTATION_NOT_NEEDED -> {
+                        rotationState.atomicCopyFailures = 0
+                        rotationState.comparisonFailures = 0
+                        rotationState.moveFailures = 0
+                        logD { "$LOG_ROTATION not needed" }
+                    }
+                }
+
+                // Rip through some more LogAction (if able) while we hold a lock.
+                logAction = when {
+                    // We lost our lock
+                    !lockLog.isValid() -> null
+                    // We lost our logStream
+                    !logStream.isOpen() -> null
+                    // Log rotation is needed
+                    size >= maxLogFileSize -> null
+                    // Yield to another process (potentially)
+                    processedWrites >= yieldOn -> null
+                    // Job cancellation
+                    !jobLogLoop.isActive -> null
+
+                    // Dequeue next LogAction (if available)
+                    else -> try {
+                        // Share the thread.
+                        yield()
+
+                        rotateActionQueue.dequeueOrNull()
+                            ?: retryAction._getAndSet(new = null)
+                            ?: channel.tryReceive().getOrNull()
+                    } catch (_: CancellationException) {
+                        // Shouldn't happen b/c just checked isActive, but if so
+                        // we want to ensure we pop out for logStream.sync. The
+                        // main loop will re-throw the exception when it yields.
+                        null
                     }
                 }
             }
@@ -2263,16 +2263,14 @@ public class FileLog: Log {
 
             if (jobLogLoop.isActive && size >= maxLogFileSize) {
                 if (lockLog.isValid()) {
-                    CurrentThread.uninterrupted {
-                        rotateLogs(
-                            state = rotationState,
-                            rotateActionQueue = rotateActionQueue,
-                            logStream = logStream,
-                            lockFile = lockFile,
-                            buf = buf,
-                            retryActionIsNotNull = retryAction._get() != null,
-                        )
-                    }
+                    rotateLogs(
+                        state = rotationState,
+                        rotateActionQueue = rotateActionQueue,
+                        logStream = logStream,
+                        lockFile = lockFile,
+                        buf = buf,
+                        retryActionIsNotNull = retryAction._get() != null,
+                    )
                 } else {
                     // We lost lockLog. Trigger an immediate retry.
                     rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
@@ -2322,7 +2320,7 @@ public class FileLog: Log {
         lockFile: LockFile,
         buf: ByteArray,
         retryActionIsNotNull: Boolean,
-    ) {
+    ): Unit = CurrentThread.uninterrupted {
         // If a previous log rotation is currently underway, we must
         // wait for it to complete before doing another one.
         //
