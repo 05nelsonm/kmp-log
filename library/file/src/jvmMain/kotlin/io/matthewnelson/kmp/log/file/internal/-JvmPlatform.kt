@@ -39,6 +39,9 @@ internal actual fun FileLog.Companion.pid(): Int = JVM_PID
 private val LOG_TIME_FORMAT_YEAR_NO = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
 private val LOG_TIME_FORMAT_YEAR_YES = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.ENGLISH)
 
+private const val PID_UNKNOWN = -1
+private const val PROCFS_SELF = "/proc/self"
+
 // https://github.com/05nelsonm/kmp-process/blob/master/library/process/src/jvmMain/kotlin/io/matthewnelson/kmp/process/internal/-PID.kt
 private val JVM_PID: Int by lazy {
     if (ANDROID.SDK_INT != null) return@lazy try {
@@ -47,9 +50,9 @@ private val JVM_PID: Int by lazy {
             .invoke(null) as Int
     } catch (_: Throwable) {
         try {
-            "/proc/self".toFile().canonicalFile2().name.toInt()
+            PROCFS_SELF.toFile().canonicalFile2().name.toInt()
         } catch (_: Throwable) {
-            -1
+            PID_UNKNOWN
         }
     }
 
@@ -88,10 +91,10 @@ private val JVM_PID: Int by lazy {
 
     // Last resort.
     if (SysDirSep == '/') try {
-        val procfs = "/proc/self".toFile()
+        val procfs = PROCFS_SELF.toFile()
         if (procfs.exists2()) return@lazy procfs.canonicalFile2().name.toInt()
     } catch (_: Throwable) {}
 
     // Unknown
-    -1
+    PID_UNKNOWN
 }
