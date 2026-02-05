@@ -2314,7 +2314,7 @@ public class FileLog: Log {
     *
     * NOTE: lockLog is required to be held when calling this function.
     * */
-    @Throws(CancellationException::class, DirectoryNotEmptyException::class)
+    @Throws(CancellationException::class, IOException::class)
     private suspend fun ScopeLogLoop.rotateLogs(
         state: RotationState,
         rotateActionQueue: RotateActionQueue,
