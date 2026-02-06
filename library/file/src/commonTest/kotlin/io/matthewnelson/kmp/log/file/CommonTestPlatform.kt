@@ -53,7 +53,7 @@ internal inline fun withTmpFile(block: (tmp: File) -> Unit) {
     try {
         block(file)
     } finally {
-        file.delete2()
+        file.delete2(ignoreReadOnly = true)
     }
 }
 
