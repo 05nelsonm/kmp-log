@@ -17,33 +17,23 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
-import io.matthewnelson.kmp.file.AccessDeniedException
 import io.matthewnelson.kmp.file.Closeable
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.IOException
-import io.matthewnelson.kmp.file.chmod2
+import io.matthewnelson.kmp.file.OpenExcl
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 
-@Throws(IOException::class)
-internal inline fun File.openLockFileRobustly(): LockFile = try {
-    openLockFile()
-} catch (e: AccessDeniedException) {
-    try {
-        chmod2("600")
-    } catch (ee: IOException) {
-        e.addSuppressed(ee)
-        throw e
-    }
-    try {
-        openLockFile()
-    } catch (ee: IOException) {
-        e.addSuppressed(ee)
-        throw e
-    }
-}
+@Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
+internal suspend fun File.openLockFileRobustly(
+    useDeleteOrMoveToRandomIfDirectory: ((previous: File, moved: File) -> Unit)? = null,
+): LockFile = openRobustly(
+    mode = OpenExcl.MaybeCreate.DEFAULT.mode,
+    useDeleteOrMoveToRandomIfDirectory = useDeleteOrMoveToRandomIfDirectory,
+    open = { openLockFile() },
+)
 
 internal const val FILE_LOCK_SIZE = 1L
 // Bytes 0-1 are locked when writing to the log file

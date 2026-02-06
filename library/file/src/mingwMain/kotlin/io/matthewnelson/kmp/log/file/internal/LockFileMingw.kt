@@ -18,9 +18,11 @@
 
 package io.matthewnelson.kmp.log.file.internal
 
+import io.matthewnelson.kmp.file.AccessDeniedException
 import io.matthewnelson.kmp.file.Closeable
 import io.matthewnelson.kmp.file.ClosedException
 import io.matthewnelson.kmp.file.File
+import io.matthewnelson.kmp.file.FileSystemException
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.lastErrorToIOException
 import io.matthewnelson.kmp.file.path
@@ -66,7 +68,7 @@ internal actual abstract class LockFile private constructor(h: HANDLE?): Closeab
 
     @Volatile
     private var _h: HANDLE? = h
-    private val closeLock = SynchronizedObject()
+    private val closeLock = if (h == null) null else SynchronizedObject()
 
     internal actual fun isOpen(): Boolean = _h != null
 
@@ -96,6 +98,7 @@ internal actual abstract class LockFile private constructor(h: HANDLE?): Closeab
     }
 
     actual final override fun close() {
+        if (closeLock == null) return
         val h = synchronized(closeLock) {
             val h = _h ?: return
             _h = null
@@ -124,7 +127,22 @@ internal actual abstract class LockFile private constructor(h: HANDLE?): Closeab
                 dwFlagsAndAttributes = FILE_ATTRIBUTE_NORMAL.convert(),
                 hTemplateFile = null,
             )
-            if (handle == null || handle == INVALID_HANDLE_VALUE) throw lastErrorToIOException(file)
+            if (handle == null || handle == INVALID_HANDLE_VALUE) {
+                val e = lastErrorToIOException(file)
+                if (e !is AccessDeniedException) throw e
+
+                val isDirectory = try {
+                    file.isDirectory()
+                } catch (ee: IOException) {
+                    e.addSuppressed(ee)
+                    throw e
+                }
+                if (!isDirectory) throw e
+
+                val ee = FileSystemException(file, reason = "Is a directory")
+                ee.addSuppressed(e)
+                throw ee
+            }
             return handle
         }
     }
@@ -138,7 +156,7 @@ internal actual abstract class LockFile private constructor(h: HANDLE?): Closeab
         override fun isValid(): Boolean = isOpen() && !isReleased
 
         override fun release() {
-            if (isReleased) return
+            if (closeLock == null || isReleased) return
 
             val ret = synchronized(closeLock) {
                 if (isReleased) return
@@ -166,7 +184,7 @@ internal actual abstract class LockFile private constructor(h: HANDLE?): Closeab
 
 internal actual object StubLockFile: LockFile() {
 
-    override fun lock(position: Long, size: Long, blocking: Boolean): FileLock {
+    override fun lock(position: Long, size: Long, blocking: Boolean): StubFileLock {
         if (size == FILE_LOCK_SIZE) {
             if (position == FILE_LOCK_POS_LOG) return LockLog
             if (position == FILE_LOCK_POS_ROTATE) return LockRotate

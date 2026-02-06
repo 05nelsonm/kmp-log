@@ -97,7 +97,7 @@ private inline fun File.doMove(dest: File): Int = MoveFileExA(
 
 @OptIn(ExperimentalForeignApi::class)
 @Throws(FileNotFoundException::class, FileSystemException::class)
-private fun File.isDirectory(): Boolean = memScoped {
+internal fun File.isDirectory(): Boolean = memScoped {
     val file = this@isDirectory
     val stat = alloc<_stat64>()
     var ret: Int

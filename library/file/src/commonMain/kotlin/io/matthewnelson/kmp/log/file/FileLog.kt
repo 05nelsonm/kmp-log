@@ -26,13 +26,11 @@ import io.matthewnelson.encoding.utf8.UTF8
 import io.matthewnelson.encoding.utf8.UTF8.CharPreProcessor.Companion.sizeUTF8
 import io.matthewnelson.immutable.collections.toImmutableList
 import io.matthewnelson.immutable.collections.toImmutableSet
-import io.matthewnelson.kmp.file.AccessDeniedException
 import io.matthewnelson.kmp.file.Closeable
 import io.matthewnelson.kmp.file.DirectoryNotEmptyException
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.FileStream
-import io.matthewnelson.kmp.file.FileSystemException
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.NotDirectoryException
 import io.matthewnelson.kmp.file.OpenExcl
@@ -98,6 +96,7 @@ import io.matthewnelson.kmp.log.file.internal.newLogDispatcher
 import io.matthewnelson.kmp.log.file.internal.now
 import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
 import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
+import io.matthewnelson.kmp.log.file.internal.openRobustly
 import io.matthewnelson.kmp.log.file.internal.pid
 import io.matthewnelson.kmp.log.file.internal.uninterrupted
 import io.matthewnelson.kmp.log.file.internal.uninterruptedRunBlocking
@@ -496,8 +495,8 @@ public class FileLog: Log {
     /**
      * The timeout, in milliseconds, to use when acquiring a [File] lock.
      *
-     * **NOTE:** If `-1`, [File] lock use was disabled via [Builder.fileLock], otherwise
-     * will be between `375` and [Duration.INFINITE].
+     * **NOTE:** If `-1`, [File] lock use was disabled via [Builder.fileLock]. Otherwise,
+     * will **always** be between `375` and [Duration.INFINITE] (inclusive).
      *
      * @see [Builder.fileLock]
      * @see [Builder.fileLockTimeout]
@@ -716,9 +715,9 @@ public class FileLog: Log {
          * exception. This will **always** be called from the background thread [FileLog]
          * is operating on.
          *
-         * @param [time] The local date/time recorded when [FileLog.log] was invoked.
-         *   If [Builder.formatOmitYear] was `true`, will be in the format of `MM-dd HH:mm:ss.SSS`,
-         *   otherwise will be in the format of `yyyy-MM-dd HH:mm:ss.SSS`.
+         * @param [time] The local date/time recorded when [FileLog.log] was invoked. If
+         *   [Builder.formatOmitYear] was `true`, will be in the format of `MM-dd HH:mm:ss.SSS`.
+         *   Otherwise, will be in the format of `yyyy-MM-dd HH:mm:ss.SSS`.
          * @param [pid] The process id. Can be `-1` on Jvm if was unable to obtain it.
          * @param [tid] The thread id recorded when [FileLog.log] was invoked.
          * @param [level] The [Log.Level] of the log.
@@ -758,7 +757,7 @@ public class FileLog: Log {
     public abstract class ThreadPool internal constructor(
 
         /**
-         * The number of threads to allocate. Will be between `1` and `8`.
+         * The number of threads to allocate. Will be between `1` and `8` (inclusive).
          * */
         @JvmField
         public val nThreads: Int,
@@ -1894,7 +1893,10 @@ public class FileLog: Log {
             }
 
             logJob.ensureActive()
-            val lockFile = if (fileLockTimeout == FILE_LOCK_DISABLED) StubLockFile else dotLockFile.openLockFileRobustly()
+
+            val lockFile = if (fileLockTimeout == FILE_LOCK_DISABLED) StubLockFile
+            else dotLockFile.openLockFileRobustly(::logNonEmptyDirectoryMoved)
+
             val lockFileCompletion = logJob.closeOnCompletion(lockFile)
 
             try {
@@ -1910,7 +1912,7 @@ public class FileLog: Log {
             }
 
             logJob.ensureActive()
-            val logStream = files[0].openLogFileRobustly(modeFile)
+            val logStream = files[0].openLogFileRobustly(modeFile, ::logNonEmptyDirectoryMoved)
             val logStreamCompletion = logJob.closeOnCompletion(logStream)
 
             logBuffer.logLoop(
@@ -2121,7 +2123,10 @@ public class FileLog: Log {
                             else "Closed >> $lockFile"
                         }
                         jobLogLoop.ensureActive()
-                        lockFile = if (lockFile == StubLockFile) lockFile else dotLockFile.openLockFileRobustly()
+
+                        lockFile = if (lockFile == StubLockFile) lockFile
+                        else dotLockFile.openLockFileRobustly(::logNonEmptyDirectoryMoved)
+
                         lockFileCompletion = jobLogLoop.closeOnCompletion(lockFile)
                         lockFile.lockNonBlock(
                             position = FILE_LOCK_POS_LOG,
@@ -2171,7 +2176,7 @@ public class FileLog: Log {
                     try {
                         logD(ee) { "Closed >> $logStream" }
                         jobLogLoop.ensureActive()
-                        logStream = files[0].openLogFileRobustly(modeFile)
+                        logStream = files[0].openLogFileRobustly(modeFile, ::logNonEmptyDirectoryMoved)
                         logStreamCompletion = jobLogLoop.closeOnCompletion(logStream)
                         size = logStream.size()
                         logStream.position(new = size)
@@ -2629,7 +2634,7 @@ public class FileLog: Log {
                 maxNewNameLen = dotLockFile.name.length,
             ) ?: return@forEach
 
-            logW { "Moved non-empty directory (which should NOT be there) ${file.name} >> ${moved.name}" }
+            logNonEmptyDirectoryMoved(file, moved)
         }
 
         try {
@@ -2704,9 +2709,9 @@ public class FileLog: Log {
     * If moves is left unpopulated after returning, an error has occurred and
     * an immediate retry should be scheduled.
     * */
-    @Throws(IOException::class)
     @Suppress("UnnecessaryVariable")
-    private fun prepareLogRotationInterrupted(
+    @Throws(CancellationException::class, IOException::class)
+    private suspend fun prepareLogRotationInterrupted(
         state: RotationState,
         logStream: FileStream.ReadWrite,
         buf: ByteArray,
@@ -2807,7 +2812,7 @@ public class FileLog: Log {
         var dotStream: FileStream.Read? = null
         var threw: IOException? = null
         try {
-            dotStream = dotRotateFile.openRead()
+            dotStream = dotRotateFile.openRobustly(modeFile, ::logNonEmptyDirectoryMoved) { openRead() }
             logD { "Opened >> $dotStream" }
 
             val sizeDot = dotStream.size()
@@ -2898,34 +2903,6 @@ public class FileLog: Log {
         }
 
         if (threw == null) return
-
-        // dotRotateFile.openRead failed. Why...
-        if (dotStream == null) when (threw) {
-
-            // Permissions? Try fixing them.
-            is AccessDeniedException -> try {
-                dotRotateFile.chmod2(mode = modeFile)
-            } catch (e: IOException) {
-                threw.addSuppressed(e)
-            }
-
-            // Is it a directory? Try deleting it.
-            is FileSystemException -> run {
-                val r = threw.reason ?: return@run
-                if (r.contains("EISDIR") || r.contains("Is a directory")) try {
-                    // dotRotateFile is a directory... It should NOT be one.
-                    val moved = dotRotateFile.deleteOrMoveToRandomIfNonEmptyDirectory(
-                        buf = null,
-                        maxNewNameLen = dotLockFile.name.length,
-                    )
-                    if (moved != null) logW(threw) {
-                        "Moved non-empty directory (which should NOT be there) ${dotRotateFile.name} >> ${moved.name}"
-                    }
-                } catch (e: IOException) {
-                    threw.addSuppressed(e)
-                }
-            }
-        }
 
         if (state.comparisonFailures++ > 2) {
             throw state.failureIOException(
@@ -3068,9 +3045,7 @@ public class FileLog: Log {
                         buf = null,
                         maxNewNameLen = dotLockFile.name.length,
                     )
-                    if (moved != null) logW(e) {
-                        "Moved non-empty directory (which should NOT be there) ${dest.name} >> ${moved.name}"
-                    }
+                    if (moved != null) logNonEmptyDirectoryMoved(e, dest, moved)
                     if (moved != null || !dest.exists2Robustly()) {
                         // Successfully cleared the obstacle. Retry moving the log archive.
                         moves.addFirst(move)
@@ -3092,9 +3067,7 @@ public class FileLog: Log {
                         buf = null,
                         maxNewNameLen = dotLockFile.name.length,
                     )
-                    if (moved != null) logW(e) {
-                        "Moved non-empty directory (which should NOT be there) ${source.name} >> ${moved.name}"
-                    }
+                    if (moved != null) logNonEmptyDirectoryMoved(e, source, moved)
                     if (moved != null || !source.exists2Robustly()) {
                         continue
                     }/* else {
@@ -3200,6 +3173,14 @@ public class FileLog: Log {
         contract { callsInPlace(lazyMsg, InvocationKind.AT_MOST_ONCE) }
         if (!debug) return 0
         return LOG.d(t, lazyMsg)
+    }
+
+    private fun logNonEmptyDirectoryMoved(previous: File, moved: File): Int {
+        return logNonEmptyDirectoryMoved(t = null, previous, moved)
+    }
+
+    private fun logNonEmptyDirectoryMoved(t: Throwable?, previous: File, moved: File): Int = logW(t) {
+        "Moved non-empty directory (which should NOT be there) ${previous.name} >> ${moved.name}"
     }
 
     @OptIn(ExperimentalContracts::class)

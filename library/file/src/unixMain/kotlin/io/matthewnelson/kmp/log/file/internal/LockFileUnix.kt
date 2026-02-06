@@ -65,7 +65,7 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
 
     @Volatile
     private var _fd: Int = fd
-    private val closeLock = SynchronizedObject()
+    private val closeLock = if (fd == -1) null else SynchronizedObject()
 
     internal actual fun isOpen(): Boolean = _fd != -1
 
@@ -101,6 +101,7 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
     }
 
     actual final override fun close() {
+        if (closeLock == null) return
         val fd = synchronized(closeLock) {
             val fd = _fd
             if (fd == -1) return
@@ -142,7 +143,7 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
         override fun isValid(): Boolean = isOpen() && !isReleased
 
         override fun release() {
-            if (isReleased) return
+            if (closeLock == null || isReleased) return
 
             val ret = synchronized(closeLock) {
                 if (isReleased) return
@@ -167,7 +168,7 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
 
 internal actual object StubLockFile: LockFile() {
 
-    override fun lock(position: Long, size: Long, blocking: Boolean): FileLock {
+    override fun lock(position: Long, size: Long, blocking: Boolean): StubFileLock {
         if (size == FILE_LOCK_SIZE) {
             if (position == FILE_LOCK_POS_LOG) return LockLog
             if (position == FILE_LOCK_POS_ROTATE) return LockRotate
