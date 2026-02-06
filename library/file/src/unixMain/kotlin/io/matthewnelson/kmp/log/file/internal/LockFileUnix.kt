@@ -167,7 +167,7 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
 
 internal actual object StubLockFile: LockFile() {
 
-    override fun lock(position: Long, size: Long, blocking: Boolean): FileLock {
+    override fun lock(position: Long, size: Long, blocking: Boolean): StubFileLock {
         if (size == FILE_LOCK_SIZE) {
             if (position == FILE_LOCK_POS_LOG) return LockLog
             if (position == FILE_LOCK_POS_ROTATE) return LockRotate

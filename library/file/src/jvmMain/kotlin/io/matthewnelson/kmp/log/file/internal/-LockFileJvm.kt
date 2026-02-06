@@ -21,6 +21,7 @@ import io.matthewnelson.kmp.file.AccessDeniedException
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.IOException
+import io.matthewnelson.kmp.file.SysFsInfo
 import io.matthewnelson.kmp.file.wrapIOException
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -57,13 +58,26 @@ internal fun File.openNioFileChannel(): LockFile  = try {
         e.addSuppressed(t)
         throw e
     }
-    if (t is FileNotFoundException) {
-        if (t.message?.contains("denied") != true) throw t
-        val e = AccessDeniedException(this, reason = "Permission denied")
-        e.addSuppressed(t)
-        throw e
-    }
-    throw t.wrapIOException()
+    if (t !is FileNotFoundException) throw t.wrapIOException()
+
+    val m = t.message ?: throw t
+    throw when {
+        m.contains("denied") -> {
+            var e: FileSystemException = AccessDeniedException(this, reason = m)
+            if (SysFsInfo.name == "FsJvmNioNonPosix") try {
+                // Windows throws (Access is denied) when is a directory
+                if (isDirectory) {
+                    e = FileSystemException(this, reason = "Is a directory")
+                        .apply { addSuppressed(e) }
+                }
+            } catch (tt: SecurityException) {
+                e.addSuppressed(tt)
+            }
+            e
+        }
+        m.contains("Is a directory") -> FileSystemException(this, reason = m)
+        else -> throw t
+    }.apply { addSuppressed(t) }
 }
 
 // java.nio.channels.FileLock requires non-null FileChannel
@@ -84,14 +98,14 @@ internal actual object StubLockFile: LockFile() {
     override fun read(p0: ByteBuffer?, p1: Long): Int = error("unused")
     override fun write(p0: ByteBuffer?, p1: Long): Int = error("unused")
     override fun map(p0: MapMode?, p1: Long, p2: Long): MappedByteBuffer? = error("unused")
-    override fun lock(p0: Long, p1: Long, p2: Boolean): FileLock {
+    override fun lock(p0: Long, p1: Long, p2: Boolean): StubFileLock {
         if (p1 == FILE_LOCK_SIZE && !p2) {
             if (p0 == FILE_LOCK_POS_LOG) return LockLog
             if (p0 == FILE_LOCK_POS_ROTATE) return LockRotate
         }
         return StubFileLock(p0, p1, p2)
     }
-    override fun tryLock(p0: Long, p1: Long, p2: Boolean): FileLock? = lock(p0, p1, p2)
+    override fun tryLock(p0: Long, p1: Long, p2: Boolean): StubFileLock = lock(p0, p1, p2)
 
     override fun implCloseChannel() {}
     actual override fun toString(): String = "StubLockFile"
