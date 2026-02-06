@@ -15,18 +15,47 @@
  **/
 package io.matthewnelson.kmp.log.file.internal
 
+import io.matthewnelson.kmp.file.AccessDeniedException
+import io.matthewnelson.kmp.file.FileSystemException
+import io.matthewnelson.kmp.file.OpenExcl
+import io.matthewnelson.kmp.file.mkdirs2
+import io.matthewnelson.kmp.file.openWrite
 import io.matthewnelson.kmp.file.use
 import io.matthewnelson.kmp.log.file.withTmpFile
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlin.time.Duration.Companion.milliseconds
 
 class FileLockUnitTest {
+
+    @Test
+    fun givenLockFile_whenInvalidPermissions_thenOpenThrowsAccessDeniedException() = withTmpFile { tmp ->
+        tmp.openWrite(excl = OpenExcl.MustCreate.of(mode = "400")).close()
+        assertFailsWith<AccessDeniedException> { tmp.openLockFile().close() }
+    }
+
+    @Test
+    fun givenLockFile_whenIsDirectory_thenOpenThrowsFileSystemException() = withTmpFile { tmp ->
+        tmp.mkdirs2(mode = null, mustCreate = true)
+        try {
+            tmp.openLockFile().close()
+            fail("openLockFile should have thrown exception...")
+        } catch (e: FileSystemException) {
+            val r = e.reason ?: throw AssertionError("reason == null", e)
+            when {
+                r.contains("EISDIR") -> {} // pass
+                r.contains("Is a directory") -> {} // pass
+                else -> fail("reason does not contain EISDIR or Is a directory...", e)
+            }
+        }
+    }
 
     @Test
     fun givenFileLock_whenLockFileClosed_thenIsValidReturnsFalse() = withTmpFile { tmp ->
