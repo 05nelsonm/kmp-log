@@ -18,6 +18,7 @@ package io.matthewnelson.kmp.log.file.internal
 import io.matthewnelson.encoding.base16.Base16
 import io.matthewnelson.encoding.core.Encoder.Companion.encodeToString
 import io.matthewnelson.kmp.file.AccessDeniedException
+import io.matthewnelson.kmp.file.Closeable
 import io.matthewnelson.kmp.file.DirectoryNotEmptyException
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.FileNotFoundException
@@ -29,26 +30,87 @@ import io.matthewnelson.kmp.file.OpenExcl
 import io.matthewnelson.kmp.file.chmod2
 import io.matthewnelson.kmp.file.delete2
 import io.matthewnelson.kmp.file.exists2
+import io.matthewnelson.kmp.file.name
 import io.matthewnelson.kmp.file.openRead
 import io.matthewnelson.kmp.file.openReadWrite
 import io.matthewnelson.kmp.file.parentFile
 import io.matthewnelson.kmp.file.resolve
+import kotlinx.coroutines.delay
 import org.kotlincrypto.hash.blake2.BLAKE2s
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
+import kotlin.time.Duration.Companion.milliseconds
 
-@Throws(IOException::class)
-internal fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite = try {
-    openReadWrite(excl = OpenExcl.MaybeCreate.of(mode))
-} catch (e: AccessDeniedException) {
-    try {
+@Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
+internal suspend fun File.openLogFileRobustly(
+    mode: String,
+    useDeleteOrMoveToRandomIfDirectory: ((previous: File, moved: File) -> Unit)? = null,
+): FileStream.ReadWrite = openRobustly(
+    mode = mode,
+    useDeleteOrMoveToRandomIfDirectory = useDeleteOrMoveToRandomIfDirectory,
+    open = { openReadWrite(excl = OpenExcl.MaybeCreate.of(mode)) },
+)
+
+@Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
+@OptIn(ExperimentalContracts::class)
+internal suspend inline fun <T: Closeable> File.openRobustly(
+    mode: String,
+    noinline useDeleteOrMoveToRandomIfDirectory: ((previous: File, moved: File) -> Unit)?,
+    open: File.() -> T,
+): T {
+    contract { callsInPlace(open, InvocationKind.AT_LEAST_ONCE) }
+    val e: FileSystemException = try {
+        return open()
+    } catch (e: FileSystemException) {
+        e
+    }
+
+    if (e is AccessDeniedException) try {
+        // Permissions. Try to fix them.
         chmod2(mode)
     } catch (ee: IOException) {
         e.addSuppressed(ee)
         throw e
+    } else {
+        if (useDeleteOrMoveToRandomIfDirectory == null) throw e
+        val r = e.reason ?: throw e
+
+        if (r.contains("EISDIR") || r.contains("Is a directory")) try {
+            // Open failed due to it being a directory. Try to delete it and,
+            // if non-empty, move to random location.
+            val moved = deleteOrMoveToRandomIfNonEmptyDirectory(
+                buf = null,
+                maxNewNameLen = name.length.coerceAtLeast(7),
+            )
+            if (moved != null) useDeleteOrMoveToRandomIfDirectory(this, moved)
+
+            // Delay after deletion (or move), before attempting to re-open.
+            // If another process is doing the same thing at this exact moment,
+            // immediate creation of the new file may result in their delete/move
+            // landing after our re-open (or vice versa). So all parties at this
+            // point delay for a second before the re-try.
+            delay(10.milliseconds)
+        } catch (t: Throwable) {
+            if (t is CancellationException) {
+                t.addSuppressed(e)
+                throw t
+            }
+            e.addSuppressed(t)
+            throw e
+        } else throw e // Otherwise, throw original exception.
     }
+
+    // Retry open.
     try {
-        openReadWrite(excl = OpenExcl.MaybeCreate.of(mode))
+        return open()
     } catch (ee: IOException) {
+        if (ee is FileNotFoundException) {
+            ee.addSuppressed(e)
+            throw ee
+        }
         e.addSuppressed(ee)
         throw e
     }
