@@ -68,7 +68,7 @@ internal actual abstract class LockFile private constructor(h: HANDLE?): Closeab
 
     @Volatile
     private var _h: HANDLE? = h
-    private val closeLock = SynchronizedObject()
+    private val closeLock = if (h == null) null else SynchronizedObject()
 
     internal actual fun isOpen(): Boolean = _h != null
 
@@ -98,6 +98,7 @@ internal actual abstract class LockFile private constructor(h: HANDLE?): Closeab
     }
 
     actual final override fun close() {
+        if (closeLock == null) return
         val h = synchronized(closeLock) {
             val h = _h ?: return
             _h = null
@@ -155,7 +156,7 @@ internal actual abstract class LockFile private constructor(h: HANDLE?): Closeab
         override fun isValid(): Boolean = isOpen() && !isReleased
 
         override fun release() {
-            if (isReleased) return
+            if (closeLock == null || isReleased) return
 
             val ret = synchronized(closeLock) {
                 if (isReleased) return
