@@ -21,18 +21,30 @@ import io.matthewnelson.kmp.file.Closeable
 import io.matthewnelson.kmp.file.File
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.OpenExcl
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 @Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
 internal suspend fun File.openLockFileRobustly(
-    useDeleteOrMoveToRandomIfDirectory: ((previous: File, moved: File) -> Unit)? = null,
+    onEISDIRMoved: (previous: File, moved: File) -> Unit,
 ): LockFile = openRobustly(
     mode = OpenExcl.MaybeCreate.DEFAULT.mode,
-    useDeleteOrMoveToRandomIfDirectory = useDeleteOrMoveToRandomIfDirectory,
-    open = { openLockFile() },
+    deleteOrMoveOnEISDIR = true,
+    onEISDIR = { previous, moved ->
+        if (moved != null) onEISDIRMoved(previous, moved)
+
+        // Delay after deletion (or move), before attempting to re-open.
+        // If another process is doing the same thing at this exact moment,
+        // immediate creation of the new file may result in their delete/move
+        // landing after our re-open (or vice versa). So all parties at this
+        // point delay for a moment before the re-try.
+        delay(10.milliseconds)
+    },
+    open = File::openLockFile,
 )
 
 internal const val FILE_LOCK_SIZE = 1L

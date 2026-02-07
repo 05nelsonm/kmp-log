@@ -1912,7 +1912,7 @@ public class FileLog: Log {
             }
 
             logJob.ensureActive()
-            val logStream = files[0].openLogFileRobustly(modeFile, ::logNonEmptyDirectoryMoved)
+            val logStream = files[0].openLogFileRobustly(modeFile)
             val logStreamCompletion = logJob.closeOnCompletion(logStream)
 
             logBuffer.logLoop(
@@ -2176,7 +2176,7 @@ public class FileLog: Log {
                     try {
                         logD(ee) { "Closed >> $logStream" }
                         jobLogLoop.ensureActive()
-                        logStream = files[0].openLogFileRobustly(modeFile, ::logNonEmptyDirectoryMoved)
+                        logStream = files[0].openLogFileRobustly(modeFile)
                         logStreamCompletion = jobLogLoop.closeOnCompletion(logStream)
                         size = logStream.size()
                         logStream.position(new = size)
@@ -2730,8 +2730,8 @@ public class FileLog: Log {
     * an immediate retry should be scheduled.
     * */
     @Suppress("UnnecessaryVariable")
-    @Throws(CancellationException::class, IOException::class)
-    private suspend fun prepareLogRotationInterrupted(
+    @Throws(IOException::class)
+    private fun prepareLogRotationInterrupted(
         state: RotationState,
         logStream: FileStream.ReadWrite,
         buf: ByteArray,
@@ -2832,7 +2832,12 @@ public class FileLog: Log {
         var dotStream: FileStream.Read? = null
         var threw: IOException? = null
         try {
-            dotStream = dotRotateFile.openRobustly(modeFile, ::logNonEmptyDirectoryMoved) { openRead() }
+            dotStream = dotRotateFile.openRobustly(
+                modeFile,
+                deleteOrMoveOnEISDIR = true,
+                onEISDIR = { previous, moved -> if (moved != null) logNonEmptyDirectoryMoved(previous, moved) },
+                open = File::openRead,
+            )
             logD { "Opened >> $dotStream" }
 
             val sizeDot = dotStream.size()
@@ -2923,6 +2928,15 @@ public class FileLog: Log {
         }
 
         if (threw == null) return
+
+        if (dotStream == null && threw is FileNotFoundException) {
+            // dotRotateFile was a directory, was deleted or moved, and
+            // the openRead retry failed b/c it no-longer exists. This
+            // is a "successful" failure.
+            state.comparisonFailures = 0
+            moves.clear()
+            return
+        }
 
         if (state.comparisonFailures++ > (MAX_RETRIES - 1)) {
             throw state.failureIOException(

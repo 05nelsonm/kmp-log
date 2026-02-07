@@ -25,77 +25,89 @@ import io.matthewnelson.kmp.file.openReadWrite
 import io.matthewnelson.kmp.file.openWrite
 import io.matthewnelson.kmp.file.resolve
 import io.matthewnelson.kmp.log.file.withTmpFile
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.fail
 
 class OpenRobustlyUnitTest {
 
     @Test
-    fun givenInvalidPermissions_whenOpenRobustly_thenRetriesOpenAfterChmod() = runTest {
-        withTmpFile { tmp ->
-            tmp.openWrite(excl = OpenExcl.MustCreate.of(mode = "400")).close()
-            var invocationOpen = 0
-            tmp.openRobustly(
-                mode = OpenExcl.MaybeCreate.DEFAULT.mode,
-                useDeleteOrMoveToRandomIfDirectory = null,
-                open = { invocationOpen++; openReadWrite(excl = null) },
-            ).close()
-            assertEquals(2, invocationOpen)
-        }
+    fun givenInvalidPermissions_whenOpenRobustly_thenRetriesOpenAfterChmod() = withTmpFile { tmp ->
+        tmp.openWrite(excl = OpenExcl.MustCreate.of(mode = "400")).close()
+        var invocationOpen = 0
+        tmp.openRobustly(
+            mode = OpenExcl.MaybeCreate.DEFAULT.mode,
+            deleteOrMoveOnEISDIR = false,
+            onEISDIR = { _, _ -> },
+            open = { invocationOpen++; openReadWrite(excl = null) },
+        ).close()
+        assertEquals(2, invocationOpen)
     }
 
     @Test
-    fun givenDirectory_whenOpenRobustly_thenRetryOpenPreservesFileNotFoundException() = runTest {
-        withTmpFile { tmp ->
-            var invocationOpen = 0
-            try {
-                tmp.mkdirs2(mode = null, mustCreate = true).openRobustly(
-                    mode = OpenExcl.MaybeCreate.DEFAULT.mode,
-                    useDeleteOrMoveToRandomIfDirectory = { _, _ -> error("Should not be called...") },
-                    open = { invocationOpen++; openRead() }
-                ).close()
-                fail("openRobustly succeeded...")
-            } catch (_: FileNotFoundException) {
-                // pass
-            }
-            assertEquals(2, invocationOpen)
-        }
-    }
-
-    @Test
-    fun givenEmptyDirectory_whenOpenRobustly_thenRetriesOpenAfterDeletion() = runTest {
-        withTmpFile { tmp ->
-            var invocationOpen = 0
+    fun givenDirectory_whenOpenRobustly_thenRetryOpenPreservesFileNotFoundException() = withTmpFile { tmp ->
+        var invocationOpen = 0
+        var invocationMove = 0
+        try {
             tmp.mkdirs2(mode = null, mustCreate = true).openRobustly(
                 mode = OpenExcl.MaybeCreate.DEFAULT.mode,
-                useDeleteOrMoveToRandomIfDirectory = { _, _ -> error("Should not be called...") },
-                open = { invocationOpen++; openReadWrite(excl = null) },
+                deleteOrMoveOnEISDIR = true,
+                onEISDIR = { _, moved ->
+                    invocationMove++
+                    // delete2 should have succeeded b/c it was empty,
+                    // and no move should have occurred.
+                    assertNull(moved)
+                },
+                open = { invocationOpen++; openRead() }
             ).close()
-            assertEquals(2, invocationOpen)
+            fail("openRobustly succeeded...")
+        } catch (_: FileNotFoundException) {
+            // pass
         }
+        assertEquals(2, invocationOpen)
+        assertEquals(1, invocationMove)
     }
 
     @Test
-    fun givenNonEmptyDirectory_whenOpenRobustly_thenRetriesOpenAfterMovingToRandomName() = runTest {
-        withTmpFile { tmp ->
-            var invocationOpen = 0
-            var invocationMove = 0
-            val subDirTmp = tmp.resolve("sub_directory").mkdirs2(mode = null, mustCreate = true)
-            tmp.openRobustly(
-                mode = OpenExcl.MaybeCreate.DEFAULT.mode,
-                useDeleteOrMoveToRandomIfDirectory = { _, dest ->
-                    invocationMove++
-                    dest.resolve(subDirTmp.name).delete2(mustExist = true)
-                    dest.delete2(mustExist = true)
-                    assertNotEquals(tmp, dest)
-                },
-                open = { invocationOpen++; openReadWrite(excl = null) },
-            ).close()
-            assertEquals(2, invocationOpen)
-            assertEquals(1, invocationMove)
-        }
+    fun givenEmptyDirectory_whenOpenRobustly_thenRetriesOpenAfterDeletion() = withTmpFile { tmp ->
+        var invocationOpen = 0
+        var invocationMove = 0
+        tmp.mkdirs2(mode = null, mustCreate = true).openRobustly(
+            mode = OpenExcl.MaybeCreate.DEFAULT.mode,
+            deleteOrMoveOnEISDIR = true,
+            onEISDIR = { _, moved ->
+                invocationMove++
+                // delete2 should have succeeded b/c it was empty,
+                // and no move should have occurred.
+                assertNull(moved)
+            },
+            open = { invocationOpen++; openReadWrite(excl = null) },
+        ).close()
+        assertEquals(2, invocationOpen)
+        assertEquals(1, invocationMove)
+    }
+
+    @Test
+    fun givenNonEmptyDirectory_whenOpenRobustly_thenRetriesOpenAfterMovingToRandomName() = withTmpFile { tmp ->
+        var invocationOpen = 0
+        var invocationMove = 0
+        val subDirTmp = tmp.resolve("sub_directory").mkdirs2(mode = null, mustCreate = true)
+        tmp.openRobustly(
+            mode = OpenExcl.MaybeCreate.DEFAULT.mode,
+            deleteOrMoveOnEISDIR = true,
+            onEISDIR = { _, moved ->
+                invocationMove++
+                assertNotNull(moved)
+                moved.resolve(subDirTmp.name).delete2(mustExist = true)
+                moved.delete2(mustExist = true)
+                assertNotEquals(tmp, moved)
+            },
+            open = { invocationOpen++; openReadWrite(excl = null) },
+        ).close()
+        assertEquals(2, invocationOpen)
+        assertEquals(1, invocationMove)
     }
 }
