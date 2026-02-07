@@ -2929,6 +2929,15 @@ public class FileLog: Log {
 
         if (threw == null) return
 
+        if (dotStream == null && threw is FileNotFoundException) {
+            // dotRotateFile was a directory, was deleted or moved, and
+            // the openRead retry failed b/c it no-longer exists. This
+            // is a "successful" failure.
+            state.comparisonFailures = 0
+            moves.clear()
+            return
+        }
+
         if (state.comparisonFailures++ > (MAX_RETRIES - 1)) {
             throw state.failureIOException(
                 attempts = state.comparisonFailures,
