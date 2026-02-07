@@ -2319,9 +2319,7 @@ public class FileLog: Log {
             // immediately dequeued and executed while still holding our lock
             // on writes to logStream (unless there are LogAction present in the
             // rotateActionQueue which come first).
-            if (retryAction._get() == null && lockLog.isValid()) try {
-                lockLog.doRelease()
-            } catch (e: IOException) {
+            if (retryAction._get() == null) lockLog.doRelease(onFailure = { e ->
                 // If a log rotation is currently underway, we must wait for it
                 // so that we do not invalidate its lockRotate inadvertently.
                 awaitLogRotation()
@@ -2334,8 +2332,7 @@ public class FileLog: Log {
                 } catch (ee: IOException) {
                     e.addSuppressed(ee)
                 }
-                logW(e) { "Lock release failure >> $lockLog" }
-            }
+            })
         }
     }
 
@@ -2508,9 +2505,7 @@ public class FileLog: Log {
                     state.moveFailures = 0
                 }
 
-                if (lockRotate.isValid()) try {
-                    lockRotate.doRelease()
-                } catch (e: IOException) {
+                lockRotate.doRelease(onFailure = { e ->
                     try {
                         // Close the lock file (if not already). Next logLoop iteration
                         // will fail to obtain its lock due to a ClosedException and then
@@ -2519,9 +2514,7 @@ public class FileLog: Log {
                     } catch (ee: IOException) {
                         e.addSuppressed(ee)
                     }
-
-                    logW(e) { "Lock release failure >> $lockRotate" }
-                }
+                })
 
                 // No further action is needed. Return early.
                 return
@@ -2533,9 +2526,7 @@ public class FileLog: Log {
         if (moves.isEmpty()) {
             // An error occurred in prepareLogRotation{Full/Interrupted}
 
-            if (lockRotate.isValid()) try {
-                lockRotate.doRelease()
-            } catch (e: IOException) {
+            lockRotate.doRelease(onFailure = { e ->
                 try {
                     // Close the lock file (if not already). Next logLoop iteration
                     // will fail to obtain its lock due to a ClosedException and then
@@ -2544,9 +2535,7 @@ public class FileLog: Log {
                 } catch (ee: IOException) {
                     e.addSuppressed(ee)
                 }
-
-                logW(e) { "Lock release failure >> $lockRotate" }
-            }
+            })
 
             // Trigger an immediate retry.
             rotateActionQueue.enqueue(
@@ -2561,21 +2550,17 @@ public class FileLog: Log {
         state.comparisonFailures = 0
 
         executeLogRotationMoves(state, rotateActionQueue, moves).invokeOnCompletion {
-            if (lockRotate.isValid()) try {
-                lockRotate.doRelease()
-            } catch (e: IOException) {
-                logW(e) { "Lock release failure >> $lockRotate" }
-
+            lockRotate.doRelease(onFailure = { _ ->
                 // No other recovery mechanism but to close the lock file
                 // and invalidate all locks currently held, otherwise the
                 // next log rotation may deadlock when attempting to acquire
                 // lockRotate.
+                //
+                // This is done lazily here as a priority LogAction in order
+                // to not inadvertently invalidate a lockLog in the midst
+                // of executing a LogAction that is writing to logStream. If
+                // the lockFile is already closed, it does nothing.
                 rotateActionQueue.enqueue { stream, _, _, processedWrites ->
-                    // This is done lazily here as a priority LogAction in order
-                    // to not inadvertently invalidate a lockLog in the midst
-                    // of executing a LogAction that is writing to logStream. If
-                    // the lockFile is already closed, it does nothing.
-
                     // Ensure any writes are synced to disk before invalidating
                     // all locks. The inner loop within logLoop may have processed
                     // some actions before picking this one up. As such, invalidation
@@ -2612,7 +2597,7 @@ public class FileLog: Log {
 
                     0L
                 }
-            }
+            })
         }
     }
 
@@ -3171,12 +3156,18 @@ public class FileLog: Log {
         }
     }
 
-    @Throws(IOException::class)
-    private inline fun FileLock.doRelease() {
-        release()
-        logD {
-            if (this is StubFileLock) null
-            else "Released lock on ${dotLockFile.name} >> $this"
+    @OptIn(ExperimentalContracts::class)
+    private inline fun FileLock.doRelease(onFailure: (e: IOException) -> Unit) {
+        contract { callsInPlace(onFailure, InvocationKind.AT_MOST_ONCE) }
+        if (isValid()) try {
+            release()
+            logD {
+                if (this is StubFileLock) null
+                else "Released lock on ${dotLockFile.name} >> $this"
+            }
+        } catch (e: IOException) {
+            onFailure(e)
+            logW(e) { "Lock release failure >> $this" }
         }
     }
 
