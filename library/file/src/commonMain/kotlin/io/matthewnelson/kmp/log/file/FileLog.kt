@@ -2239,12 +2239,7 @@ public class FileLog: Log {
                         }
                         logD { "Write would exceed maxLogFileSize[$maxLogFileSize]. Retrying after $LOG_ROTATION." }
                     }
-                    ROTATION_NOT_NEEDED -> {
-                        rotationState.atomicCopyFailures = 0
-                        rotationState.comparisonFailures = 0
-                        rotationState.moveFailures = 0
-                        logD { "$LOG_ROTATION not needed" }
-                    }
+                    ROTATION_NOT_NEEDED -> logD { "$LOG_ROTATION not needed" }
                 }
 
                 // Rip through some more LogAction (if able) while we hold a lock.
@@ -2313,8 +2308,10 @@ public class FileLog: Log {
                         retryActionIsNotNull = retryAction._get() != null,
                     )
                 } else {
-                    // We lost lockLog. Trigger an immediate retry.
-                    rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
+                    // We lost lockLog. Trigger an immediate retry after re-acquiring lockLog.
+                    rotateActionQueue.enqueue(
+                        if (retryAction._get() != null) LogAction.Rotation.ExecuteAction else checkIfLogRotationIsNeeded
+                    )
                 }
             }
 
@@ -2421,13 +2418,26 @@ public class FileLog: Log {
             } catch (e: IOException) {
                 t.addSuppressed(e)
             }
+
+            if (state.lockAcquisitionFailures++ > (MAX_RETRIES - 1)) {
+                throw state.failureIOException(
+                    attempts = state.lockAcquisitionFailures,
+                    reason = "acquire a rotation lock on ${dotLockFile.name}",
+                    cause = t,
+                )
+            }
+
             logW(t) { "Failed to acquire a rotation lock on ${dotLockFile.name}. Retrying $LOG_ROTATION." }
 
             // Trigger an immediate retry.
-            rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
+            rotateActionQueue.enqueue(
+                if (retryActionIsNotNull) LogAction.Rotation.ExecuteAction else checkIfLogRotationIsNeeded
+            )
 
             return
         }
+
+        state.lockAcquisitionFailures = 0
 
         logD {
             if (lockRotate is StubFileLock) null
@@ -2485,10 +2495,19 @@ public class FileLog: Log {
                 rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
 
                 // Release lockRotate below and return early.
-                0L
+                -1L
             }
 
             if (size < maxLogFileSize) {
+                if (size != -1L) {
+                    // Was no error from above when obtaining FileStream.size.
+                    // size really is less than maxLogFileSize and there is
+                    // nothing to do. Reset state.
+                    state.atomicCopyFailures = 0
+                    state.comparisonFailures = 0
+                    state.moveFailures = 0
+                }
+
                 if (lockRotate.isValid()) try {
                     lockRotate.doRelease()
                 } catch (e: IOException) {
@@ -2529,9 +2548,10 @@ public class FileLog: Log {
                 logW(e) { "Lock release failure >> $lockRotate" }
             }
 
-            // Trigger an immediate retry. If another process is also
-            // logging, it may finish off the log rotation for us, so.
-            rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
+            // Trigger an immediate retry.
+            rotateActionQueue.enqueue(
+                if (retryActionIsNotNull) LogAction.Rotation.ExecuteAction else checkIfLogRotationIsNeeded
+            )
 
             return
         }
@@ -2671,7 +2691,7 @@ public class FileLog: Log {
                 e.addSuppressed(ee)
             }
 
-            if (state.atomicCopyFailures++ > 2) {
+            if (state.atomicCopyFailures++ > (MAX_RETRIES - 1)) {
                 throw state.failureIOException(
                     attempts = state.atomicCopyFailures,
                     reason = "atomically copy ${files[0].name} >> ${dotRotateFile.name}",
@@ -2904,7 +2924,7 @@ public class FileLog: Log {
 
         if (threw == null) return
 
-        if (state.comparisonFailures++ > 2) {
+        if (state.comparisonFailures++ > (MAX_RETRIES - 1)) {
             throw state.failureIOException(
                 attempts = state.comparisonFailures,
                 reason = "compare ${files[0].name} with ${dotRotateFile.name}",
@@ -3098,7 +3118,7 @@ public class FileLog: Log {
             return@launch
         }
 
-        if (state.moveFailures++ > 2) {
+        if (state.moveFailures++ > (MAX_RETRIES - 1)) {
             throw state.failureIOException(
                 attempts = state.moveFailures,
                 reason = "move ${dotRotateFile.name} >> ${files[1].name}",
@@ -3123,6 +3143,8 @@ public class FileLog: Log {
 
     private class RotationState {
 
+        @Volatile
+        var lockAcquisitionFailures: Int = 0
         @Volatile
         var atomicCopyFailures: Int = 0
         @Volatile
