@@ -78,6 +78,10 @@ kmpConfiguration {
                                 "setprop log.tag.SysLogUnitTest VERBOSE",
                                 NullOutputReceiver.getReceiver(),
                             )
+                            device.executeShellCommand(
+                                "setprop log.tag.AndroidFileLogChecker DEBUG",
+                                NullOutputReceiver.getReceiver(),
+                            )
                         }
                     })
                 }.get()
@@ -93,6 +97,7 @@ kmpConfiguration {
 
             sourceSetTestInstrumented {
                 dependencies {
+                    implementation(project(":library:file"))
                     implementation(libs.androidx.test.core)
                     implementation(libs.androidx.test.runner)
                     implementation(libs.encoding.base16)
