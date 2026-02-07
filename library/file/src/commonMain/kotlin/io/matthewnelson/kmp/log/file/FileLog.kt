@@ -2308,9 +2308,10 @@ public class FileLog: Log {
                         retryActionIsNotNull = retryAction._get() != null,
                     )
                 } else {
-                    // We lost lockLog. Trigger an immediate retry.
-                    if (retryAction._get() != null) rotateActionQueue.enqueue { _, _, _, _ -> EXECUTE_ROTATE_LOGS }
-                    else rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
+                    // We lost lockLog. Trigger an immediate retry after re-acquiring lockLog.
+                    rotateActionQueue.enqueue(
+                        if (retryAction._get() != null) LogAction.Rotation.ExecuteAction else checkIfLogRotationIsNeeded
+                    )
                 }
             }
 
@@ -2428,9 +2429,10 @@ public class FileLog: Log {
 
             logW(t) { "Failed to acquire a rotation lock on ${dotLockFile.name}. Retrying $LOG_ROTATION." }
 
-            // Trigger an immediate retry
-            if (retryActionIsNotNull) rotateActionQueue.enqueue { _, _, _, _ -> EXECUTE_ROTATE_LOGS }
-            else rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
+            // Trigger an immediate retry.
+            rotateActionQueue.enqueue(
+                if (retryActionIsNotNull) LogAction.Rotation.ExecuteAction else checkIfLogRotationIsNeeded
+            )
 
             return
         }
@@ -2547,8 +2549,9 @@ public class FileLog: Log {
             }
 
             // Trigger an immediate retry.
-            if (retryActionIsNotNull) rotateActionQueue.enqueue { _, _, _, _ -> EXECUTE_ROTATE_LOGS }
-            else rotateActionQueue.enqueue(checkIfLogRotationIsNeeded)
+            rotateActionQueue.enqueue(
+                if (retryActionIsNotNull) LogAction.Rotation.ExecuteAction else checkIfLogRotationIsNeeded
+            )
 
             return
         }

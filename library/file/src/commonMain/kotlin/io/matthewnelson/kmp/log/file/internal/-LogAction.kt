@@ -54,6 +54,8 @@ internal sealed interface LogAction {
             // Special return value for a rotation check to indicate it is not needed
             internal const val ROTATION_NOT_NEEDED = -615L
 
+            internal val ExecuteAction = Rotation { _, _, _, _ -> EXECUTE_ROTATE_LOGS }
+
             internal fun newCheckAction(
                 maxLogFileSize: Long,
                 dotRotateFile: File,
