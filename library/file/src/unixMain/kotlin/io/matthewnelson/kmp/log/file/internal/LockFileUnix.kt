@@ -102,6 +102,7 @@ internal actual abstract class LockFile private constructor(fd: Int): Closeable 
 
     actual final override fun close() {
         if (closeLock == null) return
+        if (_fd == -1) return
         val fd = synchronized(closeLock) {
             val fd = _fd
             if (fd == -1) return
