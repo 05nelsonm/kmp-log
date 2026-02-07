@@ -48,6 +48,7 @@ import io.matthewnelson.kmp.file.use
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.annotation.ExperimentalLogApi
 import io.matthewnelson.kmp.log.file.internal.CurrentThread
+import io.matthewnelson.kmp.log.file.internal.Directory
 import io.matthewnelson.kmp.log.file.internal.FILE_LOCK_POS_LOG
 import io.matthewnelson.kmp.log.file.internal.FILE_LOCK_POS_ROTATE
 import io.matthewnelson.kmp.log.file.internal.FILE_LOCK_SIZE
@@ -94,6 +95,7 @@ import io.matthewnelson.kmp.log.file.internal.lockNonBlock
 import io.matthewnelson.kmp.log.file.internal.moveLogTo
 import io.matthewnelson.kmp.log.file.internal.newLogDispatcher
 import io.matthewnelson.kmp.log.file.internal.now
+import io.matthewnelson.kmp.log.file.internal.openDirectory
 import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
 import io.matthewnelson.kmp.log.file.internal.openLogFileRobustly
 import io.matthewnelson.kmp.log.file.internal.openRobustly
@@ -626,6 +628,7 @@ public class FileLog: Log {
         val logJob = (instance as FileLog)._logJob ?: return false
 
         run {
+            if (!timeout.isPositive()) return@run
             val dispatcher = currentCoroutineContext()[ContinuationInterceptor] ?: return@run
             val qn = dispatcher::class.qualifiedName ?: return@run
             if (!qn.startsWith("kotlinx.coroutines.test")) return@run
@@ -2453,6 +2456,14 @@ public class FileLog: Log {
         // moves to execute (Byte.MAX_VALUE).
         val moves = ArrayDeque<Pair<File, File>>(files.size)
 
+        // Storage. prepareLogRotationFull will open the directory to sync it
+        // after atomically copying logStream. Will populate this with either
+        // the Pair (success), or null (failure to open). If prepareLogRotationFull
+        // is NOT called below, this will be empty and, as such, the directory
+        // will be opened before executing any moves in order to pass to that
+        // Job.
+        val openDir = ArrayList<Pair<Directory, DisposableHandle>?>(1)
+
         if (dotRotateFile.exists2Robustly()) {
             // Picking up a previously interrupted log file rotation (moving
             // dotRotateFile -> *.001 is the last move that gets executed).
@@ -2520,7 +2531,7 @@ public class FileLog: Log {
                 return
             }
 
-            prepareLogRotationFull(state, logStream, buf, moves)
+            prepareLogRotationFull(state, openDir, logStream, buf, moves)
         }
 
         if (moves.isEmpty()) {
@@ -2537,6 +2548,23 @@ public class FileLog: Log {
                 }
             })
 
+            // Could be unpopulated, or element 0 is null (failed to open directory).
+            openDir.removeFirstOrNull()?.let { (dir, handle) ->
+                val e: IOException? = try {
+                    dir.close()
+                    null
+                } catch (e: IOException) {
+                    e
+                } finally {
+                    handle.dispose()
+                }
+
+                logD(e) {
+                    if (dir == Directory.NoOp) null
+                    else "Closed >> $dir"
+                }
+            }
+
             // Trigger an immediate retry.
             rotateActionQueue.enqueue(
                 if (retryActionIsNotNull) LogAction.Rotation.ExecuteAction else checkIfLogRotationIsNeeded
@@ -2549,7 +2577,18 @@ public class FileLog: Log {
         state.atomicCopyFailures = 0
         state.comparisonFailures = 0
 
-        executeLogRotationMoves(state, rotateActionQueue, moves).invokeOnCompletion {
+        // Try opening (if not already populated)
+        tryOpenLogDirectory(storage = openDir)
+
+        val childJob = executeLogRotationMoves(state, openDir.firstOrNull()?.first, rotateActionQueue, moves)
+
+        // Migrate completion handle to ChildJob
+        openDir.removeFirstOrNull()?.let { (dir, handle) ->
+            handle.dispose()
+            childJob.closeOnCompletion(dir, logOpen = false)
+        }
+
+        childJob.invokeOnCompletion {
             lockRotate.doRelease(onFailure = { _ ->
                 // No other recovery mechanism but to close the lock file
                 // and invalidate all locks currently held, otherwise the
@@ -2613,8 +2652,9 @@ public class FileLog: Log {
     * an immediate retry should be scheduled.
     * */
     @Throws(IOException::class)
-    private fun prepareLogRotationFull(
+    private fun ScopeLogLoop.prepareLogRotationFull(
         state: RotationState,
+        openDir: ArrayList<Pair<Directory, DisposableHandle>?>,
         logStream: FileStream.ReadWrite,
         buf: ByteArray,
         moves: ArrayDeque<Pair<File, File>>,
@@ -2641,6 +2681,8 @@ public class FileLog: Log {
 
             logNonEmptyDirectoryMoved(file, moved)
         }
+
+        tryOpenLogDirectory(storage = openDir)
 
         try {
             // Shouldn't exist, but just in case using openWrite instead of openLogFileRobustly to ensure it
@@ -2688,7 +2730,29 @@ public class FileLog: Log {
             return
         }
 
-        // TODO: fsync directory (Issue #93)
+        openDir.firstOrNull()?.let { (dir, handle) ->
+            if (!dir.isOpen()) return@let // Directory.NoOp
+
+            logD { "Syncing directory ${directory.name}" }
+            try {
+                dir.sync()
+            } catch (e: IOException) {
+                val ee: IOException? = try {
+                    dir.close()
+                    null
+                } catch (ee: IOException) {
+                    ee
+                } finally {
+                    handle.dispose()
+                }
+
+                logW(e) { "Sync failure >> $dir" }
+                logD(ee) { "Closed >> $dir" }
+
+                // Attempt a re-open before moves get executed.
+                openDir.clear()
+            }
+        }
 
         truncate0AndSync(logStream, file = files[0])
 
@@ -2955,7 +3019,7 @@ public class FileLog: Log {
             try {
                 logStream.sync(meta = true)
             } catch (e: IOException) {
-                logW(e) { "Sync failure >> $this" }
+                logW(e) { "Sync failure >> $logStream" }
                 // Will be closed in catch block below which will
                 // hopefully force it to the filesystem, in addition
                 // to trying an alternative truncation method.
@@ -3028,6 +3092,7 @@ public class FileLog: Log {
     * */
     private fun ScopeLogLoop.executeLogRotationMoves(
         state: RotationState,
+        logDir: Directory?,
         rotateActionQueue: RotateActionQueue,
         moves: ArrayDeque<Pair<File, File>>,
     ): Job = scopeLogLoop.launch(context = CoroutineName(LOG.tag + "-$LOG_ROTATION")) {
@@ -3035,8 +3100,9 @@ public class FileLog: Log {
         thisJob.invokeOnCompletion { logD { "$LOG_ROTATION Stopped >> $thisJob" } }
         logD { "$LOG_ROTATION Started >> $thisJob" }
 
-//        val startSize = moves.size
         var threw: IOException? = null
+        var needsFinalDirectorySync = false
+
         while (moves.isNotEmpty()) {
             val move = moves.removeFirst()
             val (source, dest) = move
@@ -3044,6 +3110,25 @@ public class FileLog: Log {
             try {
                 source.moveLogTo(dest)
                 logD { "Moved ${source.name} >> ${dest.name}" }
+
+                if (logDir != null && logDir.isOpen()) {
+                    logD { "Syncing directory ${directory.name}" }
+                    try {
+                        logDir.sync()
+                    } catch (e: IOException) {
+                        // If we failed and there are still moves left to execute,
+                        // ensure a final attempt to sync the directory is made after
+                        // remaining moves execute.
+                        if (moves.isNotEmpty()) needsFinalDirectorySync = true
+
+                        try {
+                            logDir.close()
+                        } catch (ee: IOException) {
+                            e.addSuppressed(ee)
+                        }
+                        logW(e) { "Sync failure >> $logDir" }
+                    }
+                }
 
                 // yield only after we have our first move such that
                 // there exists a "hole" in the log files. This matters
@@ -3100,9 +3185,27 @@ public class FileLog: Log {
             }
         }
 
-//        if (moves.size != startSize) {
-//            // TODO: fsync directory (Issue #93)
-//        }
+        if (needsFinalDirectorySync) run {
+            // Will only be the case if logDir was closed due to sync failure, meaning
+            // that logDir was NOT Directory.NoOp (i.e. not Windows).
+            val newLogDir = try {
+                directory.openDirectory()
+            } catch (e: IOException) {
+                logW(e) { "Failed to re-open directory >> ${directory.name}" }
+                return@run
+            }
+
+            thisJob.closeOnCompletion(newLogDir)
+
+            logD { "Syncing directory ${directory.name}" }
+            try {
+                newLogDir.sync()
+            } catch (e: IOException) {
+                logW(e) { "Sync failure >> $newLogDir" }
+            }
+
+            // Will be closed by job completion.
+        }
 
         if (threw == null) {
             state.moveFailures = 0
@@ -3171,10 +3274,27 @@ public class FileLog: Log {
         }
     }
 
+    private fun ScopeLogLoop.tryOpenLogDirectory(storage: ArrayList<Pair<Directory, DisposableHandle>?>) = try {
+        if (storage.isEmpty()) {
+            val dir = directory.openDirectory()
+            val handle = jobLogLoop.closeOnCompletion(dir)
+            storage.add(dir to handle)
+        }
+        Unit
+    } catch (e: IOException) {
+        // Indicates that an attempt to open was made, but resulted in failure.
+        // Subsequent invocations of tryOpenLogDirectory for the same storage will
+        // simply return and not try again.
+        storage.add(null)
+        logW(e) { "Failed to open directory >> ${directory.name}" }
+    }
+
     private object NoOpDisposableHandle: DisposableHandle { override fun dispose() {} }
 
     private fun Job.closeOnCompletion(closeable: Closeable, logOpen: Boolean = true): DisposableHandle {
         if (closeable == StubLockFile) return NoOpDisposableHandle
+        if (closeable == Directory.NoOp) return NoOpDisposableHandle
+
         if (logOpen) logD { "Opened >> $closeable" }
 
         return invokeOnCompletion { t ->
