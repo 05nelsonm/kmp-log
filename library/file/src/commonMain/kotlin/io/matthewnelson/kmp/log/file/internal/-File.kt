@@ -35,30 +35,30 @@ import io.matthewnelson.kmp.file.openRead
 import io.matthewnelson.kmp.file.openReadWrite
 import io.matthewnelson.kmp.file.parentFile
 import io.matthewnelson.kmp.file.resolve
-import kotlinx.coroutines.delay
 import org.kotlincrypto.hash.blake2.BLAKE2s
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
-import kotlin.time.Duration.Companion.milliseconds
 
-@Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
-internal suspend fun File.openLogFileRobustly(
-    mode: String,
-    useDeleteOrMoveToRandomIfDirectory: ((previous: File, moved: File) -> Unit)? = null,
-): FileStream.ReadWrite = openRobustly(
+@Throws(IllegalArgumentException::class, IOException::class)
+internal fun File.openLogFileRobustly(mode: String): FileStream.ReadWrite = openRobustly(
     mode = mode,
-    useDeleteOrMoveToRandomIfDirectory = useDeleteOrMoveToRandomIfDirectory,
+    // If someone configures FileLog.Builder.{fileName/fileExtension} that
+    // points to an active directory, we want to fail instead of attempting
+    // to delete or move it to a randomly named location within logDirectory.
+    deleteOrMoveOnEISDIR = false,
+    onEISDIR = { _, _ -> },
     open = { openReadWrite(excl = OpenExcl.MaybeCreate.of(mode)) },
 )
 
-@Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
+@Throws(IllegalArgumentException::class, IOException::class)
 @OptIn(ExperimentalContracts::class)
-internal suspend inline fun <T: Closeable> File.openRobustly(
+internal inline fun <T: Closeable> File.openRobustly(
     mode: String,
-    noinline useDeleteOrMoveToRandomIfDirectory: ((previous: File, moved: File) -> Unit)?,
+    deleteOrMoveOnEISDIR: Boolean,
+    onEISDIR: (previous: File, moved: File?) -> Unit,
     open: File.() -> T,
 ): T {
     contract { callsInPlace(open, InvocationKind.AT_LEAST_ONCE) }
@@ -75,7 +75,7 @@ internal suspend inline fun <T: Closeable> File.openRobustly(
         e.addSuppressed(ee)
         throw e
     } else {
-        if (useDeleteOrMoveToRandomIfDirectory == null) throw e
+        if (!deleteOrMoveOnEISDIR) throw e
         val r = e.reason ?: throw e
 
         if (r.contains("EISDIR") || r.contains("Is a directory")) try {
@@ -85,15 +85,9 @@ internal suspend inline fun <T: Closeable> File.openRobustly(
                 buf = null,
                 maxNewNameLen = name.length.coerceAtLeast(7),
             )
-            if (moved != null) useDeleteOrMoveToRandomIfDirectory(this, moved)
-
-            // Delay after deletion (or move), before attempting to re-open.
-            // If another process is doing the same thing at this exact moment,
-            // immediate creation of the new file may result in their delete/move
-            // landing after our re-open (or vice versa). So all parties at this
-            // point delay for a second before the re-try.
-            delay(10.milliseconds)
+            onEISDIR(this, moved)
         } catch (t: Throwable) {
+            // Preserve CancellationException for openLockFileRobustly's delay
             if (t is CancellationException) {
                 t.addSuppressed(e)
                 throw t
