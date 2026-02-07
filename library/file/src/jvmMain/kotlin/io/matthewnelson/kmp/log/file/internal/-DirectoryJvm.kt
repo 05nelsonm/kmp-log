@@ -16,11 +16,25 @@
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.File
+import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.IOException
+import io.matthewnelson.kmp.file.NotDirectoryException
+import io.matthewnelson.kmp.file.exists2
 
 @Throws(IOException::class)
 internal actual fun File.openDirectory(): Directory {
-    val opener = DirectoryOpener.INSTANCE ?: return Directory.NoOp
+    val opener = DirectoryOpener.INSTANCE ?: try {
+        if (!isDirectory) {
+            if (!exists2()) throw FileNotFoundException(toString())
+            throw NotDirectoryException(this)
+        }
+        return Directory.NoOp
+    } catch (t: SecurityException) {
+        val e = AccessDeniedException(this, reason = "SecurityException")
+        e.addSuppressed(t)
+        throw e
+    }
+
     return opener.open(this)
 }
 
