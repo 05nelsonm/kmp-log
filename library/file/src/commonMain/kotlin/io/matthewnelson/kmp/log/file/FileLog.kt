@@ -488,6 +488,7 @@ public class FileLog: Log {
      *
      * @see [Builder.bufferOverflow]
      * */
+    @JvmField
     public val bufferOverflowDropOldest: Boolean
 
     /**
