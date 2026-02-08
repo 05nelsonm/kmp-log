@@ -15,9 +15,12 @@
  **/
 package io.matthewnelson.kmp.log.sys
 
+import android.os.Build
 import io.matthewnelson.encoding.base16.Base16
 import io.matthewnelson.encoding.core.Encoder.Companion.encodeToString
 import io.matthewnelson.kmp.file.SysTempDir
+import io.matthewnelson.kmp.file.readUtf8
+import io.matthewnelson.kmp.file.toFile
 import io.matthewnelson.kmp.log.Log
 import io.matthewnelson.kmp.log.file.FileLog
 import kotlin.random.Random
@@ -88,6 +91,35 @@ class AndroidFileLogTest {
 
             // Level.Verbose so that SysLog does not pick anything up
             repeat(125) { logger.v(s) }
+
+            log.uninstallAndAwaitSync()
+
+            // Check to ensure implementation's pid/tid logic for android is OK.
+            val line = log.logFiles[0].toFile()
+                .readUtf8()
+                .lines()
+                .first()
+
+            val actualPID = line
+                .substringAfter("V ")
+                .substringBefore(" ")
+                .toInt()
+            val actualTID = line
+                .substringAfter("V ")
+                .substringAfter("$actualPID ")
+                .substringBefore(" ")
+                .toLong()
+
+            val expectedPID = android.os.Process.myPid()
+            val expectedTID = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                Thread.currentThread().threadId()
+            } else {
+                @Suppress("DEPRECATION")
+                Thread.currentThread().id
+            }
+
+            assertEquals(expectedPID, actualPID, "pid")
+            assertEquals(expectedTID, actualTID, "tid")
         } finally {
             log.uninstallAndAwaitSync()
             tmp.deleteRecursively()
