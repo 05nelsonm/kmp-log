@@ -228,8 +228,9 @@ import kotlin.time.Duration.Companion.milliseconds
  * further filtering configuration by way of blacklists and whitelists for both [Logger.domain]
  * and/or [Logger.tag].
  *
- * [Builder.min], [Builder.max], [Builder.blacklistDomain], [Builder.whitelistDomain] and
- * [Builder.whitelistTag] are `5` configuration options which directly affect how [FileLog]
+ * [Builder.min], [Builder.max], [Builder.blacklistDomain], [Builder.blacklistDomainNull],
+ * [Builder.blacklistTag], [Builder.whitelistDomain], [Builder.whitelistDomainNull] and
+ * [Builder.whitelistTag] are `8` configuration options which directly affect how [FileLog]
  * filters incoming logs.
  *
  * ### Log Formatting
@@ -239,8 +240,8 @@ import kotlin.time.Duration.Companion.milliseconds
  * 1) The local date (year omitted)
  * 2) The local time
  * 3) The first character of the [Log.Level] name
- * 4) The `0` prefixed 7-digit process id
- * 5) The `0` prefixed 7-digit thread id
+ * 4) The `0` prefixed 7-digit process-id
+ * 5) The `0` prefixed 7-digit thread-id
  * 6) The concatenated [Logger.domain] (if non-null) and [Logger.tag]
  *
  * ```
@@ -253,6 +254,19 @@ import kotlin.time.Duration.Companion.milliseconds
  * 01-01 01:59:01.853 D 0452849 0452855 SomeOtherTagNoDomain: {log line 1 of 1}
  * 01-01 01:59:01.854 D 0452849 0452855 [some.domain]SomeTag: {log line 1 of 1}
  * ```
+ *
+ * The thread-id is retrieved in the following platform specific manner:
+ *  - Android:
+ *      + API 36+: [Thread.threadId](https://developer.android.com/reference/java/lang/Thread#threadId())
+ *      + API 35-: [Thread.getId](https://developer.android.com/reference/java/lang/Thread#getId())
+ *  - Jvm/AndroidUnitTest:
+ *      + Java 19+: [Thread.threadId](https://docs.oracle.com/en/java/javase/19/docs/api/java.base/java/lang/Thread.html#threadId())
+ *      + Java 18-: [Thread.getId](https://docs.oracle.com/javase/8/docs/api/java/lang/Thread.html#getId--)
+ *  - Native:
+ *      + Android: [gettid](https://www.man7.org/linux/man-pages/man2/gettid.2.html)
+ *      + Darwin: [pthread_mach_thread_np](https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h#L543)
+ *      + Linux: [SYS_gettid](https://www.man7.org/linux/man-pages/man2/gettid.2.html)
+ *      + MinGW: [GetCurrentThreadId](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getcurrentthreadid)
  *
  * [Builder.format] and [Builder.formatOmitYear] are `2` configuration options which directly
  * affect how logs are formatted before being written to the log [File].
@@ -474,6 +488,7 @@ public class FileLog: Log {
      *
      * @see [Builder.bufferOverflow]
      * */
+    @JvmField
     public val bufferOverflowDropOldest: Boolean
 
     /**
@@ -558,6 +573,9 @@ public class FileLog: Log {
 
     /**
      * Enable/Disable [Level.Debug] logs this instance generates pertaining to its internal operations.
+     *
+     * **NOTE:** To capture the logs, a non-[FileLog] implementation of [Log] is required. All [FileLog]
+     * instances deny [Level.Debug] logs from [DOMAIN].
      *
      * @see [DOMAIN]
      * @see [Builder.debug]
@@ -1707,8 +1725,13 @@ public class FileLog: Log {
             if (blacklistDomainNull) return false
             if (!whitelistDomainNull) return false
         } else {
-            // Do not log to self, only to other Log instances (if installed).
-            if (domain == DOMAIN && tag == LOG.tag) return false
+            if (domain == DOMAIN) {
+                // Do NOT log to self, only to other Log instances (if installed).
+                if (tag == LOG.tag) return false
+                // Do NOT allow debug logs from other FileLog instances. This would
+                // be severely problematic as FileLog.log exempts DOMAIN from blocking.
+                if (level <= Level.Debug) return false
+            }
 
             if (_blacklistDomain.contains(domain)) return false
             if (_whitelistDomain.isNotEmpty() && !_whitelistDomain.contains(domain)) return false
