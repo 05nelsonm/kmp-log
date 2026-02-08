@@ -368,6 +368,23 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
+    fun givenBuilder_whenBlacklistDomain_thenChecksValidity() {
+        val b = newBuilder()
+        arrayOf<FileLog.Builder.() -> Unit>(
+            { blacklistDomain("") },
+            { blacklistDomain("", "") },
+            { blacklistDomain(listOf("")) },
+        ).forEach { fn ->
+            try {
+                fn(b)
+                fail()
+            } catch (e: IllegalArgumentException) {
+                assertEquals(true, e.message?.startsWith("domain.length[0] < min["))
+            }
+        }
+    }
+
+    @Test
     fun givenBuilder_whenWhitelistDomain_thenChecksValidity() {
         val b = newBuilder()
         arrayOf<FileLog.Builder.() -> Unit>(
@@ -385,20 +402,19 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenBuilder_whenWhitelistTags_thenChecksValidity() {
-        val b = newBuilder()
-        arrayOf<FileLog.Builder.() -> Unit>(
-            { whitelistTag("") },
-            { whitelistTag("", "") },
-            { whitelistTag(listOf("")) },
-        ).forEach { fn ->
-            try {
-                fn(b)
-                fail()
-            } catch (e: IllegalArgumentException) {
-                assertEquals("tag cannot be empty", e.message)
-            }
-        }
+    fun givenBuilder_whenBlacklistDomainReset_thenResetsConfigured() {
+        val b = newBuilder().blacklistDomain("kmp.log")
+        assertEquals(1, b.build().blacklistDomain.size)
+
+        b.blacklistDomainReset()
+        assertEquals(0, b.build().blacklistDomain.size)
+
+        b.blacklistDomain("kmp.log").blacklistDomainNull(deny = true)
+        assertTrue(b.build().blacklistDomainNull)
+
+        // Ensure reset also resets blacklistDomainNull to false
+        b.blacklistDomainReset()
+        assertFalse(b.build().blacklistDomainNull)
     }
 
     @Test
@@ -419,6 +435,49 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
+    fun givenBuilder_whenBlacklistTag_thenChecksValidity() {
+        val b = newBuilder()
+        arrayOf<FileLog.Builder.() -> Unit>(
+            { blacklistTag("") },
+            { blacklistTag("", "") },
+            { blacklistTag(listOf("")) },
+        ).forEach { fn ->
+            try {
+                fn(b)
+                fail()
+            } catch (e: IllegalArgumentException) {
+                assertEquals("tag cannot be empty", e.message)
+            }
+        }
+    }
+
+    @Test
+    fun givenBuilder_whenWhitelistTag_thenChecksValidity() {
+        val b = newBuilder()
+        arrayOf<FileLog.Builder.() -> Unit>(
+            { whitelistTag("") },
+            { whitelistTag("", "") },
+            { whitelistTag(listOf("")) },
+        ).forEach { fn ->
+            try {
+                fn(b)
+                fail()
+            } catch (e: IllegalArgumentException) {
+                assertEquals("tag cannot be empty", e.message)
+            }
+        }
+    }
+
+    @Test
+    fun givenBuilder_whenBlacklistTagReset_thenResetsConfigured() {
+        val b = newBuilder().blacklistTag("something")
+        assertEquals(1, b.build().blacklistTag.size)
+
+        b.blacklistTagReset()
+        assertEquals(0, b.build().blacklistTag.size)
+    }
+
+    @Test
     fun givenBuilder_whenWhitelistTagReset_thenResetsConfigured() {
         val b = newBuilder().whitelistTag("something")
         assertEquals(1, b.build().whitelistTag.size)
@@ -428,7 +487,14 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
-    fun givenWhitelistTags_whenCastAsMutable_thenThrowsClassCastException() {
+    fun givenBlacklistTag_whenCastAsMutable_thenThrowsClassCastException() {
+        val tags = newBuilder().blacklistTag("Tag").build().blacklistTag
+        assertEquals(1, tags.size)
+        assertFailsWith<ClassCastException> { tags as MutableSet<String> }
+    }
+
+    @Test
+    fun givenWhitelistTag_whenCastAsMutable_thenThrowsClassCastException() {
         val tags = newBuilder().whitelistTag("Tag").build().whitelistTag
         assertEquals(1, tags.size)
         assertFailsWith<ClassCastException> { tags as MutableSet<String> }
