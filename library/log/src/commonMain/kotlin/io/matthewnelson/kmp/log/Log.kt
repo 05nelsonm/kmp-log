@@ -1151,18 +1151,20 @@ public abstract class Log {
      * the [Level.Fatal] log, [printStackTrace] will be used to output the error before
      * aborting.
      *
-     * Abort handling is performed in the following manner:
-     *  - Android: [android.util.Log.wtf](https://developer.android.com/reference/android/util/Log#wtf(java.lang.String,%20java.lang.String))
+     * Abort handling is performed in the following platform specific manner:
+     *  - Android:
+     *      + API 8+: [android.util.Log.wtf](https://developer.android.com/reference/android/util/Log#wtf(java.lang.String,%20java.lang.String))
+     *      + API 7-: [Runtime.halt](https://developer.android.com/reference/java/lang/Runtime#halt(int))
      *  - Jvm/AndroidUnitTest: [Runtime.halt](https://docs.oracle.com/javase/8/docs/api/java/lang/Runtime.html#halt-int-)
      *  - Js/WasmJs:
-     *      - Browser: Throw exception
-     *      - Node.js: [process.abort](https://nodejs.org/api/process.html#processabort)
+     *      + Browser: `throw` exception
+     *      + Node.js: [process.abort](https://nodejs.org/api/process.html#processabort)
      *  - WasmWasi: [proc_exit](https://github.com/WebAssembly/WASI/blob/wasi-0.1/preview1/docs.md#-proc_exitrval-exitcode)
      *  - Native:
-     *      - Android:
-     *          - API 30+: [__android_log_call_aborter](https://cs.android.com/android/platform/superproject/+/android-latest-release:system/logging/liblog/include/android/log.h;l=336)
-     *          - API 29-: [abort](https://man7.org/linux/man-pages/man3/abort.3p.html)
-     *      - Darwin/Linux/MinGW: [abort](https://man7.org/linux/man-pages/man3/abort.3p.html)
+     *      + Android:
+     *          + API 30+: [__android_log_call_aborter](https://cs.android.com/android/_/android/platform/system/logging/+/5eae18dc033804219caba52774e575f60a44303e:liblog/include/android/log.h;l=341;bpv=0;bpt=0)
+     *          + API 29-: [abort](https://man7.org/linux/man-pages/man3/abort.3p.html)
+     *      + Darwin/Linux/MinGW: [abort](https://man7.org/linux/man-pages/man3/abort.3p.html)
      * */
     public object AbortHandler: Log(uid = ABORT_HANDLER_UID, min = Level.Fatal) {
 
