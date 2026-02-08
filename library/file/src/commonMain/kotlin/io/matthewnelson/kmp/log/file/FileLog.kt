@@ -515,6 +515,14 @@ public class FileLog: Log {
     public val blacklistDomain: Set<String>
 
     /**
+     * If [Logger.domain] `null` (i.e. no domain) will be denied.
+     *
+     * @see [Builder.blacklistDomainNull]
+     * */
+    @JvmField
+    public val blacklistDomainNull: Boolean
+
+    /**
      * The [Logger.domain] to allow logs from. If empty, all [Logger.domain] are allowed.
      *
      * @see [Builder.whitelistDomain]
@@ -715,7 +723,9 @@ public class FileLog: Log {
 
         /**
          * Format the log entry. Must be thread-safe, fast, non-blocking, and not throw
-         * exception. This will **always** be called from the background thread [FileLog]
+         * exception.
+         *
+         * **NOTE:** This will **always** be called from the background thread [FileLog]
          * is operating on.
          *
          * @param [time] The local date/time recorded when [FileLog.log] was invoked. If
@@ -724,12 +734,12 @@ public class FileLog: Log {
          * @param [pid] The process id. Can be `-1` on Jvm if was unable to obtain it.
          * @param [tid] The thread id recorded when [FileLog.log] was invoked.
          * @param [level] The [Log.Level] of the log.
-         * @param [domain] The [Logger.domain]
+         * @param [domain] The [Logger.domain] or `null`.
          * @param [tag] The [Logger.tag]
          * @param [msg] The log message. Will be `null` or non-empty, never empty.
-         * @param [t] The exception or `null`
+         * @param [t] The exception or `null`.
          *
-         * @return The formatted log to write, or `null` no log needs to be written.
+         * @return The formatted log to write, or `null` if no log needs to be written.
          *
          * @see [Log.log]
          * */
@@ -771,6 +781,11 @@ public class FileLog: Log {
 
             /**
              * Creates a new [ThreadPool] instance.
+             *
+             * **NOTE:** [nThreads] must be appropriate for the number of [FileLog] that will be
+             * utilizing the [ThreadPool], and total amount of work all are expected to be doing.
+             * It is ill-advised to put, say `10` [FileLog], on a [ThreadPool] instantiated with
+             * an [nThreads] of `1`.
              *
              * @param [nThreads] The number of threads to allocate.
              *
@@ -825,6 +840,7 @@ public class FileLog: Log {
         private var _formatter = DEFAULT_FORMATTER
         private var _formatterOmitYear = true
         private val _blacklistDomain = mutableSetOf<String>()
+        private var _blacklistDomainNull = false
         private val _whitelistDomain = mutableSetOf<String>()
         private var _whitelistDomainNull = true
         private val _whitelistTag = mutableSetOf<String>()
@@ -1093,6 +1109,7 @@ public class FileLog: Log {
          *
          * @return The [Builder]
          *
+         * @see [blacklistDomainNull]
          * @see [blacklistDomainReset]
          * @see [whitelistDomain]
          * @see [whitelistDomainNull]
@@ -1113,6 +1130,7 @@ public class FileLog: Log {
          *
          * @return The [Builder]
          *
+         * @see [blacklistDomainNull]
          * @see [blacklistDomainReset]
          * @see [whitelistDomain]
          * @see [whitelistDomainNull]
@@ -1133,6 +1151,7 @@ public class FileLog: Log {
          *
          * @return The [Builder]
          *
+         * @see [blacklistDomainNull]
          * @see [blacklistDomainReset]
          * @see [whitelistDomain]
          * @see [whitelistDomainNull]
@@ -1147,9 +1166,30 @@ public class FileLog: Log {
         }
 
         /**
+         * DEFAULT: `false`
+         *
          * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [blacklistDomain]
+         * @see [blacklistDomainReset]
+         * @see [whitelistDomain]
+         * @see [whitelistDomainNull]
+         * @see [DOMAIN]
          * */
-        public fun blacklistDomainReset(): Builder = apply { _blacklistDomain.clear() }
+        public fun blacklistDomainNull(deny: Boolean): Builder = apply { _blacklistDomainNull = deny }
+
+        /**
+         * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [blacklistDomain]
+         * @see [blacklistDomainNull]
+         * @see [DOMAIN]
+         * */
+        public fun blacklistDomainReset(): Builder = apply { _blacklistDomain.clear() }.blacklistDomainNull(deny = false)
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.domain])
@@ -1161,6 +1201,7 @@ public class FileLog: Log {
          * @see [whitelistDomainNull]
          * @see [whitelistDomainReset]
          * @see [blacklistDomain]
+         * @see [blacklistDomainNull]
          * @see [DOMAIN]
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
@@ -1181,6 +1222,7 @@ public class FileLog: Log {
          * @see [whitelistDomainNull]
          * @see [whitelistDomainReset]
          * @see [blacklistDomain]
+         * @see [blacklistDomainNull]
          * @see [DOMAIN]
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
@@ -1201,6 +1243,7 @@ public class FileLog: Log {
          * @see [whitelistDomainNull]
          * @see [whitelistDomainReset]
          * @see [blacklistDomain]
+         * @see [blacklistDomainNull]
          * @see [DOMAIN]
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
@@ -1220,6 +1263,8 @@ public class FileLog: Log {
          *
          * @see [whitelistDomain]
          * @see [whitelistDomainReset]
+         * @see [blacklistDomain]
+         * @see [blacklistDomainNull]
          * @see [DOMAIN]
          * */
         public fun whitelistDomainNull(allow: Boolean): Builder = apply { _whitelistDomainNull = allow }
@@ -1233,7 +1278,7 @@ public class FileLog: Log {
          * @see [whitelistDomainNull]
          * @see [DOMAIN]
          * */
-        public fun whitelistDomainReset(): Builder = apply { _whitelistDomain.clear() }.whitelistDomainNull(true)
+        public fun whitelistDomainReset(): Builder = apply { _whitelistDomain.clear() }.whitelistDomainNull(allow = true)
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.tag])
@@ -1425,6 +1470,7 @@ public class FileLog: Log {
                 formatter = _formatter,
                 formatterOmitYear = _formatterOmitYear,
                 blacklistDomain = blacklistDomain,
+                blacklistDomainNull = _blacklistDomainNull,
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
                 whitelistTag = whitelistTag,
@@ -1488,6 +1534,7 @@ public class FileLog: Log {
         formatter: Formatter,
         formatterOmitYear: Boolean,
         blacklistDomain: Set<String>,
+        blacklistDomainNull: Boolean,
         whitelistDomain: Set<String>,
         whitelistDomainNull: Boolean,
         whitelistTag: Set<String>,
@@ -1567,6 +1614,7 @@ public class FileLog: Log {
         this.yieldOn = yieldOn
         this.fileLockTimeout = fileLockTimeout
         this.blacklistDomain = blacklistDomain
+        this.blacklistDomainNull = blacklistDomainNull
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull
         this.whitelistTag = whitelistTag
@@ -1575,6 +1623,7 @@ public class FileLog: Log {
     override fun isLoggable(level: Level, domain: String?, tag: String): Boolean {
         // domain
         if (domain == null) {
+            if (blacklistDomainNull) return false
             if (!whitelistDomainNull) return false
         } else {
             // Do not log to self, only to other Log instances (if installed).
