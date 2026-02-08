@@ -55,6 +55,20 @@ class FileLogUnitTest {
     }
 
     @Test
+    fun givenBlacklistDomainNull_whenIsLoggable_thenReturnsExpected() = runTest {
+        withTmpFile { tmp ->
+            val log = FileLog.Builder(tmp.path)
+                .blacklistDomainNull(deny = true)
+                .build()
+
+            log.installAndTest {
+                assertFalse(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
+                assertTrue(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
+            }
+        }
+    }
+
+    @Test
     fun givenWhitelistDomains_whenIsLoggable_thenReturnsExpected() = runTest {
         withTmpFile { tmp ->
             val log = FileLog.Builder(tmp.path)
