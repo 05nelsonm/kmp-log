@@ -523,6 +523,14 @@ public class FileLog: Log {
     public val blacklistDomainNull: Boolean
 
     /**
+     * The [Logger.tag] to deny logs from. If empty, no [Logger.tag] are denied.
+     *
+     * @see [Builder.blacklistTag]
+     * */
+    @JvmField
+    public val blacklistTag: Set<String>
+
+    /**
      * The [Logger.domain] to allow logs from. If empty, all [Logger.domain] are allowed.
      *
      * @see [Builder.whitelistDomain]
@@ -841,6 +849,7 @@ public class FileLog: Log {
         private var _formatterOmitYear = true
         private val _blacklistDomain = mutableSetOf<String>()
         private var _blacklistDomainNull = false
+        private val _blacklistTag = mutableSetOf<String>()
         private val _whitelistDomain = mutableSetOf<String>()
         private var _whitelistDomainNull = true
         private val _whitelistTag = mutableSetOf<String>()
@@ -1103,7 +1112,7 @@ public class FileLog: Log {
         public fun formatOmitYear(omit: Boolean): Builder = apply { _formatterOmitYear = omit }
 
         /**
-         * DEFAULT: empty (i.e. Do not reject any [Logger.domain])
+         * DEFAULT: empty (i.e. Do not deny any [Logger.domain])
          *
          * TODO
          *
@@ -1124,7 +1133,7 @@ public class FileLog: Log {
         }
 
         /**
-         * DEFAULT: empty (i.e. Do not reject any [Logger.domain])
+         * DEFAULT: empty (i.e. Do not deny any [Logger.domain])
          *
          * TODO
          *
@@ -1145,7 +1154,7 @@ public class FileLog: Log {
         }
 
         /**
-         * DEFAULT: empty (i.e. Do not reject any [Logger.domain])
+         * DEFAULT: empty (i.e. Do not deny any [Logger.domain])
          *
          * TODO
          *
@@ -1190,6 +1199,69 @@ public class FileLog: Log {
          * @see [DOMAIN]
          * */
         public fun blacklistDomainReset(): Builder = apply { _blacklistDomain.clear() }.blacklistDomainNull(deny = false)
+
+        /**
+         * DEFAULT: empty (i.e. Do not deny any [Logger.tag])
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [blacklistTagReset]
+         * @see [whitelistTag]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
+         * */
+        public fun blacklistTag(tag: String): Builder {
+            Logger.checkTag(tag)
+            _blacklistTag.add(tag)
+            return this
+        }
+
+        /**
+         * DEFAULT: empty (i.e. Do not deny any [Logger.tag])
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [blacklistTagReset]
+         * @see [whitelistTag]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
+         * */
+        public fun blacklistTag(vararg tags: String): Builder {
+            tags.forEach { tag -> Logger.checkTag(tag) }
+            _blacklistTag.addAll(tags)
+            return this
+        }
+
+        /**
+         * DEFAULT: empty (i.e. Do not deny any [Logger.tag])
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [blacklistTagReset]
+         * @see [whitelistTag]
+         *
+         * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
+         * */
+        public fun blacklistTag(tags: Collection<String>): Builder {
+            tags.forEach { tag -> Logger.checkTag(tag) }
+            _blacklistTag.addAll(tags)
+            return this
+        }
+
+        /**
+         * TODO
+         *
+         * @return The [Builder]
+         *
+         * @see [blacklistTag]
+         * */
+        public fun blacklistTagReset(): Builder = apply { _blacklistTag.clear() }
 
         /**
          * DEFAULT: empty (i.e. Allow all [Logger.domain])
@@ -1288,6 +1360,7 @@ public class FileLog: Log {
          * @return The [Builder]
          *
          * @see [whitelistTagReset]
+         * @see [blacklistTag]
          *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
@@ -1305,6 +1378,7 @@ public class FileLog: Log {
          * @return The [Builder]
          *
          * @see [whitelistTagReset]
+         * @see [blacklistTag]
          *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
@@ -1322,6 +1396,7 @@ public class FileLog: Log {
          * @return The [Builder]
          *
          * @see [whitelistTagReset]
+         * @see [blacklistTag]
          *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
@@ -1370,6 +1445,7 @@ public class FileLog: Log {
             val fileName = _fileName
             val fileExtension = _fileExtension
             val blacklistDomain = _blacklistDomain.toImmutableSet()
+            val blacklistTag = _blacklistTag.toImmutableSet()
             val whitelistDomain = _whitelistDomain.toImmutableSet()
             val whitelistTag = _whitelistTag.toImmutableSet()
             val directory = logDirectory.toFile().canonicalFile2()
@@ -1471,6 +1547,7 @@ public class FileLog: Log {
                 formatterOmitYear = _formatterOmitYear,
                 blacklistDomain = blacklistDomain,
                 blacklistDomainNull = _blacklistDomainNull,
+                blacklistTag = blacklistTag,
                 whitelistDomain = whitelistDomain,
                 whitelistDomainNull = if (whitelistDomain.isEmpty()) true else _whitelistDomainNull,
                 whitelistTag = whitelistTag,
@@ -1498,6 +1575,7 @@ public class FileLog: Log {
 
     private val _blacklistDomain: Array<String>
     private val _whitelistDomain: Array<String>
+    private val _blacklistTag: Array<String>
     private val _whitelistTag: Array<String>
 
     private val LOG: Logger
@@ -1535,6 +1613,7 @@ public class FileLog: Log {
         formatterOmitYear: Boolean,
         blacklistDomain: Set<String>,
         blacklistDomainNull: Boolean,
+        blacklistTag: Set<String>,
         whitelistDomain: Set<String>,
         whitelistDomainNull: Boolean,
         whitelistTag: Set<String>,
@@ -1583,6 +1662,7 @@ public class FileLog: Log {
         this._blacklistDomain = blacklistDomain.toTypedArray()
         this._whitelistDomain = whitelistDomain.toTypedArray()
 
+        this._blacklistTag = blacklistTag.toTypedArray()
         this._whitelistTag = whitelistTag.toTypedArray()
 
         this.debug = debug
@@ -1615,6 +1695,7 @@ public class FileLog: Log {
         this.fileLockTimeout = fileLockTimeout
         this.blacklistDomain = blacklistDomain
         this.blacklistDomainNull = blacklistDomainNull
+        this.blacklistTag = blacklistTag
         this.whitelistDomain = whitelistDomain
         this.whitelistDomainNull = whitelistDomainNull
         this.whitelistTag = whitelistTag
@@ -1634,6 +1715,7 @@ public class FileLog: Log {
         }
 
         // tag
+        if (_blacklistTag.contains(tag)) return false
         if (_whitelistTag.isNotEmpty() && !_whitelistTag.contains(tag)) return false
 
         return _logHandle._get()?.second?.supervisorJob?.isActive ?: false

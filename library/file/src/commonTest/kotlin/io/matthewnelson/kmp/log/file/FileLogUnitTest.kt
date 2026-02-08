@@ -40,7 +40,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class FileLogUnitTest {
 
     @Test
-    fun givenBlacklistDomains_whenIsLoggable_thenReturnsExpected() = runTest {
+    fun givenBlacklistDomain_whenIsLoggable_thenReturnsExpected() = runTest {
         withTmpFile { tmp ->
             val log = FileLog.Builder(tmp.path)
                 .blacklistDomain("blacklist.domain")
@@ -69,7 +69,7 @@ class FileLogUnitTest {
     }
 
     @Test
-    fun givenWhitelistDomains_whenIsLoggable_thenReturnsExpected() = runTest {
+    fun givenWhitelistDomain_whenIsLoggable_thenReturnsExpected() = runTest {
         withTmpFile { tmp ->
             val log = FileLog.Builder(tmp.path)
                 .whitelistDomain("kmp.log")
@@ -99,7 +99,22 @@ class FileLogUnitTest {
     }
 
     @Test
-    fun givenWhitelistTags_whenIsLoggable_thenReturnsExpected() = runTest {
+    fun givenBlacklistTag_whenIsLoggable_thenReturnsExpected() = runTest {
+        withTmpFile { tmp ->
+            val log = FileLog.Builder(tmp.path)
+                .blacklistTag("Tag")
+                .build()
+
+            log.installAndTest {
+                assertFalse(Log.Logger.of(tag = "Tag", domain = null).isLoggable(Level.Error))
+                assertFalse(Log.Logger.of(tag = "Tag", domain = "kmp.log").isLoggable(Level.Error))
+                assertTrue(Log.Logger.of(tag = "NotTag").isLoggable(Level.Error))
+            }
+        }
+    }
+
+    @Test
+    fun givenWhitelistTag_whenIsLoggable_thenReturnsExpected() = runTest {
         withTmpFile { tmp ->
             val log = FileLog.Builder(tmp.path)
                 .whitelistTag("Tag")
@@ -114,7 +129,7 @@ class FileLogUnitTest {
     }
 
     @Test
-    fun givenWhitelistDomainsAndTags_whenIsLoggable_thenReturnsExpected() = runTest {
+    fun givenWhitelistDomainAndTag_whenIsLoggable_thenReturnsExpected() = runTest {
         withTmpFile { tmp ->
             val log = FileLog.Builder(tmp.path)
                 .whitelistDomain("kmp.log")
