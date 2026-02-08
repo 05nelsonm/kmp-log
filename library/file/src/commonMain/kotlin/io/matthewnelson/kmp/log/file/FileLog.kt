@@ -574,6 +574,9 @@ public class FileLog: Log {
     /**
      * Enable/Disable [Level.Debug] logs this instance generates pertaining to its internal operations.
      *
+     * **NOTE:** To capture the logs, a non-[FileLog] implementation of [Log] is required. All [FileLog]
+     * instances deny [Level.Debug] logs from [DOMAIN].
+     *
      * @see [DOMAIN]
      * @see [Builder.debug]
      * */
@@ -1722,8 +1725,13 @@ public class FileLog: Log {
             if (blacklistDomainNull) return false
             if (!whitelistDomainNull) return false
         } else {
-            // Do not log to self, only to other Log instances (if installed).
-            if (domain == DOMAIN && tag == LOG.tag) return false
+            if (domain == DOMAIN) {
+                // Do NOT log to self, only to other Log instances (if installed).
+                if (tag == LOG.tag) return false
+                // Do NOT allow debug logs from other FileLog instances. This would
+                // be severely problematic as FileLog.log exempts DOMAIN from blocking.
+                if (level <= Level.Debug) return false
+            }
 
             if (_blacklistDomain.contains(domain)) return false
             if (_whitelistDomain.isNotEmpty() && !_whitelistDomain.contains(domain)) return false
