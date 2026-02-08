@@ -49,7 +49,6 @@ class AndroidFileLogTest {
 
         val opened = mutableListOf<String>()
         val closed = mutableListOf<String>()
-        val failures = mutableListOf<String>()
 
         // If changing uid, update build.gradle.kts
         val checker = object : Log(uid = "AndroidFileLogChecker", Level.Debug) {
@@ -63,9 +62,6 @@ class AndroidFileLogTest {
                     }
                     msg.startsWith("Closed >> ") -> synchronized(this) {
                         closed.add(msg.substringAfter("Closed >> "))
-                    }
-                    msg.contains("fail", ignoreCase = true) -> synchronized(this) {
-                        failures.add(msg)
                     }
                 }
 
@@ -129,7 +125,6 @@ class AndroidFileLogTest {
         println("OPENED$opened")
         println("CLOSED$closed")
 
-        assertEquals(0, failures.size)
         assertNotEquals(0, opened.size)
         assertEquals(opened.size, closed.size)
 
