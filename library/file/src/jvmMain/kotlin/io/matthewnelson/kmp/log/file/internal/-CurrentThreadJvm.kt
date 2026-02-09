@@ -31,7 +31,9 @@ private val METHOD_THREAD_ID by lazy {
 internal actual fun CurrentThread.id(): Long {
     val thread = Thread.currentThread()
     METHOD_THREAD_ID?.let { threadId ->
-        return threadId.invoke(thread) as Long
+        try {
+            return threadId.invoke(thread) as Long
+        } catch (_: Throwable) {}
     }
 
     @Suppress("DEPRECATION")

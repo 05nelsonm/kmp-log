@@ -30,6 +30,7 @@ import java.nio.channels.FileChannel
 import java.nio.file.InvalidPathException
 import java.nio.file.StandardOpenOption
 
+@Suppress("NewApi")
 internal class DirectoryOpenerNioPosix private constructor(): DirectoryOpener() {
 
     internal companion object {

@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
+@file:Suppress("NOTHING_TO_INLINE")
+
 package io.matthewnelson.kmp.log.file.internal
 
 import io.matthewnelson.kmp.file.ClosedException
@@ -26,7 +28,6 @@ import platform.posix.O_CLOEXEC
 import platform.posix.O_DIRECTORY
 import platform.posix.O_RDONLY
 import platform.posix.errno
-import platform.posix.fsync
 import kotlin.concurrent.AtomicInt
 
 @Throws(IOException::class)
@@ -53,7 +54,7 @@ private class UnixDirectory(fd: Int): Directory() {
         do {
             val fd = _fd.value
             if (fd == -1) throw ClosedException()
-            ret = fsync(fd)
+            ret = unixFsync(fd)
         } while (ret == -1 && errno == EINTR)
         if (ret == -1) throw errnoToIOException(errno)
     }
@@ -67,3 +68,5 @@ private class UnixDirectory(fd: Int): Directory() {
 
     override fun toString(): String = "UnixDirectory@${hashCode()}"
 }
+
+internal expect inline fun unixFsync(fd: Int): Int
