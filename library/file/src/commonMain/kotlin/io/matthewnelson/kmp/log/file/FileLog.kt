@@ -449,7 +449,9 @@ public class FileLog: Log {
     public val maxLogFileSize: Long
 
     /**
-     * The permissions to use for [File.mkdirs2] when creating [logDirectory].
+     * The permissions to use for [File.mkdirs2] when creating [logDirectory], and any necessary
+     * subdirectories. If [logDirectory] already exists, then permissions are re-applied to the
+     * [logDirectory] via [File.chmod2] at time of [Log.Root.install].
      *
      * @see [File.chmod2]
      * @see [Builder.directoryGroupReadable]
