@@ -35,6 +35,7 @@ import io.matthewnelson.kmp.file.FileStream
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.NotDirectoryException
 import io.matthewnelson.kmp.file.OpenExcl
+import io.matthewnelson.kmp.file.SysFsInfo
 import io.matthewnelson.kmp.file.canonicalFile2
 import io.matthewnelson.kmp.file.chmod2
 import io.matthewnelson.kmp.file.delete2
@@ -2026,7 +2027,8 @@ public class FileLog: Log {
                 logD { "Created directory (and any required subdirectories) ${directory.name}" }
                 false
             } catch (_: FileAlreadyExistsException) {
-                true
+                // Directory permissions are not a thing on Windows.
+                SysFsInfo.isPosix
             }
 
             run {
