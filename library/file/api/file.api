@@ -45,6 +45,8 @@ public final class io/matthewnelson/kmp/log/file/FileLog$Builder {
 	public final fun bufferCapacity (I)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun bufferOverflow (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun build ()Lio/matthewnelson/kmp/log/file/FileLog;
+	public final fun copy ()Lio/matthewnelson/kmp/log/file/FileLog$Builder;
+	public final fun copy (Ljava/lang/String;)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun debug (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun directoryGroupReadable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
 	public final fun directoryGroupWritable (Z)Lio/matthewnelson/kmp/log/file/FileLog$Builder;
