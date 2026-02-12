@@ -2021,18 +2021,12 @@ public class FileLog: Log {
                 awaitAndCancel(previousLogJob, timeout = 25.milliseconds, canceledBy = { "new $LOG_JOB >> $logJob" })
             }
 
-            try {
+            val applyDirectoryPermissions = try {
                 directory.mkdirs2(mode = modeDirectory, mustCreate = true)
                 logD { "Created directory (and any required subdirectories) ${directory.name}" }
-            } catch (e: FileAlreadyExistsException) {
-                try {
-                    directory.chmod2(mode = modeDirectory)
-                    logD { "Applied permissions $modeDirectory to ${directory.name}" }
-                } catch (ee: IOException) {
-                    ee.addSuppressed(e)
-                    // Try continuing such that failure occurs at lock/log file open.
-                    logW(ee) { "Failed to apply permissions $modeDirectory to directory ${directory.name}" }
-                }
+                false
+            } catch (_: FileAlreadyExistsException) {
+                true
             }
 
             run {
@@ -2046,6 +2040,14 @@ public class FileLog: Log {
                     //   the same log file leading to data corruption.
                     throw IllegalStateException("Symbolic link hijacking detected >> [$canonical] != [$directory]")
                 }
+            }
+
+            if (applyDirectoryPermissions) try {
+                directory.chmod2(mode = modeDirectory)
+                logD { "Applied permissions $modeDirectory to directory ${directory.name}" }
+            } catch (e: IOException) {
+                // Try continuing such that failure occurs at lock/log file open.
+                logW(e) { "Failed to apply permissions $modeDirectory to directory ${directory.name}" }
             }
 
             try {
