@@ -29,6 +29,7 @@ import io.matthewnelson.immutable.collections.toImmutableSet
 import io.matthewnelson.kmp.file.Closeable
 import io.matthewnelson.kmp.file.DirectoryNotEmptyException
 import io.matthewnelson.kmp.file.File
+import io.matthewnelson.kmp.file.FileAlreadyExistsException
 import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.FileStream
 import io.matthewnelson.kmp.file.IOException
@@ -2020,7 +2021,19 @@ public class FileLog: Log {
                 awaitAndCancel(previousLogJob, timeout = 25.milliseconds, canceledBy = { "new $LOG_JOB >> $logJob" })
             }
 
-            directory.mkdirs2(mode = modeDirectory, mustCreate = false)
+            try {
+                directory.mkdirs2(mode = modeDirectory, mustCreate = true)
+                logD { "Created directory (and any required subdirectories) ${directory.name}" }
+            } catch (e: FileAlreadyExistsException) {
+                try {
+                    directory.chmod2(mode = modeDirectory)
+                    logD { "Applied permissions $modeDirectory to ${directory.name}" }
+                } catch (ee: IOException) {
+                    ee.addSuppressed(e)
+                    // Try continuing such that failure occurs at lock/log file open.
+                    logW(ee) { "Failed to apply permissions $modeDirectory to directory ${directory.name}" }
+                }
+            }
 
             run {
                 val canonical = directory.canonicalFile2()
