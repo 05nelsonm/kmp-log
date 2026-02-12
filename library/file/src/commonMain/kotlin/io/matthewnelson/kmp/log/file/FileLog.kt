@@ -510,6 +510,15 @@ public class FileLog: Log {
     public val yieldOn: Byte
 
     /**
+     * If `true`, [FileStream.sync] will be called after every write to the log file. Otherwise,
+     * [FileStream.sync] behavior will defer to [yieldOn].
+     *
+     * @see [Builder.syncEachWrite]
+     * */
+    @JvmField
+    public val syncEachWrite: Boolean
+
+    /**
      * The timeout, in milliseconds, to use when acquiring a [File] lock.
      *
      * **NOTE:** If `-1`, [File] lock use was disabled via [Builder.fileLock]. Otherwise,
@@ -860,6 +869,7 @@ public class FileLog: Log {
         private var _bufferOverflowDropOldest = false
         private var _minWaitOn = Level.Verbose
         private var _yieldOn: Byte = 2
+        private var _syncEachWrite = false
         private var _fileLockEnable = true
         private var _fileLockTimeout = -1L
         private var _threadPool: ThreadPool? = null
@@ -973,30 +983,30 @@ public class FileLog: Log {
          *
          * Configure the log file name.
          *
-         * @param [name] The name to use for the log file.
+         * @param [value] The name to use for the log file.
          *
          * @return The [Builder]
          *
          * @throws [IllegalArgumentException] When:
-         *  - [name] is empty
-         *  - [name] is greater than `64` characters in length
-         *  - [name] ends with character `.`
-         *  - [name] contains whitespace
-         *  - [name] contains character `/`
-         *  - [name] contains character `\`
-         *  - [name] contains null character `\u0000`
+         *  - [value] is empty
+         *  - [value] is greater than `64` characters in length
+         *  - [value] ends with character `.`
+         *  - [value] contains whitespace
+         *  - [value] contains character `/`
+         *  - [value] contains character `\`
+         *  - [value] contains null character `\u0000`
          * */
-        public fun fileName(name: String): Builder {
-            require(name.isNotEmpty()) { "fileName cannot be empty" }
-            require(name.length <= 64) { "fileName cannot exceed 64 characters" }
-            require(!name.endsWith('.')) { "fileName cannot end with '.'" }
-            name.forEach { c ->
+        public fun fileName(value: String): Builder {
+            require(value.isNotEmpty()) { "fileName cannot be empty" }
+            require(value.length <= 64) { "fileName cannot exceed 64 characters" }
+            require(!value.endsWith('.')) { "fileName cannot end with '.'" }
+            value.forEach { c ->
                 require(!c.isWhitespace()) { "fileName cannot contain whitespace" }
                 require(c != '/') { "fileName cannot contain '/'" }
                 require(c != '\\') { "fileName cannot contain '\\'" }
                 require(c != '\u0000') { "fileName cannot contain null character '\\u0000'" }
             }
-            _fileName = name
+            _fileName = value
             return this
         }
 
@@ -1005,28 +1015,28 @@ public class FileLog: Log {
          *
          * Configure the log file extension name.
          *
-         * @param [name] The name to use for the log file extension, or empty for no extension.
+         * @param [value] The name to use for the log file extension, or empty for no extension.
          *
          * @return The [Builder]
          *
          * @throws [IllegalArgumentException] When:
-         *  - [name] is greater than `8` characters in length
-         *  - [name] contains whitespace
-         *  - [name] contains character `.`
-         *  - [name] contains character `/`
-         *  - [name] contains character `\`
-         *  - [name] contains null character `\u0000`
+         *  - [value] is greater than `8` characters in length
+         *  - [value] contains whitespace
+         *  - [value] contains character `.`
+         *  - [value] contains character `/`
+         *  - [value] contains character `\`
+         *  - [value] contains null character `\u0000`
          * */
-        public fun fileExtension(name: String): Builder {
-            require(name.length <= 8) { "fileExtension cannot exceed 8 characters" }
-            name.forEach { c ->
+        public fun fileExtension(value: String): Builder {
+            require(value.length <= 8) { "fileExtension cannot exceed 8 characters" }
+            value.forEach { c ->
                 require(!c.isWhitespace()) { "fileExtension cannot contain whitespace" }
                 require(c != '.') { "fileExtension cannot contain '.'" }
                 require(c != '/') { "fileExtension cannot contain '/'" }
                 require(c != '\\') { "fileExtension cannot contain '\\'" }
                 require(c != '\u0000') { "fileExtension cannot contain null character '\\u0000'" }
             }
-            _fileExtension = name
+            _fileExtension = value
             return this
         }
 
@@ -1085,6 +1095,15 @@ public class FileLog: Log {
         public fun yieldOn(nLogs: Byte): Builder = apply { _yieldOn = nLogs }
 
         /**
+         * DEFAULT: `false`
+         *
+         * TODO
+         *
+         * @return The [Builder]
+         * */
+        public fun syncEachWrite(enable: Boolean): Builder = apply { _syncEachWrite = enable }
+
+        /**
          * DEFAULT: `true` (i.e. Use [File] locks)
          *
          * TODO
@@ -1103,7 +1122,7 @@ public class FileLog: Log {
         public fun fileLockTimeout(millis: Long): Builder = apply { _fileLockTimeout = millis }
 
         /**
-         * DEFAULT: `null` (i.e. Use a single dedicated thread)
+         * DEFAULT: `null` (i.e. Use a single, dedicated thread)
          *
          * TODO
          *
@@ -1144,9 +1163,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun blacklistDomain(domain: String): Builder {
-            Logger.checkDomain(domain)
-            _blacklistDomain.add(domain)
+        public fun blacklistDomain(deny: String): Builder {
+            Logger.checkDomain(deny)
+            _blacklistDomain.add(deny)
             return this
         }
 
@@ -1165,9 +1184,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun blacklistDomain(vararg domains: String): Builder {
-            domains.forEach { domain -> Logger.checkDomain(domain) }
-            _blacklistDomain.addAll(domains)
+        public fun blacklistDomain(vararg deny: String): Builder {
+            deny.forEach { domain -> Logger.checkDomain(domain) }
+            _blacklistDomain.addAll(deny)
             return this
         }
 
@@ -1186,9 +1205,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun blacklistDomain(domains: Collection<String>): Builder {
-            domains.forEach { domain -> Logger.checkDomain(domain) }
-            _blacklistDomain.addAll(domains)
+        public fun blacklistDomain(deny: Collection<String>): Builder {
+            deny.forEach { domain -> Logger.checkDomain(domain) }
+            _blacklistDomain.addAll(deny)
             return this
         }
 
@@ -1230,9 +1249,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun blacklistTag(tag: String): Builder {
-            Logger.checkTag(tag)
-            _blacklistTag.add(tag)
+        public fun blacklistTag(deny: String): Builder {
+            Logger.checkTag(deny)
+            _blacklistTag.add(deny)
             return this
         }
 
@@ -1248,9 +1267,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun blacklistTag(vararg tags: String): Builder {
-            tags.forEach { tag -> Logger.checkTag(tag) }
-            _blacklistTag.addAll(tags)
+        public fun blacklistTag(vararg deny: String): Builder {
+            deny.forEach { tag -> Logger.checkTag(tag) }
+            _blacklistTag.addAll(deny)
             return this
         }
 
@@ -1266,9 +1285,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun blacklistTag(tags: Collection<String>): Builder {
-            tags.forEach { tag -> Logger.checkTag(tag) }
-            _blacklistTag.addAll(tags)
+        public fun blacklistTag(deny: Collection<String>): Builder {
+            deny.forEach { tag -> Logger.checkTag(tag) }
+            _blacklistTag.addAll(deny)
             return this
         }
 
@@ -1296,9 +1315,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun whitelistDomain(domain: String): Builder {
-            Logger.checkDomain(domain)
-            _whitelistDomain.add(domain)
+        public fun whitelistDomain(allow: String): Builder {
+            Logger.checkDomain(allow)
+            _whitelistDomain.add(allow)
             return this
         }
 
@@ -1317,9 +1336,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun whitelistDomain(vararg domains: String): Builder {
-            domains.forEach { domain -> Logger.checkDomain(domain) }
-            _whitelistDomain.addAll(domains)
+        public fun whitelistDomain(vararg allow: String): Builder {
+            allow.forEach { domain -> Logger.checkDomain(domain) }
+            _whitelistDomain.addAll(allow)
             return this
         }
 
@@ -1338,9 +1357,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkDomain] fails.
          * */
-        public fun whitelistDomain(domains: Collection<String>): Builder {
-            domains.forEach { domain -> Logger.checkDomain(domain) }
-            _whitelistDomain.addAll(domains)
+        public fun whitelistDomain(allow: Collection<String>): Builder {
+            allow.forEach { domain -> Logger.checkDomain(domain) }
+            _whitelistDomain.addAll(allow)
             return this
         }
 
@@ -1382,9 +1401,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun whitelistTag(tag: String): Builder {
-            Logger.checkTag(tag)
-            _whitelistTag.add(tag)
+        public fun whitelistTag(allow: String): Builder {
+            Logger.checkTag(allow)
+            _whitelistTag.add(allow)
             return this
         }
 
@@ -1400,9 +1419,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun whitelistTag(vararg tags: String): Builder {
-            tags.forEach { tag -> Logger.checkTag(tag) }
-            _whitelistTag.addAll(tags)
+        public fun whitelistTag(vararg allow: String): Builder {
+            allow.forEach { tag -> Logger.checkTag(tag) }
+            _whitelistTag.addAll(allow)
             return this
         }
 
@@ -1418,9 +1437,9 @@ public class FileLog: Log {
          *
          * @throws [IllegalArgumentException] If [Logger.checkTag] fails.
          * */
-        public fun whitelistTag(tags: Collection<String>): Builder {
-            tags.forEach { tag -> Logger.checkTag(tag) }
-            _whitelistTag.addAll(tags)
+        public fun whitelistTag(allow: Collection<String>): Builder {
+            allow.forEach { tag -> Logger.checkTag(tag) }
+            _whitelistTag.addAll(allow)
             return this
         }
 
@@ -1559,6 +1578,7 @@ public class FileLog: Log {
                 bufferOverflowDropOldest = bufferOverflowDropOldest,
                 minWaitOn = minWaitOn,
                 yieldOn = yieldOn,
+                syncEachWrite = _syncEachWrite,
                 fileLockTimeout = fileLockTimeout,
                 threadPool = _threadPool as? RealThreadPool,
                 formatter = _formatter,
@@ -1625,6 +1645,7 @@ public class FileLog: Log {
         bufferOverflowDropOldest: Boolean,
         minWaitOn: Level,
         yieldOn: Byte,
+        syncEachWrite: Boolean,
         fileLockTimeout: Long,
         threadPool: RealThreadPool?,
         formatter: Formatter,
@@ -1710,6 +1731,7 @@ public class FileLog: Log {
         this.bufferOverflowDropOldest = bufferOverflowDropOldest
         this.minWaitOn = minWaitOn
         this.yieldOn = yieldOn
+        this.syncEachWrite = syncEachWrite
         this.fileLockTimeout = fileLockTimeout
         this.blacklistDomain = blacklistDomain
         this.blacklistDomainNull = blacklistDomainNull
@@ -1821,17 +1843,7 @@ public class FileLog: Log {
                 if (preprocessingResult == null) {
                     if (level == Level.Fatal) {
                         // fsync no matter what before the process is aborted.
-                        try {
-                            stream.sync(meta = true)
-                        } catch (e: IOException) {
-                            // Try to force it by closing.
-                            try {
-                                stream.close()
-                            } catch (ee: IOException) {
-                                e.addSuppressed(ee)
-                            }
-                            threw?.addSuppressed(e)
-                        }
+                        stream.doSync(log = false, threw = threw)
                     }
 
                     _pendingLogCount._decrementAndGet()
@@ -1875,21 +1887,10 @@ public class FileLog: Log {
                 } catch (t: Throwable) {
                     threw = t
                     0L
-                } finally {
-                    if (level == Level.Fatal) {
-                        // fsync no matter what before the process is aborted.
-                        try {
-                            stream.sync(meta = true)
-                        } catch (e: IOException) {
-                            // Try to force it by closing.
-                            try {
-                                stream.close()
-                            } catch (ee: IOException) {
-                                e.addSuppressed(ee)
-                            }
-                            threw?.addSuppressed(e)
-                        }
-                    }
+                }
+
+                if (syncEachWrite || level == Level.Fatal) {
+                    stream.doSync(log = level != Level.Fatal, threw = threw)
                 }
 
                 _pendingLogCount._decrementAndGet()
@@ -2430,26 +2431,9 @@ public class FileLog: Log {
             }
 
             if (processedWrites > 0) {
-                if (logStream.isOpen()) {
-                    // Ensure everything is synced to disk before going further,
-                    // either to do a log rotation or release lockLog for another
-                    // process to pickup.
-                    logD { "Syncing ${files[0].name}" }
-                    try {
-                        CurrentThread.uninterrupted {
-                            logStream.sync(meta = true)
-                        }
-                    } catch (e: IOException) {
-                        // Try to force it by closing. logStream will be
-                        // re-opened on the next logLoop iteration.
-                        try {
-                            logStream.close()
-                        } catch (ee: IOException) {
-                            e.addSuppressed(ee)
-                        }
-                        logW(e) { "Sync failure >> $logStream" }
-                    }
-                }
+                if (!syncEachWrite) logStream.doSync(sync = {
+                    CurrentThread.uninterrupted { sync(meta = true) }
+                })
 
                 logD { "Processed $processedWrites log(s)" }
             }
@@ -2765,21 +2749,7 @@ public class FileLog: Log {
                     // (all data has been pushed to disk already because the sync was
                     // performed here and then the inner loop popped out as a result
                     // of losing lockLog).
-                    if (processedWrites > 0 && stream.isOpen()) {
-                        logD { "Syncing ${files[0].name}" }
-                        try {
-                            stream.sync(meta = true)
-                        } catch (e: IOException) {
-                            // Try to force it by closing. logStream will be
-                            // re-opened on the next logLoop iteration.
-                            try {
-                                stream.close()
-                            } catch (ee: IOException) {
-                                e.addSuppressed(ee)
-                            }
-                            logW(e) { "Sync failure >> $stream" }
-                        }
-                    }
+                    if (processedWrites > 0 && !syncEachWrite) stream.doSync()
 
                     try {
                         // Close the lock file (if not already). Next logLoop iteration
@@ -2887,9 +2857,9 @@ public class FileLog: Log {
         openDir.firstOrNull()?.let { (dir, handle) ->
             if (!dir.isOpen()) return@let // Directory.NoOp
 
-            logD { "Syncing directory ${directory.name}" }
             try {
                 dir.sync()
+                logD { "Synced directory ${directory.name}" }
             } catch (e: IOException) {
                 val ee: IOException? = try {
                     dir.close()
@@ -3168,45 +3138,24 @@ public class FileLog: Log {
     private fun truncate0AndSync(logStream: FileStream.ReadWrite, file: File) {
         try {
             logStream.size(new = 0L)
-
-            logD { "Syncing ${file.name}" }
-            try {
-                logStream.sync(meta = true)
-            } catch (e: IOException) {
-                logW(e) { "Sync failure >> $logStream" }
-                // Will be closed in catch block below which will
-                // hopefully force it to the filesystem, in addition
-                // to trying an alternative truncation method.
-                throw e
-            }
-
             logD { "Truncated ${file.name} to 0" }
+            logStream.doSync(throwOnFailure = true)
         } catch (e: IOException) {
-            try {
-                logStream.close()
-            } catch (ee: IOException) {
-                e.addSuppressed(ee)
-            }
-
             // Try a different way.
             var s: FileStream.Write? = null
             try {
                 // O_TRUNC
                 s = file.openWrite(excl = OpenExcl.MustExist)
                 logD { "Opened >> $s" }
-
-                logD { "Syncing ${file.name}" }
-                try {
-                    s.sync(meta = true)
-                } catch (ee: IOException) {
-                    // Truncation succeeded, but our sync did not. Just
-                    // go with it at this point and hope for the best.
-                    // The finally block will close this FileStream.Write,
-                    // so hopefully that forces it to the filesystem.
-                    logW(ee) { "Sync failure >> $s" }
-                }
-
                 logD { "Truncated ${file.name} to 0" }
+
+                s.doSync(
+                    // If we fail, truncation succeeded via openWrite, but our sync did
+                    // not. Just go with it at this point and hope for the best. The
+                    // finally block will close this FileStream.Write, so hopefully
+                    // that forces it to the filesystem.
+                    throwOnFailure = false,
+                )
             } catch (ee: IOException) {
                 // openWrite failed
                 e.addSuppressed(ee)
@@ -3266,9 +3215,9 @@ public class FileLog: Log {
                 logD { "Moved ${source.name} >> ${dest.name}" }
 
                 if (logDir != null && logDir.isOpen()) {
-                    logD { "Syncing directory ${directory.name}" }
                     try {
                         logDir.sync()
+                        logD { "Synced directory ${directory.name}" }
                     } catch (e: IOException) {
                         // If we failed and there are still moves left to execute,
                         // ensure a final attempt to sync the directory is made after
@@ -3351,9 +3300,9 @@ public class FileLog: Log {
 
             thisJob.closeOnCompletion(newLogDir)
 
-            logD { "Syncing directory ${directory.name}" }
             try {
                 newLogDir.sync()
+                logD { "Synced directory ${directory.name}" }
             } catch (e: IOException) {
                 logW(e) { "Sync failure >> $newLogDir" }
             }
@@ -3413,18 +3362,54 @@ public class FileLog: Log {
         }
     }
 
+    @Throws(IOException::class) // Only if throwOnFailure == true
+    @OptIn(ExperimentalContracts::class)
+    private inline fun FileStream.Write.doSync(
+        log: Boolean = true,
+        threw: Throwable? = null,
+        throwOnFailure: Boolean = false,
+        sync: FileStream.() -> Unit = { sync(meta = true) },
+    ) {
+        contract { callsInPlace(sync, InvocationKind.AT_MOST_ONCE) }
+        if (!isOpen()) return
+
+        try {
+            sync()
+        } catch (e: IOException) {
+            // Try to force it by closing. logStream will be
+            // re-opened on the next logLoop iteration.
+            try {
+                close()
+            } catch (ee: IOException) {
+                e.addSuppressed(ee)
+            }
+            if (log) logW(e) { "Sync failure >> $this" }
+            threw?.addSuppressed(e)
+            if (throwOnFailure) throw e
+            return
+        }
+
+        // Assumes stream belongs to the active log file...
+        if (log) logD { "Synced ${files[0].name}" }
+    }
+
     @OptIn(ExperimentalContracts::class)
     private inline fun FileLock.doRelease(onFailure: (e: IOException) -> Unit) {
         contract { callsInPlace(onFailure, InvocationKind.AT_MOST_ONCE) }
-        if (isValid()) try {
+        if (!isValid()) return
+
+        try {
             release()
-            logD {
-                if (this is StubFileLock) null
-                else "Released lock on ${dotLockFile.name} >> $this"
-            }
         } catch (e: IOException) {
             onFailure(e)
             logW(e) { "Lock release failure >> $this" }
+            return
+        }
+
+        logD {
+            if (this is StubFileLock) null
+            // Assume lock belongs to active lock file...
+            else "Released lock on ${dotLockFile.name} >> $this"
         }
     }
 
