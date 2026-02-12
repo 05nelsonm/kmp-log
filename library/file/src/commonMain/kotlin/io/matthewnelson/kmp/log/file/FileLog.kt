@@ -29,11 +29,13 @@ import io.matthewnelson.immutable.collections.toImmutableSet
 import io.matthewnelson.kmp.file.Closeable
 import io.matthewnelson.kmp.file.DirectoryNotEmptyException
 import io.matthewnelson.kmp.file.File
+import io.matthewnelson.kmp.file.FileAlreadyExistsException
 import io.matthewnelson.kmp.file.FileNotFoundException
 import io.matthewnelson.kmp.file.FileStream
 import io.matthewnelson.kmp.file.IOException
 import io.matthewnelson.kmp.file.NotDirectoryException
 import io.matthewnelson.kmp.file.OpenExcl
+import io.matthewnelson.kmp.file.SysFsInfo
 import io.matthewnelson.kmp.file.canonicalFile2
 import io.matthewnelson.kmp.file.chmod2
 import io.matthewnelson.kmp.file.delete2
@@ -447,7 +449,9 @@ public class FileLog: Log {
     public val maxLogFileSize: Long
 
     /**
-     * The permissions to use for [File.mkdirs2] when creating [logDirectory].
+     * The permissions to use for [File.mkdirs2] when creating [logDirectory], and any necessary
+     * subdirectories. If [logDirectory] already exists, then permissions are re-applied to the
+     * [logDirectory] via [File.chmod2] at time of [Log.Root.install].
      *
      * @see [File.chmod2]
      * @see [Builder.directoryGroupReadable]
@@ -2020,9 +2024,15 @@ public class FileLog: Log {
                 awaitAndCancel(previousLogJob, timeout = 25.milliseconds, canceledBy = { "new $LOG_JOB >> $logJob" })
             }
 
-            directory.mkdirs2(mode = modeDirectory, mustCreate = false)
+            val wasDirectoryCreated = try {
+                directory.mkdirs2(mode = modeDirectory, mustCreate = true)
+                logD { "Created directory (and any required subdirectories) ${directory.name}" }
+                true
+            } catch (_: FileAlreadyExistsException) {
+                false
+            }
 
-            run {
+            if (!wasDirectoryCreated) {
                 val canonical = directory.canonicalFile2()
                 if (canonical != directory) {
                     // FAIL:
@@ -2035,7 +2045,16 @@ public class FileLog: Log {
                 }
             }
 
-            try {
+            // Directory permissions are not a thing on Windows.
+            if (!wasDirectoryCreated && SysFsInfo.isPosix) try {
+                directory.chmod2(mode = modeDirectory)
+                logD { "Applied permissions $modeDirectory to directory ${directory.name}" }
+            } catch (e: IOException) {
+                // Try continuing such that failure occurs at lock/log file open.
+                logW(e) { "Failed to apply permissions $modeDirectory to directory ${directory.name}" }
+            }
+
+            if (!wasDirectoryCreated) try {
                 // Some systems, such as macOS, have highly unreliable fcntl byte-range file lock
                 // behavior when the target is a symbolic link. We want no part in that and require
                 // the lock file to be a regular file.
@@ -2057,7 +2076,7 @@ public class FileLog: Log {
 
             val lockFileCompletion = logJob.closeOnCompletion(lockFile)
 
-            try {
+            if (!wasDirectoryCreated) try {
                 val canonical = files[0].canonicalFile2()
                 if (canonical != files[0]) {
                     logW { "Symbolic link detected >> [$canonical] != [${files[0]}]" }
@@ -3141,6 +3160,14 @@ public class FileLog: Log {
             logD { "Truncated ${file.name} to 0" }
             logStream.doSync(throwOnFailure = true)
         } catch (e: IOException) {
+            try {
+                // FileStream.Write.size may have failed and it is still open.
+                // Make certain that it is closed before going forward.
+                logStream.close()
+            } catch (ee: IOException) {
+                e.addSuppressed(ee)
+            }
+
             // Try a different way.
             var s: FileStream.Write? = null
             try {
