@@ -42,7 +42,7 @@ private val LOG_TIME_FORMAT_YEAR_YES = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS
 private const val PID_UNKNOWN = -1
 private const val PROCFS_SELF = "/proc/self"
 
-// https://github.com/05nelsonm/kmp-process/blob/master/library/process/src/jvmMain/kotlin/io/matthewnelson/kmp/process/internal/-PID.kt
+// https://github.com/05nelsonm/kmp-process/blob/4b7b62bf3cc68463f35d5d404a0fdc63977e5b92/library/process/src/jvmMain/kotlin/io/matthewnelson/kmp/process/internal/-JvmPlatform.kt#L59
 private val JVM_PID: Int by lazy {
     if (ANDROID.SDK_INT != null) return@lazy try {
         Class.forName("android.os.Process")

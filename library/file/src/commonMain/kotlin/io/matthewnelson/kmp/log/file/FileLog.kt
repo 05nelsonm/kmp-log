@@ -861,10 +861,11 @@ public class FileLog: Log {
         public val logDirectory: String,
     ) {
 
+        // NOTE: If adding anything, update copy function.
         private var _min = Level.Info
         private var _max = Level.Fatal
-        private var _modeDirectory = ModeBuilder.of(isDirectory = true)
-        private var _modeFile = ModeBuilder.of(isDirectory = false)
+        private val _modeDirectory = ModeBuilder.of(isDirectory = true)
+        private val _modeFile = ModeBuilder.of(isDirectory = false)
         private var _fileName = "log"
         private var _fileExtension = ""
         private var _maxLogFileSize = (if (isDesktop()) 10L else 5L) * 1024L * 1024L // 10 Mb or 5 Mb
@@ -887,6 +888,58 @@ public class FileLog: Log {
         private val _whitelistTag = mutableSetOf<String>()
         private var _debug = false
         private var _warn = true
+
+        /**
+         * Copies this [Builder] and all of its current settings to a new one.
+         *
+         * @return A new [Builder]
+         * */
+        public inline fun copy(): Builder = copy(logDirectory = null)
+
+        /**
+         * Copies this [Builder] and all of its current settings to a new one.
+         *
+         * @param [logDirectory] The new [Builder.logDirectory] to use, or `null` to use
+         * the current [Builder.logDirectory].
+         *
+         * @return A new [Builder]
+         * */
+        public fun copy(logDirectory: String?): Builder {
+            val new = Builder(logDirectory ?: this.logDirectory)
+            new._min = _min
+            new._max = _max
+            new._modeDirectory.groupRead = _modeDirectory.groupRead
+            new._modeDirectory.groupWrite = _modeDirectory.groupWrite
+            new._modeDirectory.otherRead = _modeDirectory.otherRead
+            new._modeDirectory.otherWrite = _modeDirectory.otherWrite
+            new._modeFile.groupRead = _modeFile.groupRead
+            new._modeFile.groupWrite = _modeFile.groupWrite
+            new._modeFile.otherRead = _modeFile.otherRead
+            new._modeFile.otherWrite = _modeFile.otherWrite
+            new._fileName = _fileName
+            new._fileExtension = _fileExtension
+            new._maxLogFileSize = _maxLogFileSize
+            new._maxLogFiles = _maxLogFiles
+            new._bufferCapacity = _bufferCapacity
+            new._bufferOverflowDropOldest = _bufferOverflowDropOldest
+            new._minWaitOn = _minWaitOn
+            new._yieldOn = _yieldOn
+            new._syncEachWrite = _syncEachWrite
+            new._fileLockEnable = _fileLockEnable
+            new._fileLockTimeout = _fileLockTimeout
+            new._threadPool = _threadPool
+            new._formatter = _formatter
+            new._formatterOmitYear = _formatterOmitYear
+            new._blacklistDomain.addAll(_blacklistDomain)
+            new._blacklistDomainNull = _blacklistDomainNull
+            new._blacklistTag.addAll(_blacklistTag)
+            new._whitelistDomain.addAll(_whitelistDomain)
+            new._whitelistDomainNull = _whitelistDomainNull
+            new._whitelistTag.addAll(_whitelistTag)
+            new._debug = _debug
+            new._warn = _warn
+            return new
+        }
 
         /**
          * DEFAULT: [Level.Info]
@@ -3158,7 +3211,7 @@ public class FileLog: Log {
         try {
             logStream.size(new = 0L)
             logD { "Truncated ${file.name} to 0" }
-            logStream.doSync(throwOnFailure = true)
+            logStream.doSync(file = file, throwOnFailure = true)
         } catch (e: IOException) {
             try {
                 // FileStream.Write.size may have failed and it is still open.
@@ -3177,6 +3230,7 @@ public class FileLog: Log {
                 logD { "Truncated ${file.name} to 0" }
 
                 s.doSync(
+                    file = file,
                     // If we fail, truncation succeeded via openWrite, but our sync did
                     // not. Just go with it at this point and hope for the best. The
                     // finally block will close this FileStream.Write, so hopefully
@@ -3394,8 +3448,9 @@ public class FileLog: Log {
     private inline fun FileStream.Write.doSync(
         log: Boolean = true,
         threw: Throwable? = null,
+        file: File = files[0],
         throwOnFailure: Boolean = false,
-        sync: FileStream.() -> Unit = { sync(meta = true) },
+        sync: FileStream.Write.() -> Unit = { sync(meta = true) },
     ) {
         contract { callsInPlace(sync, InvocationKind.AT_MOST_ONCE) }
         if (!isOpen()) return
@@ -3416,8 +3471,7 @@ public class FileLog: Log {
             return
         }
 
-        // Assumes stream belongs to the active log file...
-        if (log) logD { "Synced ${files[0].name}" }
+        if (log) logD { "Synced ${file.name}" }
     }
 
     @OptIn(ExperimentalContracts::class)
