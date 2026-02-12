@@ -3154,6 +3154,14 @@ public class FileLog: Log {
             logD { "Truncated ${file.name} to 0" }
             logStream.doSync(throwOnFailure = true)
         } catch (e: IOException) {
+            try {
+                // FileStream.Write.size may have failed and it is still open.
+                // Make certain that it is closed before going forward.
+                logStream.close()
+            } catch (ee: IOException) {
+                e.addSuppressed(ee)
+            }
+
             // Try a different way.
             var s: FileStream.Write? = null
             try {
