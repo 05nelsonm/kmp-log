@@ -2022,16 +2022,15 @@ public class FileLog: Log {
                 awaitAndCancel(previousLogJob, timeout = 25.milliseconds, canceledBy = { "new $LOG_JOB >> $logJob" })
             }
 
-            val applyDirectoryPermissions = try {
+            val wasDirectoryCreated = try {
                 directory.mkdirs2(mode = modeDirectory, mustCreate = true)
                 logD { "Created directory (and any required subdirectories) ${directory.name}" }
-                false
+                true
             } catch (_: FileAlreadyExistsException) {
-                // Directory permissions are not a thing on Windows.
-                SysFsInfo.isPosix
+                false
             }
 
-            run {
+            if (!wasDirectoryCreated) {
                 val canonical = directory.canonicalFile2()
                 if (canonical != directory) {
                     // FAIL:
@@ -2044,7 +2043,8 @@ public class FileLog: Log {
                 }
             }
 
-            if (applyDirectoryPermissions) try {
+            // Directory permissions are not a thing on Windows.
+            if (!wasDirectoryCreated && SysFsInfo.isPosix) try {
                 directory.chmod2(mode = modeDirectory)
                 logD { "Applied permissions $modeDirectory to directory ${directory.name}" }
             } catch (e: IOException) {
@@ -2052,7 +2052,7 @@ public class FileLog: Log {
                 logW(e) { "Failed to apply permissions $modeDirectory to directory ${directory.name}" }
             }
 
-            try {
+            if (!wasDirectoryCreated) try {
                 // Some systems, such as macOS, have highly unreliable fcntl byte-range file lock
                 // behavior when the target is a symbolic link. We want no part in that and require
                 // the lock file to be a regular file.
@@ -2074,7 +2074,7 @@ public class FileLog: Log {
 
             val lockFileCompletion = logJob.closeOnCompletion(lockFile)
 
-            try {
+            if (!wasDirectoryCreated) try {
                 val canonical = files[0].canonicalFile2()
                 if (canonical != files[0]) {
                     logW { "Symbolic link detected >> [$canonical] != [${files[0]}]" }
