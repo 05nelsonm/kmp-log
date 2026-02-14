@@ -287,6 +287,13 @@ class FileLogBuilderUnitTest {
     }
 
     @Test
+    fun givenYieldOn_whenEquals1_thenSyncEachWriteIsTrue() {
+        val log = newBuilder().yieldOn(1).syncEachWrite(false).build()
+        assertEquals(1, log.yieldOn)
+        assertTrue(log.syncEachWrite, "syncEachWrite")
+    }
+
+    @Test
     fun givenFileLockTimeout_whenLessThan1_thenUsesCalculatedValue() {
         val fileLockTimeout = newBuilder()
             // isDesktop defaults

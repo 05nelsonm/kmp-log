@@ -517,6 +517,8 @@ public class FileLog: Log {
      * If `true`, [FileStream.sync] will be called after every write to the log file. Otherwise,
      * [FileStream.sync] behavior will defer to [yieldOn].
      *
+     * **NOTE:** If [yieldOn] is `1`, this will **always** be `true`
+     *
      * @see [Builder.syncEachWrite]
      * */
     @JvmField
@@ -1635,7 +1637,7 @@ public class FileLog: Log {
                 bufferOverflowDropOldest = bufferOverflowDropOldest,
                 minWaitOn = minWaitOn,
                 yieldOn = yieldOn,
-                syncEachWrite = _syncEachWrite,
+                syncEachWrite = if (yieldOn == 1.toByte()) true else _syncEachWrite,
                 fileLockTimeout = fileLockTimeout,
                 threadPool = _threadPool as? RealThreadPool,
                 formatter = _formatter,
@@ -2472,6 +2474,13 @@ public class FileLog: Log {
                     ROTATION_NOT_NEEDED -> logD { "$LOG_ROTATION not needed" }
                 }
 
+                try {
+                    // Share the thread
+                    yield()
+                } catch (_: CancellationException) {
+                    // Defer to main loop yield in order to ensure FileStream.sync is called
+                }
+
                 // Rip through some more LogAction (if able) while we hold a lock.
                 logAction = when {
                     // We lost our lock
@@ -2486,19 +2495,9 @@ public class FileLog: Log {
                     !jobLogLoop.isActive -> null
 
                     // Dequeue next LogAction (if available)
-                    else -> try {
-                        // Share the thread.
-                        yield()
-
-                        rotateActionQueue.dequeueOrNull()
-                            ?: retryAction._getAndSet(new = null)
-                            ?: channel.tryReceive().getOrNull()
-                    } catch (_: CancellationException) {
-                        // Shouldn't happen b/c just checked isActive, but if so
-                        // we want to ensure we pop out for logStream.sync. The
-                        // main loop will re-throw the exception when it yields.
-                        null
-                    }
+                    else -> rotateActionQueue.dequeueOrNull()
+                        ?: retryAction._getAndSet(new = null)
+                        ?: channel.tryReceive().getOrNull()
                 }
             }
 
