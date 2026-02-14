@@ -13,20 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("NOTHING_TO_INLINE")
+@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
 
 package io.matthewnelson.kmp.log.file.internal
 
 import kotlinx.coroutines.CloseableCoroutineDispatcher
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.newFixedThreadPoolContext
 
-@Throws(IllegalArgumentException::class)
-internal actual inline fun LogDispatcherAllocator.Companion.newLogDispatcher(nThreads: Int, name: String): LogDispatcher {
-    @OptIn(DelicateCoroutinesApi::class)
-    return newFixedThreadPoolContext(nThreads, name)
-}
+internal actual value class LogDispatcher private constructor(internal val value: Pair<Int, CoroutineDispatcher>) {
 
-internal actual inline fun LogDispatcher.destroy() {
-    (this as? CloseableCoroutineDispatcher)?.close()
+    @OptIn(DelicateCoroutinesApi::class)
+    @Throws(IllegalArgumentException::class)
+    internal actual constructor(nThreads: Int, name: String): this(
+        value = nThreads to newFixedThreadPoolContext(nThreads, name)
+    )
+
+    @Throws(Throwable::class)
+    internal actual fun close() { (value.second as CloseableCoroutineDispatcher).close() }
+
+    actual override fun toString(): String = "LogDispatcher[nThreads=${value.first}]@${value.second.hashCode()}"
 }

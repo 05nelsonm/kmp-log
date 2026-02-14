@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-@file:Suppress("NOTHING_TO_INLINE", "LocalVariableName")
+@file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING", "LocalVariableName")
 
 package io.matthewnelson.kmp.log.file.internal
 
@@ -25,14 +25,16 @@ import kotlinx.coroutines.IO
 import kotlin.jvm.JvmSynthetic
 import kotlin.time.Duration.Companion.milliseconds
 
-// Jvm: ExecutorCoroutineDispatcher
-// Native: CloseableCoroutineDispatcher
-internal typealias LogDispatcher = CoroutineDispatcher
+internal expect value class LogDispatcher private constructor(internal val value: Pair<Int, CoroutineDispatcher>) {
 
-@Throws(IllegalArgumentException::class)
-internal expect inline fun LogDispatcherAllocator.Companion.newLogDispatcher(nThreads: Int, name: String): LogDispatcher
+    @Throws(IllegalArgumentException::class)
+    internal constructor(nThreads: Int, name: String)
 
-internal expect inline fun LogDispatcher.destroy()
+    @Throws(Throwable::class)
+    internal fun close()
+
+    override fun toString(): String
+}
 
 internal abstract class LogDispatcherAllocator protected constructor(
     LOG: Logger?,
@@ -42,10 +44,7 @@ internal abstract class LogDispatcherAllocator protected constructor(
     deallocationDispatcher = Dispatchers.IO,
 ) {
     abstract override fun doAllocation(): LogDispatcher
-    final override fun LogDispatcher.doDeallocation() { destroy() }
-
-    @Suppress("RemoveEmptyClassBody")
-    internal companion object {}
+    final override fun LogDispatcher.doDeallocation() { close() }
 }
 
 internal class RealThreadPool private constructor(nThreads: Int, init: Any): FileLog.ThreadPool(nThreads, init) {
@@ -57,7 +56,7 @@ internal class RealThreadPool private constructor(nThreads: Int, init: Any): Fil
         val logger = Logger.of(tag = "ThreadPool{${N._incrementAndGet()}}", domain = FileLog.DOMAIN)
         val name = "FileLog.${logger.tag}"
         object : LogDispatcherAllocator(logger) {
-            override fun doAllocation(): LogDispatcher = newLogDispatcher(nThreads = nThreads, name = name)
+            override fun doAllocation(): LogDispatcher = LogDispatcher(nThreads, name)
         }
     }
 
