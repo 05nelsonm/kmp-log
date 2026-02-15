@@ -95,7 +95,6 @@ import io.matthewnelson.kmp.log.file.internal.isDesktop
 import io.matthewnelson.kmp.log.file.internal.launch
 import io.matthewnelson.kmp.log.file.internal.lockNonBlock
 import io.matthewnelson.kmp.log.file.internal.moveLogTo
-import io.matthewnelson.kmp.log.file.internal.newLogDispatcher
 import io.matthewnelson.kmp.log.file.internal.now
 import io.matthewnelson.kmp.log.file.internal.openDirectory
 import io.matthewnelson.kmp.log.file.internal.openLockFileRobustly
@@ -1773,7 +1772,7 @@ public class FileLog: Log {
         })
         this.allocator = threadPool?.allocator ?: lazy {
             object : LogDispatcherAllocator(LOG) {
-                override fun doAllocation(): LogDispatcher = newLogDispatcher(nThreads = 1, name = LOG.tag)
+                override fun doAllocation(): LogDispatcher = LogDispatcher(nThreads = 1, name = LOG.tag)
                 override fun debug(): Boolean = this@FileLog.debug
             }
         }
